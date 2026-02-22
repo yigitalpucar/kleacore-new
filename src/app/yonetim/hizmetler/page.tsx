@@ -442,7 +442,7 @@ export default function ServicesPage() {
                                 </DropdownMenuItem>
                                 {service.status === "active" && (
                                   <DropdownMenuItem
-                                    onClick={() => alert(`Hizmet ${service.serviceName} askıya alındı`)}
+                                    onClick={() => alert(`Hizmet ${service.packageName} askıya alındı`)}
                                     className="flex items-center cursor-pointer text-orange-600 dark:text-orange-500"
                                   >
                                     <Pause className="mr-2 h-4 w-4" />
@@ -451,7 +451,7 @@ export default function ServicesPage() {
                                 )}
                                 {service.status === "suspended" && (
                                   <DropdownMenuItem
-                                    onClick={() => alert(`Hizmet ${service.serviceName} aktif edildi`)}
+                                    onClick={() => alert(`Hizmet ${service.packageName} aktif edildi`)}
                                     className="flex items-center cursor-pointer text-green-600 dark:text-green-500"
                                   >
                                     <CheckCircle className="mr-2 h-4 w-4" />
@@ -459,7 +459,7 @@ export default function ServicesPage() {
                                   </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem
-                                  onClick={() => confirm(`${service.serviceName} hizmetini iptal etmek istediğinize emin misiniz?`) && alert('Hizmet iptal edildi')}
+                                  onClick={() => confirm(`${service.packageName} hizmetini iptal etmek istediğinize emin misiniz?`) && alert('Hizmet iptal edildi')}
                                   className="flex items-center cursor-pointer text-red-600 dark:text-red-500"
                                 >
                                   <XCircle className="mr-2 h-4 w-4" />
