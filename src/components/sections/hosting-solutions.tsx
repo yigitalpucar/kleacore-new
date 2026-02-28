@@ -70,6 +70,7 @@ const vdsFeatures = [
 
 const plans: HostingPlan[] = [
   {
+    sku: "HST-LNX-01",
     name: "Starter",
     badge: "BAŞLANGIÇ",
     description: "Kişisel siteler için",
@@ -95,6 +96,7 @@ const plans: HostingPlan[] = [
     ],
   },
   {
+    sku: "HST-LNX-02",
     name: "Professional",
     description: "Büyüyen projeler için",
     price: 79,
@@ -119,6 +121,7 @@ const plans: HostingPlan[] = [
     ],
   },
   {
+    sku: "HST-LNX-03",
     name: "Business",
     badge: "İŞLETME",
     description: "KOBİ'ler için ideal",
@@ -144,6 +147,7 @@ const plans: HostingPlan[] = [
     ],
   },
   {
+    sku: "HST-LNX-04",
     name: "Enterprise",
     badge: "KURUMSAL",
     description: "Yoğun trafik için",

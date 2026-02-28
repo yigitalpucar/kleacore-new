@@ -5,6 +5,9 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { BorderBeam } from "@/components/magicui/border-beam";
+import { useCartStore } from "@/store/cart-store";
+import { toast } from "@/lib/toast";
+import { useRouter } from "next/navigation";
 
 export interface PlanFeature {
   icon: LucideIcon;
@@ -14,6 +17,7 @@ export interface PlanFeature {
 }
 
 export interface HostingPlan {
+  sku: string;
   name: string;
   description: string;
   price: number;
@@ -37,8 +41,26 @@ interface PricingCardProps {
 }
 
 export function PricingCard({ plan, isYearly = false, className }: PricingCardProps) {
+  const addHosting = useCartStore((state) => state.addHosting);
+  const router = useRouter();
   const displayPrice = isYearly && plan.yearlyPrice ? plan.yearlyPrice : plan.price;
   const periodLabel = isYearly ? "ay" : plan.period;
+
+  const handleAddToCart = () => {
+    const added = addHosting({
+      sku: plan.sku,
+      title: plan.name,
+      price: displayPrice,
+      billingPeriod: isYearly ? "yearly" : "monthly",
+    });
+
+    if (added) {
+      toast.success(`${plan.name} sepete eklendi.`);
+      router.push("/sepet");
+    } else {
+      toast.info("Bu ürün zaten sepetinizde.");
+    }
+  };
   return (
     <Card
       className={cn(
@@ -144,6 +166,7 @@ export function PricingCard({ plan, isYearly = false, className }: PricingCardPr
           className="w-full"
           variant={plan.popular ? "default" : "outline"}
           size="lg"
+          onClick={handleAddToCart}
         >
           {plan.cta || "Hemen Başla"}
         </Button>

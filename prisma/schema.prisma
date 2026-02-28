@@ -1,0 +1,1155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =====================
+// ENUMS
+// =====================
+
+enum UserRole {
+  ADMIN
+  CUSTOMER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum CustomerType {
+  INDIVIDUAL
+  CORPORATE
+}
+
+enum ProductCategorySlug {
+  hosting
+  vds
+  vps
+  server
+  cloud
+  datacenter
+  domain
+  ssl
+  email
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  DRAFT
+  ARCHIVED
+}
+
+enum BillingPeriod {
+  monthly
+  quarterly
+  semiannual
+  yearly
+  biennial
+  triennial
+}
+
+enum OrderStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum ServiceStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  BANK_TRANSFER
+  BALANCE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum TicketStatus {
+  OPEN
+  CUSTOMER_REPLY
+  ADMIN_REPLY
+  WAITING
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketDepartment {
+  GENERAL
+  TECHNICAL
+  BILLING
+  SALES
+}
+
+enum DnsRecordType {
+  A
+  AAAA
+  CNAME
+  MX
+  TXT
+  NS
+  SRV
+}
+
+enum DomainStatus {
+  ACTIVE
+  EXPIRED
+  TRANSFERRING
+  PENDING
+}
+
+enum SslStatus {
+  ACTIVE
+  EXPIRED
+  PENDING
+  REVOKED
+}
+
+enum SslType {
+  DV
+  OV
+  EV
+  WILDCARD
+}
+
+enum BackupStatus {
+  COMPLETED
+  IN_PROGRESS
+  FAILED
+  SCHEDULED
+}
+
+enum BackupType {
+  FULL
+  INCREMENTAL
+  DATABASE
+  FILES
+}
+
+enum TransactionType {
+  DEPOSIT
+  PAYMENT
+  REFUND
+  ADJUSTMENT
+}
+
+enum PromoCodeStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ERROR
+  SUCCESS
+}
+
+enum SystemStatusType {
+  OPERATIONAL
+  DEGRADED
+  PARTIAL_OUTAGE
+  MAJOR_OUTAGE
+  MAINTENANCE
+}
+
+enum IncidentSeverity {
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+enum IncidentStatus {
+  INVESTIGATING
+  IDENTIFIED
+  MONITORING
+  RESOLVED
+}
+
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum KbArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AffiliatePaymentStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum EmailMessageCategory {
+  BILLING
+  SUPPORT
+  SYSTEM
+  SERVICE
+  SECURITY
+  PROMOTION
+}
+
+enum EmailAccountStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+// =====================
+// AUTH / USER
+// =====================
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  password      String
+  name          String
+  surname       String     @default("")
+  phone         String?
+  role          UserRole   @default(CUSTOMER)
+  status        UserStatus @default(ACTIVE)
+  customerType  CustomerType @default(INDIVIDUAL)
+
+  // Company info (corporate customers)
+  companyName   String?
+  taxNumber     String?
+  taxOffice     String?
+
+  // Address
+  address       String?
+  city          String?
+  country       String   @default("Türkiye")
+
+  // Balance
+  balance       Float    @default(0)
+
+  // Affiliate
+  affiliateCode String?  @unique
+  referredById  String?
+  referredBy    User?    @relation("Referrals", fields: [referredById], references: [id])
+  referrals     User[]   @relation("Referrals")
+
+  // Relations
+  orders        Order[]
+  services      Service[]
+  invoices      Invoice[]
+  payments      Payment[]
+  tickets       SupportTicket[]
+  domains       Domain[]
+  sslCertificates SslCertificate[]
+  transactions  Transaction[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+  apiKeys       ApiKey[]
+  sessions      Session[]
+  passwordResetTokens PasswordResetToken[]
+  backups       Backup[]
+  emailMessages EmailMessage[]
+  emailAccounts EmailAccount[]
+
+  // Affiliate relations
+  affiliateReferrals  AffiliateReferral[] @relation("AffiliateReferrals")
+  referredReferrals   AffiliateReferral[] @relation("ReferredReferrals")
+
+  // Timestamps
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+  userAgent    String?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// =====================
+// PRODUCTS
+// =====================
+
+model ProductCategory {
+  id           String              @id @default(cuid())
+  slug         ProductCategorySlug @unique
+  name         String
+  description  String              @default("")
+  icon         String              @default("Package")
+  displayOrder Int                 @default(0)
+  isActive     Boolean             @default(true)
+  features     ProductFeature[]
+  products     Product[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@map("product_categories")
+}
+
+model ProductFeature {
+  id            String              @id @default(cuid())
+  categoryId    ProductCategorySlug
+  category      ProductCategory     @relation(fields: [categoryId], references: [slug])
+  name          String
+  slug          String
+  unit          String              @default("")
+  icon          String              @default("Tag")
+  isHighlighted Boolean             @default(false)
+  displayOrder  Int                 @default(0)
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@unique([categoryId, slug])
+  @@index([categoryId, displayOrder])
+  @@map("product_features")
+}
+
+model Product {
+  id               String          @id @default(cuid())
+  categoryId       String
+  category         ProductCategory @relation(fields: [categoryId], references: [id])
+  sku              String          @unique
+  name             String
+  slug             String          @unique
+  shortDescription String          @default("")
+  longDescription  String          @default("")
+
+  // Sub-type for category sub-pages (e.g. hosting: linux/wordpress/reseller/kurumsal)
+  subType          String          @default("")
+
+  // Features stored as JSON
+  features         Json            @default("[]")
+  includedFeatures Json            @default("[]")
+  resourceLimits   Json            @default("{}")
+
+  // FAQ stored as JSON [{question: string, answer: string}]
+  faq              Json            @default("[]")
+
+  // Pricing
+  basePrice        Float           @default(0)
+  pricingTiers     PricingTier[]
+
+  // Display
+  badge            String?
+  isPopular        Boolean         @default(false)
+  displayOrder     Int             @default(0)
+
+  // Stock
+  stockQuantity    Int             @default(-1)
+  isInStock        Boolean         @default(true)
+
+  // Status
+  status           ProductStatus   @default(DRAFT)
+  isVisible        Boolean         @default(true)
+
+  // SEO
+  metaTitle        String?
+  metaDescription  String?
+
+  // Relations
+  orders           Order[]
+  services         Service[]
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@map("products")
+}
+
+model PricingTier {
+  id              String        @id @default(cuid())
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  period          BillingPeriod
+  price           Float
+  discountedPrice Float?
+  setupFee        Float         @default(0)
+  renewalPrice    Float         @default(0)
+  isDefault       Boolean       @default(false)
+  isActive        Boolean       @default(true)
+
+  @@unique([productId, period])
+  @@map("pricing_tiers")
+}
+
+// =====================
+// ORDERS
+// =====================
+
+model Order {
+  id               String      @id @default(cuid())
+  orderNumber      String      @unique
+  customerId       String
+  customer         User        @relation(fields: [customerId], references: [id])
+  productId        String
+  product          Product     @relation(fields: [productId], references: [id])
+
+  // Config
+  domain           String?
+  billingPeriod    BillingPeriod @default(monthly)
+  quantity         Int          @default(1)
+
+  // Pricing
+  basePrice        Float        @default(0)
+  discountAmount   Float        @default(0)
+  promoCodeId      String?
+  promoCode        PromotionCode? @relation(fields: [promoCodeId], references: [id])
+  setupFee         Float        @default(0)
+  taxRate          Float        @default(20)
+  taxAmount        Float        @default(0)
+  totalAmount      Float        @default(0)
+
+  // Status
+  status           OrderStatus  @default(PENDING)
+  approvedAt       DateTime?
+  approvedBy       String?
+  processingStartedAt DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  cancellationReason String?
+  refundedAt       DateTime?
+  refundAmount     Float?
+
+  // Related
+  serviceId        String?
+  invoiceId        String?
+
+  // Notes
+  customerNotes    String?
+  adminNotes       String?
+
+  // Relations
+  items            OrderItem[]
+  activities       OrderActivity[]
+  invoice          Invoice?
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String  @id @default(cuid())
+  orderId       String
+  order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productName   String
+  productSku    String
+  quantity      Int     @default(1)
+  unitPrice     Float
+  discountAmount Float  @default(0)
+  totalPrice    Float
+  configuration Json    @default("{}")
+
+  @@map("order_items")
+}
+
+model OrderActivity {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  action      String
+  description String
+  performedBy String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@map("order_activities")
+}
+
+// =====================
+// SERVICES
+// =====================
+
+model Service {
+  id            String        @id @default(cuid())
+  customerId    String
+  customer      User          @relation(fields: [customerId], references: [id])
+  productId     String
+  product       Product       @relation(fields: [productId], references: [id])
+
+  // Service details
+  label         String        @default("")
+  domain        String?
+  username      String?
+  ipAddress     String?
+  serverName    String?
+
+  // Resources
+  diskUsed      Float?
+  diskLimit     Float?
+  bandwidthUsed Float?
+  bandwidthLimit Float?
+  cpuUsage      Float?
+  ramUsage      Float?
+
+  // Billing
+  billingPeriod BillingPeriod @default(monthly)
+  amount        Float         @default(0)
+  nextDueDate   DateTime?
+  expiresAt     DateTime?
+
+  // Status
+  status        ServiceStatus @default(ACTIVE)
+  suspendedAt   DateTime?
+  cancelledAt   DateTime?
+  suspendReason String?
+
+  // Relations
+  backups       Backup[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("services")
+}
+
+// =====================
+// DOMAINS
+// =====================
+
+model Domain {
+  id           String       @id @default(cuid())
+  customerId   String
+  customer     User         @relation(fields: [customerId], references: [id])
+  name         String       @unique
+  registrar    String       @default("KLEACORE")
+  registeredAt DateTime     @default(now())
+  expiresAt    DateTime
+  autoRenew    Boolean      @default(true)
+  privacyEnabled Boolean    @default(false)
+  status       DomainStatus @default(ACTIVE)
+  nameservers  Json         @default("[]")
+
+  // WHOIS
+  whoisName    String?
+  whoisEmail   String?
+  whoisPhone   String?
+  whoisAddress String?
+
+  // DNS
+  dnsRecords   DnsRecord[]
+  emailAccounts EmailAccount[]
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@map("domains")
+}
+
+model DnsRecord {
+  id       String        @id @default(cuid())
+  domainId String
+  domain   Domain        @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  type     DnsRecordType
+  name     String
+  value    String
+  ttl      Int           @default(3600)
+  priority Int?
+
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@map("dns_records")
+}
+
+// =====================
+// EMAIL
+// =====================
+
+model EmailAccount {
+  id            String           @id @default(cuid())
+  customerId    String
+  customer      User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  domainId      String?
+  domain        Domain?          @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  localPart     String
+  email         String           @unique
+  passwordHash  String?
+  quotaMb       Int              @default(2048)
+  usedMb        Int              @default(0)
+  status        EmailAccountStatus @default(ACTIVE)
+  forwardTo     String?
+  autoResponder Boolean          @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([customerId, status])
+  @@map("email_accounts")
+}
+
+model EmailMessage {
+  id         String               @id @default(cuid())
+  customerId String
+  customer   User                 @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  subject    String
+  preview    String               @default("")
+  content    String               @default("")
+  category   EmailMessageCategory @default(SYSTEM)
+  isRead     Boolean              @default(false)
+  sentAt     DateTime             @default(now())
+  readAt     DateTime?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  @@index([customerId, sentAt])
+  @@map("email_messages")
+}
+
+// =====================
+// INVOICES & PAYMENTS
+// =====================
+
+model Invoice {
+  id            String        @id @default(cuid())
+  invoiceNumber String        @unique
+  customerId    String
+  customer      User          @relation(fields: [customerId], references: [id])
+  orderId       String?       @unique
+  order         Order?        @relation(fields: [orderId], references: [id])
+
+  // Amounts
+  subtotal      Float         @default(0)
+  taxRate       Float         @default(20)
+  taxAmount     Float         @default(0)
+  totalAmount   Float         @default(0)
+  paidAmount    Float         @default(0)
+
+  // Status
+  status        InvoiceStatus @default(PENDING)
+  issuedAt      DateTime      @default(now())
+  dueDate       DateTime
+  paidAt        DateTime?
+
+  // Notes
+  notes         String?
+
+  // Relations
+  items         InvoiceItem[]
+  payments      Payment[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Float
+  totalPrice  Float
+
+  @@map("invoice_items")
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  invoiceId     String
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id])
+  customerId    String
+  customer      User          @relation(fields: [customerId], references: [id])
+  amount        Float
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  transactionId String?
+  notes         String?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@map("payments")
+}
+
+// =====================
+// SUPPORT
+// =====================
+
+model SupportTicket {
+  id           String           @id @default(cuid())
+  ticketNumber String           @unique
+  customerId   String
+  customer     User             @relation(fields: [customerId], references: [id])
+  subject      String
+  department   TicketDepartment @default(GENERAL)
+  priority     TicketPriority   @default(MEDIUM)
+  status       TicketStatus     @default(OPEN)
+  assignedTo   String?
+  relatedServiceId String?
+
+  // Relations
+  messages     TicketMessage[]
+
+  closedAt     DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id        String        @id @default(cuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId  String
+  senderName String
+  senderRole UserRole     @default(CUSTOMER)
+  message   String
+  attachments Json        @default("[]")
+  createdAt DateTime      @default(now())
+
+  @@map("ticket_messages")
+}
+
+// =====================
+// SSL CERTIFICATES
+// =====================
+
+model SslCertificate {
+  id           String    @id @default(cuid())
+  customerId   String
+  customer     User      @relation(fields: [customerId], references: [id])
+  domain       String
+  type         SslType   @default(DV)
+  provider     String    @default("KLEACORE")
+  status       SslStatus @default(PENDING)
+  issuedAt     DateTime?
+  expiresAt    DateTime?
+  autoRenew    Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("ssl_certificates")
+}
+
+// =====================
+// BACKUPS
+// =====================
+
+model Backup {
+  id         String       @id @default(cuid())
+  serviceId  String
+  service    Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   User         @relation(fields: [customerId], references: [id])
+  type       BackupType   @default(FULL)
+  status     BackupStatus @default(SCHEDULED)
+  size       Float?
+  filePath   String?
+  scheduleId String?
+  schedule   BackupSchedule? @relation(fields: [scheduleId], references: [id])
+  startedAt  DateTime?
+  completedAt DateTime?
+  createdAt  DateTime     @default(now())
+
+  @@map("backups")
+}
+
+model BackupSchedule {
+  id        String   @id @default(cuid())
+  serviceId String
+  frequency String   @default("daily")
+  retention Int      @default(7)
+  isActive  Boolean  @default(true)
+  lastRunAt DateTime?
+  nextRunAt DateTime?
+  backups   Backup[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("backup_schedules")
+}
+
+// =====================
+// INFRASTRUCTURE
+// =====================
+
+model Server {
+  id          String  @id @default(cuid())
+  name        String
+  hostname    String  @unique
+  ipAddress   String
+  location    String  @default("İstanbul, TR")
+  provider    String  @default("KLEACORE")
+
+  // Specs
+  cpuModel    String?
+  cpuCores    Int     @default(0)
+  ramTotal    Float   @default(0)
+  diskTotal   Float   @default(0)
+
+  // Usage
+  cpuUsage    Float   @default(0)
+  ramUsage    Float   @default(0)
+  diskUsage   Float   @default(0)
+
+  // Status
+  isActive    Boolean @default(true)
+  isOnline    Boolean @default(true)
+  uptime      Float   @default(0)
+  lastCheckedAt DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("servers")
+}
+
+// =====================
+// TRANSACTIONS
+// =====================
+
+model Transaction {
+  id          String          @id @default(cuid())
+  customerId  String
+  customer    User            @relation(fields: [customerId], references: [id])
+  type        TransactionType
+  amount      Float
+  balanceBefore Float         @default(0)
+  balanceAfter  Float         @default(0)
+  description String          @default("")
+  referenceId String?
+  createdAt   DateTime        @default(now())
+
+  @@map("transactions")
+}
+
+// =====================
+// PROMOTIONS
+// =====================
+
+model PromotionCode {
+  id                   String         @id @default(cuid())
+  code                 String         @unique
+  name                 String
+  description          String         @default("")
+  discountType         DiscountType
+  discountValue        Float
+  applicableCategories Json           @default("[]")
+  applicableProducts   Json           @default("[]")
+  applicablePeriods    Json           @default("[]")
+  maxUses              Int            @default(0)
+  maxUsesPerCustomer   Int            @default(1)
+  currentUses          Int            @default(0)
+  validFrom            DateTime
+  validUntil           DateTime
+  minOrderAmount       Float?
+  isFirstOrderOnly     Boolean        @default(false)
+  isNewCustomerOnly    Boolean        @default(false)
+  status               PromoCodeStatus @default(ACTIVE)
+  orders               Order[]
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  @@map("promotion_codes")
+}
+
+// =====================
+// BLOG
+// =====================
+
+model BlogCategory {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  description String     @default("")
+  posts       BlogPost[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("blog_categories")
+}
+
+model BlogPost {
+  id             String         @id @default(cuid())
+  categoryId     String
+  category       BlogCategory   @relation(fields: [categoryId], references: [id])
+  title          String
+  slug           String         @unique
+  excerpt        String         @default("")
+  content        String         @default("")
+  coverImage     String?
+  author         String         @default("KLEACORE")
+  tags           Json           @default("[]")
+  status         BlogPostStatus @default(DRAFT)
+  viewCount      Int            @default(0)
+  publishedAt    DateTime?
+  metaTitle      String?
+  metaDescription String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@map("blog_posts")
+}
+
+// =====================
+// KNOWLEDGE BASE
+// =====================
+
+model KnowledgeBaseCategory {
+  id          String                @id @default(cuid())
+  name        String
+  slug        String                @unique
+  description String                @default("")
+  icon        String                @default("Book")
+  displayOrder Int                  @default(0)
+  articles    KnowledgeBaseArticle[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@map("kb_categories")
+}
+
+model KnowledgeBaseArticle {
+  id             String                @id @default(cuid())
+  categoryId     String
+  category       KnowledgeBaseCategory @relation(fields: [categoryId], references: [id])
+  title          String
+  slug           String                @unique
+  content        String                @default("")
+  tags           Json                  @default("[]")
+  status         KbArticleStatus       @default(DRAFT)
+  viewCount      Int                   @default(0)
+  helpfulCount   Int                   @default(0)
+  notHelpfulCount Int                  @default(0)
+  displayOrder   Int                   @default(0)
+  publishedAt    DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@map("kb_articles")
+}
+
+// =====================
+// NOTIFICATIONS
+// =====================
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType @default(INFO)
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@map("notifications")
+}
+
+// =====================
+// ACTIVITY LOG
+// =====================
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@map("activity_logs")
+}
+
+// =====================
+// API KEYS
+// =====================
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  key         String    @unique
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  @@map("api_keys")
+}
+
+// =====================
+// AFFILIATE
+// =====================
+
+model AffiliateReferral {
+  id            String   @id @default(cuid())
+  affiliateId   String
+  affiliate     User     @relation("AffiliateReferrals", fields: [affiliateId], references: [id])
+  referredId    String
+  referred      User     @relation("ReferredReferrals", fields: [referredId], references: [id])
+  commission    Float    @default(0)
+  isPaid        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@map("affiliate_referrals")
+}
+
+model AffiliatePayment {
+  id          String                 @id @default(cuid())
+  affiliateId String
+  amount      Float
+  status      AffiliatePaymentStatus @default(PENDING)
+  paidAt      DateTime?
+  createdAt   DateTime               @default(now())
+
+  @@map("affiliate_payments")
+}
+
+// =====================
+// CONTACT
+// =====================
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String
+  isRead    Boolean  @default(false)
+  repliedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@map("contact_messages")
+}
+
+// =====================
+// SETTINGS
+// =====================
+
+model Setting {
+  id        String   @id @default(cuid())
+  group     String   @default("general")
+  key       String   @unique
+  value     String   @default("")
+  type      String   @default("string")
+  label     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// =====================
+// SYSTEM STATUS
+// =====================
+
+model SystemStatus {
+  id          String           @id @default(cuid())
+  serviceName String
+  status      SystemStatusType @default(OPERATIONAL)
+  description String           @default("")
+  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime         @default(now())
+
+  @@map("system_statuses")
+}
+
+model SystemIncident {
+  id          String           @id @default(cuid())
+  title       String
+  description String           @default("")
+  severity    IncidentSeverity @default(MINOR)
+  status      IncidentStatus   @default(INVESTIGATING)
+  serviceName String
+  startedAt   DateTime         @default(now())
+  resolvedAt  DateTime?
+  updates     Json             @default("[]")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("system_incidents")
+}
+
+// =====================
+// DOMAIN TLD PRICING
+// =====================
+
+model DomainTld {
+  id            String   @id @default(cuid())
+  ext           String   @unique
+  category      String
+  registerPrice Float
+  renewPrice    Float
+  transferPrice Float
+  isActive      Boolean  @default(true)
+  displayOrder  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("domain_tlds")
+}
