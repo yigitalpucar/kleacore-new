@@ -3,19 +3,26 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { PanelProfileHeader } from "@/components/panel/panel-profile-header";
 import { PanelTabs } from "@/components/panel/panel-tabs";
+import { auth } from "@/lib/auth";
 
-export default function PanelLayout({
+export default async function PanelLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+  const user = session?.user;
+
   return (
     <div className="flex min-h-screen flex-col">
       <Topbar />
       <Header />
 
       {/* Profile Header */}
-      <PanelProfileHeader />
+      <PanelProfileHeader
+        userName={user?.name || "Kullanıcı"}
+        userEmail={user?.email || ""}
+      />
 
       {/* Tab Navigation */}
       <PanelTabs />

@@ -6,6 +6,7 @@ import {
   Server,
   HardDrive,
   Cloud,
+  Building,
   Globe,
   Shield,
   Mail,
@@ -51,6 +52,18 @@ export const categoryConfig = {
     icon: Server,
     color: "bg-orange-500/10 text-orange-500",
     description: "Dedicated sunucu çözümleri",
+  },
+  cloud: {
+    name: "Bulut Sunucu",
+    icon: Cloud,
+    color: "bg-sky-500/10 text-sky-500",
+    description: "Yüksek performanslı bulut sunucu çözümleri",
+  },
+  datacenter: {
+    name: "Veri Merkezi",
+    icon: Building,
+    color: "bg-slate-500/10 text-slate-500",
+    description: "Colocation, CDN, DDoS koruma ve IP/ASN hizmetleri",
   },
   domain: {
     name: "Domain",

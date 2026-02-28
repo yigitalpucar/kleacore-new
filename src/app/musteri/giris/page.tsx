@@ -1,15 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import {
   User,
-  Lock,
-  Mail,
-  ArrowRight,
   Shield,
   Headphones,
   FileText,
@@ -18,10 +15,8 @@ import {
   Globe,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import Link from "next/link";
+import { LoginForm } from "@/components/auth/login-form";
+import { RegisterForm } from "@/components/auth/register-form";
 
 const quickLinks = [
   {
@@ -70,18 +65,6 @@ const features = [
 
 export default function GirisPage() {
   const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-    confirmPassword: "",
-    name: "",
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Demo: redirect to panel
-    window.location.href = "/musteri/panel";
-  };
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -108,124 +91,13 @@ export default function GirisPage() {
                     </p>
                   </CardHeader>
                   <CardContent>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                      {!isLogin && (
-                        <div className="space-y-2">
-                          <Label htmlFor="name">Ad Soyad</Label>
-                          <div className="relative">
-                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              id="name"
-                              placeholder="Adınız Soyadınız"
-                              className="pl-10"
-                              value={formData.name}
-                              onChange={(e) =>
-                                setFormData({ ...formData, name: e.target.value })
-                              }
-                              required={!isLogin}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        <Label htmlFor="email">E-posta</Label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="email"
-                            type="email"
-                            placeholder="ornek@email.com"
-                            className="pl-10"
-                            value={formData.email}
-                            onChange={(e) =>
-                              setFormData({ ...formData, email: e.target.value })
-                            }
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="password">Şifre</Label>
-                          {isLogin && (
-                            <Link
-                              href="/musteri/sifremi-unuttum"
-                              className="text-xs text-primary hover:underline"
-                            >
-                              Şifremi Unuttum
-                            </Link>
-                          )}
-                        </div>
-                        <div className="relative">
-                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="password"
-                            type="password"
-                            placeholder="********"
-                            className="pl-10"
-                            value={formData.password}
-                            onChange={(e) =>
-                              setFormData({ ...formData, password: e.target.value })
-                            }
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      {!isLogin && (
-                        <div className="space-y-2">
-                          <Label htmlFor="confirmPassword">Şifre Tekrar</Label>
-                          <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              id="confirmPassword"
-                              type="password"
-                              placeholder="********"
-                              className="pl-10"
-                              value={formData.confirmPassword}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  confirmPassword: e.target.value,
-                                })
-                              }
-                              required={!isLogin}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      <Button type="submit" className="w-full">
-                        {isLogin ? "Giriş Yap" : "Hesap Oluştur"}
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </form>
-
-                    <div className="mt-6 text-center text-sm">
+                    <Suspense fallback={<div className="py-8 text-center text-muted-foreground">Yükleniyor...</div>}>
                       {isLogin ? (
-                        <p className="text-muted-foreground">
-                          Hesabınız yok mu?{" "}
-                          <button
-                            onClick={() => setIsLogin(false)}
-                            className="text-primary hover:underline font-medium"
-                          >
-                            Kayıt Olun
-                          </button>
-                        </p>
+                        <LoginForm onSwitch={() => setIsLogin(false)} />
                       ) : (
-                        <p className="text-muted-foreground">
-                          Zaten hesabınız var mı?{" "}
-                          <button
-                            onClick={() => setIsLogin(true)}
-                            className="text-primary hover:underline font-medium"
-                          >
-                            Giriş Yapın
-                          </button>
-                        </p>
+                        <RegisterForm onSwitch={() => setIsLogin(true)} />
                       )}
-                    </div>
+                    </Suspense>
                   </CardContent>
                 </Card>
               </BlurFade>

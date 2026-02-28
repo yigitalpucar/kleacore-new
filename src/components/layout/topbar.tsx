@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
   Mail,
   ChevronRight,
   ChevronDown,
-  FileText,
-  LogOut,
   User,
-  Shield,
+  Settings,
+  FileText,
   Package,
+  LayoutDashboard,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -19,21 +19,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-// Panel menu items
-const panelMenuItems = [
-  { title: "Profil", href: "/musteri/panel/ayarlar", icon: User },
-  { title: "Güvenlik", href: "/musteri/panel/ayarlar#guvenlik", icon: Shield },
-  { title: "Faturalarım", href: "/musteri/panel/faturalar", icon: FileText },
-  { title: "Hizmetlerim", href: "/musteri/panel/hizmetlerim", icon: Package },
-];
+import { LogoutButton } from "@/components/auth/logout-button";
 
 export function Topbar() {
-  // Mock: kullanıcı giriş durumu (gerçek uygulamada auth state'den gelir)
-  const [isLoggedIn] = useState(true);
+  const { data: session, status } = useSession();
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "ADMIN";
 
   return (
-    <div className="bg-zinc-900 text-zinc-300 text-xs border-b border-zinc-800">
+    <div className="relative z-[60] bg-zinc-900 text-zinc-300 text-xs border-b border-zinc-800">
       <div className="container flex items-center justify-between h-9">
         {/* Left - Contact Info */}
         <div className="hidden sm:flex items-center gap-4">
@@ -57,32 +50,63 @@ export function Topbar() {
           </Link>
         </div>
 
-        {/* Right - Auth Links / User Menu */}
+        {/* Right - Auth */}
         <div className="flex items-center gap-3">
-          {isLoggedIn ? (
+          {status === "loading" ? (
+            <div className="h-4 w-24 rounded bg-zinc-700/60 animate-pulse" />
+          ) : session?.user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-1.5 text-primary hover:text-primary/80 transition-colors font-medium">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-primary hover:text-primary/80 transition-colors font-medium"
+                >
                   <User className="h-3 w-3" />
                   <span>Müşteri Paneli</span>
                   <ChevronDown className="h-3 w-3" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                {panelMenuItems.map((item) => (
-                  <DropdownMenuItem key={item.href} asChild>
-                    <Link href={item.href} className="flex items-center gap-2 cursor-pointer">
-                      <item.icon className="h-4 w-4" />
-                      {item.title}
+              <DropdownMenuContent align="end" sideOffset={8} className="w-56 z-[70]">
+                <div className="px-3 py-2">
+                  <p className="text-sm font-medium">{session.user.name}</p>
+                  <p className="text-xs text-muted-foreground">{session.user.email}</p>
+                </div>
+                <DropdownMenuSeparator />
+                {isAdmin && (
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link href="/yonetim" className="flex items-center gap-2">
+                      <LayoutDashboard className="h-4 w-4" />
+                      <span>Yönetim Paneli</span>
                     </Link>
                   </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/" className="flex items-center gap-2 cursor-pointer text-destructive">
-                    <LogOut className="h-4 w-4" />
-                    Çıkış Yap
+                )}
+                <DropdownMenuItem asChild className="cursor-pointer">
+                  <Link href="/musteri/panel" className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    <span>Müşteri Paneli</span>
                   </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer">
+                  <Link href="/musteri/panel/hizmetlerim" className="flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    <span>Hizmetlerim</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer">
+                  <Link href="/musteri/panel/faturalar" className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    <span>Faturalarım</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer">
+                  <Link href="/musteri/panel/ayarlar" className="flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    <span>Ayarlar</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="cursor-pointer text-red-500 p-0">
+                  <LogoutButton className="flex items-center gap-2 w-full px-2 py-1.5" />
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

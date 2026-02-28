@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Search, Bell, User, ChevronDown, Settings, LogOut } from "lucide-react";
+import { Search, Bell, User, ChevronDown, Settings } from "lucide-react";
+import { LogoutButton } from "@/components/auth/logout-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,7 +40,7 @@ const notifications = [
   },
 ];
 
-export function AdminHeader() {
+export function AdminHeader({ userName = "Admin" }: { userName?: string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const unreadCount = notifications.filter((n) => n.unread).length;
 
@@ -111,10 +112,10 @@ export function AdminHeader() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-sm font-medium">
-                  AY
+                  {userName.charAt(0).toUpperCase()}
                 </div>
                 <div className="hidden md:flex flex-col items-start">
-                  <span className="text-sm font-medium text-zinc-900 dark:text-white">Admin</span>
+                  <span className="text-sm font-medium text-zinc-900 dark:text-white">{userName}</span>
                   <span className="text-xs text-zinc-500">Yönetici</span>
                 </div>
                 <ChevronDown className="h-4 w-4 hidden md:block" />
@@ -128,11 +129,8 @@ export function AdminHeader() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-zinc-200 dark:bg-zinc-800" />
-              <DropdownMenuItem asChild className="cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 text-red-500">
-                <Link href="/" className="flex items-center gap-2">
-                  <LogOut className="h-4 w-4" />
-                  <span>Çıkış Yap</span>
-                </Link>
+              <DropdownMenuItem className="cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 text-red-500 p-0">
+                <LogoutButton className="flex items-center gap-2 w-full px-2 py-1.5" />
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

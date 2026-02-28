@@ -1,11 +1,8 @@
-"use client";
-
 import Link from "next/link";
 import {
   ShoppingCart,
   CheckCircle,
   Clock,
-  Pause,
   XCircle,
   ArrowUpDown,
   Puzzle,
@@ -15,189 +12,142 @@ import {
   ListOrdered,
   Search,
   Plus,
+  Pause,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BlurFade } from "@/components/magicui/blur-fade";
-
-// Stats
-const stats = [
-  {
-    title: "Toplam Sipariş",
-    value: "12,847",
-    description: "+156 bu ay",
-    icon: ShoppingCart,
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
-    href: "/yonetim/siparisler/tum-siparisler",
-  },
-  {
-    title: "Aktif Sipariş",
-    value: "8,634",
-    description: "%67.2 oran",
-    icon: CheckCircle,
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-    href: "/yonetim/siparisler/aktif",
-  },
-  {
-    title: "Beklemede",
-    value: "847",
-    description: "Onay bekliyor",
-    icon: Clock,
-    color: "text-yellow-500",
-    bgColor: "bg-yellow-500/10",
-    href: "/yonetim/siparisler/beklemede",
-  },
-  {
-    title: "Bu Ay Gelir",
-    value: "₺284.750",
-    description: "+18% artış",
-    icon: TrendingUp,
-    color: "text-purple-500",
-    bgColor: "bg-purple-500/10",
-    href: "/yonetim/raporlar",
-  },
-];
-
-// Quick links
-const quickLinks = [
-  {
-    title: "Tüm Siparişler",
-    description: "12,847 sipariş",
-    icon: ListOrdered,
-    href: "/yonetim/siparisler/tum-siparisler",
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
-  },
-  {
-    title: "Aktif Siparişler",
-    description: "8,634 sipariş",
-    icon: CheckCircle,
-    href: "/yonetim/siparisler/aktif",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-  },
-  {
-    title: "Beklemede",
-    description: "847 sipariş",
-    icon: Clock,
-    href: "/yonetim/siparisler/beklemede",
-    color: "text-yellow-500",
-    bgColor: "bg-yellow-500/10",
-  },
-  {
-    title: "Askıda",
-    description: "234 sipariş",
-    icon: Pause,
-    href: "/yonetim/siparisler/askida",
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
-  },
-  {
-    title: "İptal Edilen",
-    description: "1,132 sipariş",
-    icon: XCircle,
-    href: "/yonetim/siparisler/iptal",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
-  },
-  {
-    title: "Yükseltme/Düşürme",
-    description: "89 işlem",
-    icon: ArrowUpDown,
-    href: "/yonetim/siparisler/yukseltme-dusurme",
-    color: "text-indigo-500",
-    bgColor: "bg-indigo-500/10",
-  },
-  {
-    title: "Eklentiler",
-    description: "456 eklenti",
-    icon: Puzzle,
-    href: "/yonetim/siparisler/eklentiler",
-    color: "text-cyan-500",
-    bgColor: "bg-cyan-500/10",
-  },
-  {
-    title: "İptal Talepleri",
-    description: "12 talep",
-    icon: MessageSquareX,
-    href: "/yonetim/siparisler/iptal-talepleri",
-    color: "text-rose-500",
-    bgColor: "bg-rose-500/10",
-  },
-];
-
-// Recent orders
-const recentOrders = [
-  {
-    id: "S-2024-00345",
-    customer: "Ahmet Yılmaz",
-    customerId: "M-001",
-    product: "Pro Hosting",
-    category: "Hosting",
-    amount: 1198.80,
-    status: "active",
-    date: "10 dk önce",
-  },
-  {
-    id: "S-2024-00344",
-    customer: "Ayşe Demir",
-    customerId: "M-002",
-    product: "VDS Small",
-    category: "VDS",
-    amount: 418.80,
-    status: "pending",
-    date: "25 dk önce",
-  },
-  {
-    id: "S-2024-00343",
-    customer: "Mehmet Kaya",
-    customerId: "M-003",
-    product: ".com Domain",
-    category: "Domain",
-    amount: 154.80,
-    status: "active",
-    date: "1 saat önce",
-  },
-  {
-    id: "S-2024-00342",
-    customer: "Fatma Şahin",
-    customerId: "M-004",
-    product: "Starter Hosting",
-    category: "Hosting",
-    amount: 58.80,
-    status: "suspended",
-    date: "2 saat önce",
-  },
-  {
-    id: "S-2024-00341",
-    customer: "Can Özkan",
-    customerId: "M-005",
-    product: "SSL Sertifika",
-    category: "SSL",
-    amount: 299.00,
-    status: "cancelled",
-    date: "3 saat önce",
-  },
-];
+import { getOrders, getOrderStats } from "@/lib/dal/orders";
 
 const statusConfig: Record<string, { label: string; color: string }> = {
-  active: { label: "Aktif", color: "bg-green-500/10 text-green-500" },
-  pending: { label: "Beklemede", color: "bg-yellow-500/10 text-yellow-500" },
-  suspended: { label: "Askıda", color: "bg-orange-500/10 text-orange-500" },
-  cancelled: { label: "İptal", color: "bg-red-500/10 text-red-500" },
+  PENDING: { label: "Beklemede", color: "bg-yellow-500/10 text-yellow-500" },
+  APPROVED: { label: "Onaylandı", color: "bg-blue-500/10 text-blue-500" },
+  PROCESSING: { label: "İşleniyor", color: "bg-green-500/10 text-green-500" },
+  COMPLETED: { label: "Tamamlandı", color: "bg-green-500/10 text-green-500" },
+  CANCELLED: { label: "İptal", color: "bg-red-500/10 text-red-500" },
+  REFUNDED: { label: "İade", color: "bg-orange-500/10 text-orange-500" },
 };
 
-export default function OrdersDashboardPage() {
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("tr-TR", {
-      style: "currency",
-      currency: "TRY",
-      minimumFractionDigits: 2,
-    }).format(price);
-  };
+const formatPrice = (price: number) => {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    minimumFractionDigits: 2,
+  }).format(price);
+};
+
+export default async function OrdersDashboardPage() {
+  const [stats, recentResult] = await Promise.all([
+    getOrderStats(),
+    getOrders({ page: 1, perPage: 5, sortBy: "createdAt", sortOrder: "desc" }),
+  ]);
+
+  const statCards = [
+    {
+      title: "Toplam Sipariş",
+      value: stats.total.toLocaleString("tr-TR"),
+      description: `${stats.pending} onay bekliyor`,
+      icon: ShoppingCart,
+      color: "text-blue-500",
+      bgColor: "bg-blue-500/10",
+      href: "/yonetim/siparisler/tum-siparisler",
+    },
+    {
+      title: "Aktif Sipariş",
+      value: stats.processing.toLocaleString("tr-TR"),
+      description: `%${stats.total > 0 ? ((stats.processing / stats.total) * 100).toFixed(1) : 0} oran`,
+      icon: CheckCircle,
+      color: "text-green-500",
+      bgColor: "bg-green-500/10",
+      href: "/yonetim/siparisler/aktif",
+    },
+    {
+      title: "Beklemede",
+      value: stats.pending.toLocaleString("tr-TR"),
+      description: "Onay bekliyor",
+      icon: Clock,
+      color: "text-yellow-500",
+      bgColor: "bg-yellow-500/10",
+      href: "/yonetim/siparisler/beklemede",
+    },
+    {
+      title: "Toplam Gelir",
+      value: formatPrice(Number(stats.totalRevenue)),
+      description: "Tamamlanan siparişler",
+      icon: TrendingUp,
+      color: "text-purple-500",
+      bgColor: "bg-purple-500/10",
+      href: "/yonetim/raporlar",
+    },
+  ];
+
+  const quickLinks = [
+    {
+      title: "Tüm Siparişler",
+      description: `${stats.total.toLocaleString("tr-TR")} sipariş`,
+      icon: ListOrdered,
+      href: "/yonetim/siparisler/tum-siparisler",
+      color: "text-blue-500",
+      bgColor: "bg-blue-500/10",
+    },
+    {
+      title: "Aktif Siparişler",
+      description: `${stats.processing.toLocaleString("tr-TR")} sipariş`,
+      icon: CheckCircle,
+      href: "/yonetim/siparisler/aktif",
+      color: "text-green-500",
+      bgColor: "bg-green-500/10",
+    },
+    {
+      title: "Beklemede",
+      description: `${stats.pending.toLocaleString("tr-TR")} sipariş`,
+      icon: Clock,
+      href: "/yonetim/siparisler/beklemede",
+      color: "text-yellow-500",
+      bgColor: "bg-yellow-500/10",
+    },
+    {
+      title: "Askıda",
+      description: "Askıdaki siparişler",
+      icon: Pause,
+      href: "/yonetim/siparisler/askida",
+      color: "text-orange-500",
+      bgColor: "bg-orange-500/10",
+    },
+    {
+      title: "İptal Edilen",
+      description: `${stats.cancelled.toLocaleString("tr-TR")} sipariş`,
+      icon: XCircle,
+      href: "/yonetim/siparisler/iptal",
+      color: "text-red-500",
+      bgColor: "bg-red-500/10",
+    },
+    {
+      title: "Yükseltme/Düşürme",
+      description: "Paket değişiklikleri",
+      icon: ArrowUpDown,
+      href: "/yonetim/siparisler/yukseltme-dusurme",
+      color: "text-indigo-500",
+      bgColor: "bg-indigo-500/10",
+    },
+    {
+      title: "Eklentiler",
+      description: "Ek hizmetler",
+      icon: Puzzle,
+      href: "/yonetim/siparisler/eklentiler",
+      color: "text-cyan-500",
+      bgColor: "bg-cyan-500/10",
+    },
+    {
+      title: "İptal Talepleri",
+      description: "Müşteri talepleri",
+      icon: MessageSquareX,
+      href: "/yonetim/siparisler/iptal-talepleri",
+      color: "text-rose-500",
+      bgColor: "bg-rose-500/10",
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -219,7 +169,7 @@ export default function OrdersDashboardPage() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, index) => (
+        {statCards.map((stat, index) => (
           <BlurFade key={stat.title} delay={0.1 + index * 0.05}>
             <Link href={stat.href}>
               <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-pointer">
@@ -298,36 +248,36 @@ export default function OrdersDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentOrders.map((order) => (
+                  {recentResult.data.map((order) => (
                     <tr
                       key={order.id}
                       className="border-b border-zinc-200 dark:border-zinc-800 last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors"
                     >
                       <td className="py-3">
                         <Link
-                          href={`/yonetim/musteriler/${order.customerId}`}
+                          href={`/yonetim/musteriler/${order.customer.id}`}
                           className="text-sm text-zinc-900 dark:text-white hover:text-primary"
                         >
-                          {order.customer}
+                          {order.customer.name} {order.customer.surname}
                         </Link>
                       </td>
                       <td className="py-3">
-                        <span className="text-sm text-zinc-900 dark:text-white">{order.product}</span>
+                        <span className="text-sm text-zinc-900 dark:text-white">{order.product.name}</span>
                       </td>
                       <td className="py-3">
-                        <span className="text-sm text-zinc-600 dark:text-zinc-400">{order.category}</span>
+                        <span className="text-sm text-zinc-600 dark:text-zinc-400">{order.product.category?.name ?? order.product.sku}</span>
                       </td>
                       <td className="py-3">
                         <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                          {formatPrice(order.amount)}
+                          {formatPrice(Number(order.totalAmount))}
                         </span>
                       </td>
                       <td className="py-3">
                         <span className={cn(
                           "inline-flex px-2 py-0.5 rounded text-xs font-medium",
-                          statusConfig[order.status].color
+                          statusConfig[order.status]?.color ?? "bg-zinc-500/10 text-zinc-500"
                         )}>
-                          {statusConfig[order.status].label}
+                          {statusConfig[order.status]?.label ?? order.status}
                         </span>
                       </td>
                       <td className="py-3 text-right">
@@ -340,6 +290,13 @@ export default function OrdersDashboardPage() {
                       </td>
                     </tr>
                   ))}
+                  {recentResult.data.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-sm text-zinc-500">
+                        Henüz sipariş bulunmuyor
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

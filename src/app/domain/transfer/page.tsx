@@ -8,6 +8,8 @@ import { BlurFade } from "@/components/magicui/blur-fade";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { requestDomainTransfer } from "@/lib/actions/public/domains";
+import { toast } from "@/lib/toast";
 import {
   Accordion,
   AccordionContent,
@@ -72,28 +74,38 @@ const benefits = [
 export default function DomainTransferPage() {
   const [domain, setDomain] = useState("");
   const [eppCode, setEppCode] = useState("");
+  const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<null | { success: boolean; message: string }>(null);
 
   const handleTransfer = async () => {
-    if (!domain.trim() || !eppCode.trim()) return;
+    if (!domain.trim() || !eppCode.trim() || !email.trim()) return;
 
     setIsLoading(true);
     setResult(null);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      const formData = new FormData();
+      formData.set("domain", domain);
+      formData.set("eppCode", eppCode);
+      formData.set("email", email);
 
-    // Mock result
-    const success = Math.random() > 0.3;
-    setResult({
-      success,
-      message: success
-        ? "Transfer talebi başarıyla oluşturuldu! E-posta onayı bekleniyor."
-        : "EPP kodu hatalı veya domain transfer için uygun değil.",
-    });
+      const response = await requestDomainTransfer(formData);
+      setResult({
+        success: response.success,
+        message: response.success
+          ? response.message ?? "Transfer talebiniz alındı."
+          : response.error ?? "Transfer talebi oluşturulamadı.",
+      });
 
-    setIsLoading(false);
+      if (response.success) {
+        toast.success(response.message ?? "Transfer talebiniz alındı.");
+      } else {
+        toast.error(response.error ?? "Transfer talebi oluşturulamadı.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -149,6 +161,17 @@ export default function DomainTransferPage() {
                       EPP kodunu mevcut sağlayıcınızdan alabilirsiniz.
                     </p>
                   </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">
+                      İletişim E-postası
+                    </label>
+                    <Input
+                      type="email"
+                      placeholder="ornek@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
 
                   {result && (
                     <div
@@ -166,7 +189,7 @@ export default function DomainTransferPage() {
                     className="w-full"
                     size="lg"
                     onClick={handleTransfer}
-                    disabled={isLoading || !domain.trim() || !eppCode.trim()}
+                    disabled={isLoading || !domain.trim() || !eppCode.trim() || !email.trim()}
                   >
                     {isLoading ? (
                       <>

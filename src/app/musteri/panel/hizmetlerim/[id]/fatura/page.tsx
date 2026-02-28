@@ -1,7 +1,8 @@
-"use client";
-
-import { useParams } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@/lib/auth";
+import { getServiceById } from "@/lib/dal/services";
+import { getInvoicesByCustomer } from "@/lib/dal/invoices";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,119 +21,75 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Mock service data
-const getServiceById = (id: string) => {
-  const services: Record<string, {
-    id: number;
-    name: string;
-    type: string;
-    domain: string;
-  }> = {
-    "1": { id: 1, name: "Linux Hosting Pro", type: "Hosting", domain: "example.com" },
-    "2": { id: 2, name: "VDS Starter", type: "Sunucu", domain: "vds1.example.com" },
-    "3": { id: 3, name: "Wildcard SSL", type: "SSL", domain: "*.example.com" },
-  };
-  return services[id] || services["1"];
-};
+interface Props {
+  params: Promise<{ id: string }>;
+}
 
-// Mock invoices for the service
-const getInvoicesForService = (serviceId: string) => {
-  const allInvoices = [
-    {
-      id: "INV-2024-001",
-      date: "15 Ocak 2024",
-      dueDate: "25 Ocak 2024",
-      amount: 199.00,
-      status: "paid",
-      type: "Yenileme",
-      paidAt: "16 Ocak 2024",
-      paymentMethod: "Kredi Kartı",
-    },
-    {
-      id: "INV-2023-156",
-      date: "15 Ocak 2023",
-      dueDate: "25 Ocak 2023",
-      amount: 179.00,
-      status: "paid",
-      type: "Yenileme",
-      paidAt: "15 Ocak 2023",
-      paymentMethod: "Havale/EFT",
-    },
-    {
-      id: "INV-2022-089",
-      date: "15 Ocak 2022",
-      dueDate: "25 Ocak 2022",
-      amount: 149.00,
-      status: "paid",
-      type: "İlk Kayıt",
-      paidAt: "15 Ocak 2022",
-      paymentMethod: "Kredi Kartı",
-    },
-  ];
-
-  // For service 2 (VDS), show different invoices
-  if (serviceId === "2") {
-    return [
-      {
-        id: "INV-2024-089",
-        date: "1 Şubat 2024",
-        dueDate: "10 Şubat 2024",
-        amount: 299.00,
-        status: "pending",
-        type: "Yenileme",
-        paidAt: null,
-        paymentMethod: null,
-      },
-      {
-        id: "INV-2024-045",
-        date: "1 Ocak 2024",
-        dueDate: "10 Ocak 2024",
-        amount: 299.00,
-        status: "paid",
-        type: "Yenileme",
-        paidAt: "5 Ocak 2024",
-        paymentMethod: "Kredi Kartı",
-      },
-    ];
-  }
-
-  return allInvoices;
-};
-
-const statusConfig = {
-  paid: {
+const statusConfig: Record<string, {
+  label: string;
+  icon: typeof CheckCircle2;
+  color: string;
+  bg: string;
+}> = {
+  PAID: {
     label: "Ödendi",
     icon: CheckCircle2,
     color: "text-green-600",
     bg: "bg-green-500/10",
   },
-  pending: {
+  PENDING: {
     label: "Bekliyor",
     icon: Clock,
     color: "text-yellow-600",
     bg: "bg-yellow-500/10",
   },
-  overdue: {
+  OVERDUE: {
     label: "Gecikmiş",
     icon: AlertCircle,
     color: "text-red-600",
     bg: "bg-red-500/10",
   },
+  DRAFT: {
+    label: "Taslak",
+    icon: FileText,
+    color: "text-gray-600",
+    bg: "bg-gray-500/10",
+  },
+  CANCELLED: {
+    label: "İptal",
+    icon: AlertCircle,
+    color: "text-orange-600",
+    bg: "bg-orange-500/10",
+  },
 };
 
-export default function ServiceInvoicesPage() {
-  const params = useParams();
-  const serviceId = params.id as string;
-  const service = getServiceById(serviceId);
-  const invoices = getInvoicesForService(serviceId);
+const currencyFormatter = new Intl.NumberFormat("tr-TR", {
+  style: "currency",
+  currency: "TRY",
+});
+
+export default async function ServiceInvoicesPage(props: Props) {
+  const params = await props.params;
+  const session = await auth();
+  const userId = session!.user.id;
+
+  const service = await getServiceById(params.id);
+
+  if (!service || service.customerId !== userId) {
+    notFound();
+  }
+
+  // Get all customer invoices — DB does not have a direct service-invoice relation,
+  // so we fetch all and show them in context of this service
+  const invoices = await getInvoicesByCustomer(userId);
 
   const totalPaid = invoices
-    .filter((inv) => inv.status === "paid")
-    .reduce((sum, inv) => sum + inv.amount, 0);
+    .filter((inv) => inv.status === "PAID")
+    .reduce((sum, inv) => sum + Number(inv.paidAmount), 0);
 
   const pendingAmount = invoices
-    .filter((inv) => inv.status === "pending" || inv.status === "overdue")
-    .reduce((sum, inv) => sum + inv.amount, 0);
+    .filter((inv) => inv.status === "PENDING" || inv.status === "OVERDUE")
+    .reduce((sum, inv) => sum + Number(inv.totalAmount) - Number(inv.paidAmount), 0);
 
   return (
     <div className="space-y-6">
@@ -140,14 +97,14 @@ export default function ServiceInvoicesPage() {
       <BlurFade delay={0.1} inView>
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
-            <Link href={`/musteri/panel/hizmetlerim/${serviceId}`}>
+            <Link href={`/musteri/panel/hizmetlerim/${params.id}`}>
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Hizmet Faturaları</h1>
             <p className="text-muted-foreground">
-              {service.name} - {service.domain}
+              {service.product.name} - {service.domain || service.label || "-"}
             </p>
           </div>
         </div>
@@ -176,8 +133,8 @@ export default function ServiceInvoicesPage() {
                   <CheckCircle2 className="h-5 w-5 text-green-500" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Toplam Ödenen</p>
-                  <p className="text-2xl font-bold">₺{totalPaid.toFixed(2)}</p>
+                  <p className="text-sm text-muted-foreground">Toplam Odenen</p>
+                  <p className="text-2xl font-bold">{currencyFormatter.format(totalPaid)}</p>
                 </div>
               </div>
             </CardContent>
@@ -196,7 +153,7 @@ export default function ServiceInvoicesPage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Bekleyen</p>
-                  <p className="text-2xl font-bold">₺{pendingAmount.toFixed(2)}</p>
+                  <p className="text-2xl font-bold">{currencyFormatter.format(pendingAmount)}</p>
                 </div>
               </div>
             </CardContent>
@@ -216,7 +173,7 @@ export default function ServiceInvoicesPage() {
           <CardContent>
             <div className="space-y-4">
               {invoices.map((invoice) => {
-                const status = statusConfig[invoice.status as keyof typeof statusConfig];
+                const status = statusConfig[invoice.status] || statusConfig.PENDING;
                 const StatusIcon = status.icon;
 
                 return (
@@ -230,7 +187,7 @@ export default function ServiceInvoicesPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold">{invoice.id}</p>
+                        <p className="font-semibold">{invoice.invoiceNumber}</p>
                         <span className={cn(
                           "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full",
                           status.bg,
@@ -239,47 +196,44 @@ export default function ServiceInvoicesPage() {
                           <StatusIcon className="h-3 w-3" />
                           {status.label}
                         </span>
-                        <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
-                          {invoice.type}
-                        </span>
                       </div>
 
                       <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          {invoice.date}
+                          {new Date(invoice.issuedAt).toLocaleDateString("tr-TR")}
                         </span>
-                        {invoice.status === "paid" && invoice.paidAt && (
+                        {invoice.status === "PAID" && invoice.paidAt && (
                           <span className="flex items-center gap-1">
                             <CheckCircle2 className="h-3 w-3 text-green-500" />
-                            Ödeme: {invoice.paidAt}
+                            Ödeme: {new Date(invoice.paidAt).toLocaleDateString("tr-TR")}
                           </span>
                         )}
-                        {invoice.status === "pending" && (
-                          <span className="flex items-center gap-1 text-yellow-600">
+                        {(invoice.status === "PENDING" || invoice.status === "OVERDUE") && (
+                          <span className={cn(
+                            "flex items-center gap-1",
+                            invoice.status === "OVERDUE" ? "text-red-600" : "text-yellow-600"
+                          )}>
                             <Clock className="h-3 w-3" />
-                            Son Ödeme: {invoice.dueDate}
+                            Son Ödeme: {new Date(invoice.dueDate).toLocaleDateString("tr-TR")}
                           </span>
                         )}
                       </div>
-
-                      {invoice.paymentMethod && (
-                        <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                          <CreditCard className="h-3 w-3" />
-                          {invoice.paymentMethod}
-                        </div>
-                      )}
                     </div>
 
                     <div className="text-right">
-                      <p className="text-lg font-bold">₺{invoice.amount.toFixed(2)}</p>
+                      <p className="text-lg font-bold">
+                        {currencyFormatter.format(Number(invoice.totalAmount))}
+                      </p>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {invoice.status === "pending" && (
-                        <Button size="sm">
-                          <CreditCard className="mr-2 h-4 w-4" />
-                          Öde
+                      {(invoice.status === "PENDING" || invoice.status === "OVERDUE") && (
+                        <Button size="sm" asChild>
+                          <Link href={`/musteri/panel/faturalar/${invoice.id}`}>
+                            <CreditCard className="mr-2 h-4 w-4" />
+                            Ode
+                          </Link>
                         </Button>
                       )}
                       <Button variant="outline" size="sm" asChild>

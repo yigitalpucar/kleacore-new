@@ -11,6 +11,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Check, Shield, Clock, Headphones, Globe, Zap, Lock, HeartHandshake } from "lucide-react";
+import { getDomainTlds } from "@/lib/dal/domain-tlds";
 
 const features = [
   {
@@ -30,7 +31,9 @@ const features = [
   },
 ];
 
-export default function DomainKayitPage() {
+export default async function DomainKayitPage() {
+  const tlds = await getDomainTlds();
+
   return (
     <div className="flex min-h-screen flex-col">
       <Topbar />
@@ -96,7 +99,7 @@ export default function DomainKayitPage() {
             </BlurFade>
 
             <BlurFade delay={0.2} inView>
-              <TldPricing />
+              <TldPricing tlds={tlds} />
             </BlurFade>
           </div>
         </section>

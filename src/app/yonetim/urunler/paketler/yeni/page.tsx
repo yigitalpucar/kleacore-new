@@ -10,6 +10,7 @@ import {
   Plus,
   Trash2,
   Info,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,8 @@ import {
   resourceLimitLabels,
 } from "@/lib/products/constants";
 import type { ProductFormData, ProductCategorySlug, BillingPeriod } from "@/types/products";
+import { createProduct } from "@/lib/actions/admin/products";
+import { toast } from "@/lib/toast";
 
 const categoryOptions = Object.entries(categoryConfig).map(([slug, config]) => ({
   value: slug,
@@ -62,6 +65,7 @@ const defaultPricingTier = {
 export default function NewPackagePage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("basic");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<ProductFormData>({
     categoryId: "",
     sku: "",
@@ -175,8 +179,100 @@ export default function NewPackagePage() {
   };
 
   const handleSubmit = () => {
-    console.log("Form Data:", formData);
-    router.push("/yonetim/urunler/paketler");
+    const statusMap = {
+      active: "ACTIVE" as const,
+      inactive: "INACTIVE" as const,
+      draft: "DRAFT" as const,
+      archived: "ARCHIVED" as const,
+    };
+
+    if (isSubmitting) return;
+
+    if (!formData.categoryId) {
+      setActiveTab("basic");
+      toast.error("Lütfen bir kategori seçin.");
+      return;
+    }
+
+    if (!formData.sku.trim() || !formData.name.trim() || !formData.slug.trim()) {
+      setActiveTab("basic");
+      toast.error("Kategori, SKU, paket adı ve slug zorunludur.");
+      return;
+    }
+
+    if (!formData.shortDescription.trim()) {
+      setActiveTab("basic");
+      toast.error("Kısa açıklama zorunludur.");
+      return;
+    }
+
+    if (formData.pricingTiers.length === 0) {
+      setActiveTab("pricing");
+      toast.error("En az bir fiyat dönemi eklemelisiniz.");
+      return;
+    }
+
+    const hasPositivePrice = formData.pricingTiers.some((tier) => tier.price > 0);
+    if (!hasPositivePrice) {
+      setActiveTab("pricing");
+      toast.error("En az bir fiyat dönemi için fiyat 0'dan büyük olmalıdır.");
+      return;
+    }
+
+    const hasDefaultTier = formData.pricingTiers.some((tier) => tier.isDefault);
+    const normalizedPricingTiers = formData.pricingTiers.map((tier, index) => ({
+      period: tier.period,
+      price: tier.price,
+      setupFee: tier.setupFee || 0,
+      renewalPrice: tier.renewalPrice || tier.price,
+      isDefault: hasDefaultTier ? tier.isDefault : index === 0,
+      isActive: tier.isActive,
+    }));
+
+    const defaultTier = normalizedPricingTiers.find((tier) => tier.isDefault)
+      ?? normalizedPricingTiers[0];
+
+    const submit = async () => {
+      setIsSubmitting(true);
+
+      try {
+        const result = await createProduct({
+          categoryId: formData.categoryId,
+          sku: formData.sku.trim().toUpperCase(),
+          name: formData.name.trim(),
+          slug: formData.slug.trim(),
+          shortDescription: formData.shortDescription.trim(),
+          longDescription: formData.longDescription.trim(),
+          features: formData.features,
+          includedFeatures: formData.includedFeatures
+            .map((feature) => feature.trim())
+            .filter((feature) => feature.length > 0),
+          resourceLimits: formData.resourceLimits,
+          basePrice: defaultTier.price,
+          badge: formData.badge?.trim() || undefined,
+          isPopular: formData.isPopular,
+          displayOrder: formData.displayOrder,
+          stockQuantity: formData.stockQuantity,
+          status: statusMap[formData.status],
+          isVisible: formData.isVisible,
+          metaTitle: formData.metaTitle?.trim() || undefined,
+          metaDescription: formData.metaDescription?.trim() || undefined,
+          pricingTiers: normalizedPricingTiers,
+        });
+
+        if (!result.success) {
+          toast.error(result.error ?? "Paket oluşturulamadı.");
+          return;
+        }
+
+        toast.success("Paket başarıyla oluşturuldu.");
+        router.push("/yonetim/urunler/paketler");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    void submit();
   };
 
   const selectedCategory = categoryOptions.find(
@@ -204,9 +300,9 @@ export default function NewPackagePage() {
               <Eye className="mr-2 h-4 w-4" />
               Önizle
             </Button>
-            <Button onClick={handleSubmit} className="bg-primary hover:bg-primary/90">
-              <Save className="mr-2 h-4 w-4" />
-              Kaydet
+            <Button onClick={handleSubmit} disabled={isSubmitting} className="bg-primary hover:bg-primary/90">
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              {isSubmitting ? "Kaydediliyor..." : "Kaydet"}
             </Button>
           </div>
         </div>

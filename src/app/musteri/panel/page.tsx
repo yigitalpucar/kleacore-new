@@ -1,210 +1,39 @@
-"use client";
+import { auth } from "@/lib/auth";
+import { getCustomerDashboardStats } from "@/lib/dal/dashboard";
+import { getServicesByCustomer } from "@/lib/dal/services";
+import { DashboardContent } from "./content";
 
-import Link from "next/link";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Package,
-  Headphones,
-  ArrowRight,
-  ChevronRight,
-  CheckCircle2,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+export default async function DashboardPage() {
+  const session = await auth();
+  const userId = session!.user.id;
 
-// Stat cards data - colored like the example
-const statCards = [
-  {
-    title: "Aktif Hizmetler",
-    value: "1",
-    description: "Toplam aktif hizmet sayınız",
-    href: "/musteri/panel/hizmetlerim",
-    bgColor: "bg-blue-600",
-  },
-  {
-    title: "Aktif Domainler",
-    value: "0",
-    description: "Toplam aktif domain sayınız",
-    href: "/musteri/panel/domainler",
-    bgColor: "bg-green-600",
-  },
-  {
-    title: "Destek Talepleri",
-    value: "0",
-    description: "Aktif destek talebi sayınız",
-    href: "/musteri/panel/destek",
-    bgColor: "bg-orange-500",
-  },
-  {
-    title: "Faturalar",
-    value: "0",
-    description: "Ödenmemiş fatura sayınız",
-    href: "/musteri/panel/faturalar",
-    bgColor: "bg-red-500",
-  },
-];
+  const [dashboardStats, services] = await Promise.all([
+    getCustomerDashboardStats(userId),
+    getServicesByCustomer(userId),
+  ]);
 
-// Mock services data
-const services = [
-  {
-    id: 1,
-    name: "VDS-3",
-    domain: "vds1.kleacore.com",
-    nextPayment: "10/01/2027",
-    status: "active",
-  },
-];
+  // Serialize services for the client component
+  const serializedServices = services.map((s) => ({
+    id: s.id,
+    label: s.label,
+    domain: s.domain,
+    status: s.status,
+    nextDueDate: s.nextDueDate ? s.nextDueDate.toISOString() : null,
+    product: {
+      id: s.product.id,
+      name: s.product.name,
+    },
+  }));
 
-// Mock support tickets
-const supportTickets: Array<{
-  id: number;
-  subject: string;
-  department: string;
-  lastUpdate: string;
-  status: string;
-}> = [];
-
-export default function DashboardPage() {
   return (
-    <div className="space-y-6">
-      {/* Stat Cards */}
-      <BlurFade delay={0.1} inView>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {statCards.map((card) => (
-            <Link key={card.title} href={card.href}>
-              <Card
-                className={cn(
-                  "text-white border-0 hover:opacity-90 transition-opacity cursor-pointer h-full",
-                  card.bgColor
-                )}
-              >
-                <CardContent className="p-5">
-                  <p className="text-sm font-medium text-white/80">{card.title}</p>
-                  <p className="text-3xl font-bold mt-1">{card.value}</p>
-                  <p className="text-xs text-white/70 mt-2">{card.description}</p>
-                  <div className="flex items-center gap-1 mt-3 text-sm text-white/90">
-                    Görüntüle
-                    <ChevronRight className="h-4 w-4" />
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      </BlurFade>
-
-      {/* Active Services Table */}
-      <BlurFade delay={0.15} inView>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Package className="h-5 w-5 text-primary" />
-              Aktif Hizmetler ({services.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b text-left text-sm text-muted-foreground">
-                    <th className="pb-3 font-medium">Ürün/Hizmet</th>
-                    <th className="pb-3 font-medium">Domain</th>
-                    <th className="pb-3 font-medium">Sonraki Ödeme</th>
-                    <th className="pb-3 font-medium">Durum</th>
-                    <th className="pb-3 font-medium"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {services.map((service) => (
-                    <tr key={service.id} className="border-b last:border-0">
-                      <td className="py-4">
-                        <span className="text-primary font-medium">{service.name}</span>
-                      </td>
-                      <td className="py-4 text-muted-foreground">{service.domain}</td>
-                      <td className="py-4 text-muted-foreground">{service.nextPayment}</td>
-                      <td className="py-4">
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Aktif
-                        </span>
-                      </td>
-                      <td className="py-4 text-right">
-                        <Button size="sm">Yönet</Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-end mt-4">
-              <Button variant="link" asChild>
-                <Link href="/musteri/panel/hizmetlerim">
-                  Tüm Hizmetler
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-
-      {/* Support Tickets Table */}
-      <BlurFade delay={0.2} inView>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Headphones className="h-5 w-5 text-red-500" />
-              Aktif Destek Talepleri ({supportTickets.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b text-left text-sm text-muted-foreground">
-                    <th className="pb-3 font-medium">Talep No</th>
-                    <th className="pb-3 font-medium">Konu</th>
-                    <th className="pb-3 font-medium">Departman</th>
-                    <th className="pb-3 font-medium">Son Güncelleme</th>
-                    <th className="pb-3 font-medium">Durum</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {supportTickets.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground italic">
-                        Aktif destek talebi bulunmuyor.
-                      </td>
-                    </tr>
-                  ) : (
-                    supportTickets.map((ticket) => (
-                      <tr key={ticket.id} className="border-b last:border-0">
-                        <td className="py-4 text-primary font-medium">#{ticket.id}</td>
-                        <td className="py-4">{ticket.subject}</td>
-                        <td className="py-4 text-muted-foreground">{ticket.department}</td>
-                        <td className="py-4 text-muted-foreground">{ticket.lastUpdate}</td>
-                        <td className="py-4">
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                            {ticket.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-end mt-4">
-              <Button asChild>
-                <Link href="/musteri/panel/destek">
-                  Yeni Destek Talebi
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+    <DashboardContent
+      stats={{
+        activeServices: dashboardStats.activeServices,
+        totalInvoices: dashboardStats.totalInvoices,
+        unpaidInvoices: dashboardStats.unpaidInvoices,
+        openTickets: dashboardStats.openTickets,
+      }}
+      services={serializedServices}
+    />
   );
 }

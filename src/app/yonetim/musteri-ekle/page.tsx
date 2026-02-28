@@ -13,6 +13,7 @@ import {
   FileText,
   Save,
   Loader2,
+  Lock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,64 +29,48 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { createCustomer } from "@/lib/actions/admin/customers";
 
 export default function AddCustomerPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    // Kişisel Bilgiler
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    // Şirket Bilgileri
-    customerType: "individual", // individual | corporate
-    companyName: "",
-    taxNumber: "",
-    taxOffice: "",
-    // Adres Bilgileri
-    address: "",
-    city: "",
-    district: "",
-    postalCode: "",
-    country: "Türkiye",
-    // Hesap Ayarları
-    status: "active",
-    sendWelcomeEmail: true,
-    notes: "",
-  });
+  const [error, setError] = useState<string | null>(null);
+  const [customerType, setCustomerType] = useState<"INDIVIDUAL" | "CORPORATE">("INDIVIDUAL");
 
-  const handleInputChange = (field: string, value: string | boolean) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError(null);
 
-    // Simüle edilmiş API çağrısı
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    formData.set("customerType", customerType);
 
-    // Başarılı kayıt sonrası yönlendirme
-    router.push("/yonetim/musteriler");
+    const result = await createCustomer(formData);
+
+    if (result.success) {
+      router.push("/yonetim/musteriler");
+    } else {
+      setError(result.error || "Bir hata oluştu");
+      setIsSubmitting(false);
+    }
   };
 
   const turkishCities = [
-    "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Amasya", "Ankara", "Antalya", "Artvin",
-    "Aydın", "Balıkesir", "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur", "Bursa",
-    "Çanakkale", "Çankırı", "Çorum", "Denizli", "Diyarbakır", "Edirne", "Elazığ", "Erzincan",
-    "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane", "Hakkari", "Hatay", "Isparta",
-    "Mersin", "İstanbul", "İzmir", "Kars", "Kastamonu", "Kayseri", "Kırklareli", "Kırşehir",
-    "Kocaeli", "Konya", "Kütahya", "Malatya", "Manisa", "Kahramanmaraş", "Mardin", "Muğla",
-    "Muş", "Nevşehir", "Niğde", "Ordu", "Rize", "Sakarya", "Samsun", "Siirt", "Sinop",
-    "Sivas", "Tekirdağ", "Tokat", "Trabzon", "Tunceli", "Şanlıurfa", "Uşak", "Van",
-    "Yozgat", "Zonguldak", "Aksaray", "Bayburt", "Karaman", "Kırıkkale", "Batman", "Şırnak",
-    "Bartın", "Ardahan", "Iğdır", "Yalova", "Karabük", "Kilis", "Osmaniye", "Düzce"
+    "Adana", "Adiyaman", "Afyonkarahisar", "Agri", "Amasya", "Ankara", "Antalya", "Artvin",
+    "Aydin", "Balikesir", "Bilecik", "Bingol", "Bitlis", "Bolu", "Burdur", "Bursa",
+    "Canakkale", "Cankiri", "Corum", "Denizli", "Diyarbakir", "Edirne", "Elazig", "Erzincan",
+    "Erzurum", "Eskisehir", "Gaziantep", "Giresun", "Gumushane", "Hakkari", "Hatay", "Isparta",
+    "Mersin", "Istanbul", "Izmir", "Kars", "Kastamonu", "Kayseri", "Kirklareli", "Kirsehir",
+    "Kocaeli", "Konya", "Kutahya", "Malatya", "Manisa", "Kahramanmaras", "Mardin", "Mugla",
+    "Mus", "Nevsehir", "Nigde", "Ordu", "Rize", "Sakarya", "Samsun", "Siirt", "Sinop",
+    "Sivas", "Tekirdag", "Tokat", "Trabzon", "Tunceli", "Sanliurfa", "Usak", "Van",
+    "Yozgat", "Zonguldak", "Aksaray", "Bayburt", "Karaman", "Kirikkale", "Batman", "Sirnak",
+    "Bartin", "Ardahan", "Igdir", "Yalova", "Karabuk", "Kilis", "Osmaniye", "Duzce"
   ].sort();
 
   return (
     <div className="space-y-6">
-      {/* Back Button */}
       <BlurFade delay={0}>
         <Link
           href="/yonetim/musteriler"
@@ -96,7 +81,6 @@ export default function AddCustomerPage() {
         </Link>
       </BlurFade>
 
-      {/* Page Header */}
       <BlurFade delay={0.1}>
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Yeni Müşteri Ekle</h1>
@@ -104,11 +88,15 @@ export default function AddCustomerPage() {
         </div>
       </BlurFade>
 
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 p-4">
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit}>
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left Column - Main Form */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Müşteri Tipi */}
             <BlurFade delay={0.2}>
               <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                 <CardHeader>
@@ -124,30 +112,30 @@ export default function AddCustomerPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <button
                       type="button"
-                      onClick={() => handleInputChange("customerType", "individual")}
+                      onClick={() => setCustomerType("INDIVIDUAL")}
                       className={`p-4 rounded-lg border-2 transition-all text-left ${
-                        formData.customerType === "individual"
+                        customerType === "INDIVIDUAL"
                           ? "border-primary bg-primary/5"
                           : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600"
                       }`}
                     >
-                      <User className={`h-6 w-6 mb-2 ${formData.customerType === "individual" ? "text-primary" : "text-zinc-500"}`} />
-                      <p className={`font-medium ${formData.customerType === "individual" ? "text-primary" : "text-zinc-900 dark:text-white"}`}>
+                      <User className={`h-6 w-6 mb-2 ${customerType === "INDIVIDUAL" ? "text-primary" : "text-zinc-500"}`} />
+                      <p className={`font-medium ${customerType === "INDIVIDUAL" ? "text-primary" : "text-zinc-900 dark:text-white"}`}>
                         Bireysel
                       </p>
                       <p className="text-xs text-zinc-500 mt-1">Kişisel müşteri hesabı</p>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleInputChange("customerType", "corporate")}
+                      onClick={() => setCustomerType("CORPORATE")}
                       className={`p-4 rounded-lg border-2 transition-all text-left ${
-                        formData.customerType === "corporate"
+                        customerType === "CORPORATE"
                           ? "border-primary bg-primary/5"
                           : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600"
                       }`}
                     >
-                      <Building2 className={`h-6 w-6 mb-2 ${formData.customerType === "corporate" ? "text-primary" : "text-zinc-500"}`} />
-                      <p className={`font-medium ${formData.customerType === "corporate" ? "text-primary" : "text-zinc-900 dark:text-white"}`}>
+                      <Building2 className={`h-6 w-6 mb-2 ${customerType === "CORPORATE" ? "text-primary" : "text-zinc-500"}`} />
+                      <p className={`font-medium ${customerType === "CORPORATE" ? "text-primary" : "text-zinc-900 dark:text-white"}`}>
                         Kurumsal
                       </p>
                       <p className="text-xs text-zinc-500 mt-1">Şirket hesabı</p>
@@ -157,7 +145,6 @@ export default function AddCustomerPage() {
               </Card>
             </BlurFade>
 
-            {/* Kişisel Bilgiler */}
             <BlurFade delay={0.3}>
               <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                 <CardHeader>
@@ -172,27 +159,25 @@ export default function AddCustomerPage() {
                 <CardContent className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="firstName" className="text-zinc-700 dark:text-zinc-300">
+                      <Label htmlFor="name" className="text-zinc-700 dark:text-zinc-300">
                         Ad <span className="text-red-500">*</span>
                       </Label>
                       <Input
-                        id="firstName"
+                        id="name"
+                        name="name"
                         placeholder="Müşteri adı"
-                        value={formData.firstName}
-                        onChange={(e) => handleInputChange("firstName", e.target.value)}
                         required
                         className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="lastName" className="text-zinc-700 dark:text-zinc-300">
+                      <Label htmlFor="surname" className="text-zinc-700 dark:text-zinc-300">
                         Soyad <span className="text-red-500">*</span>
                       </Label>
                       <Input
-                        id="lastName"
+                        id="surname"
+                        name="surname"
                         placeholder="Müşteri soyadı"
-                        value={formData.lastName}
-                        onChange={(e) => handleInputChange("lastName", e.target.value)}
                         required
                         className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
                       />
@@ -206,10 +191,9 @@ export default function AddCustomerPage() {
                       </Label>
                       <Input
                         id="email"
+                        name="email"
                         type="email"
                         placeholder="ornek@email.com"
-                        value={formData.email}
-                        onChange={(e) => handleInputChange("email", e.target.value)}
                         required
                         className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
                       />
@@ -217,25 +201,37 @@ export default function AddCustomerPage() {
                     <div className="space-y-2">
                       <Label htmlFor="phone" className="text-zinc-700 dark:text-zinc-300">
                         <Phone className="inline h-4 w-4 mr-1" />
-                        Telefon <span className="text-red-500">*</span>
+                        Telefon
                       </Label>
                       <Input
                         id="phone"
+                        name="phone"
                         type="tel"
                         placeholder="0532 123 45 67"
-                        value={formData.phone}
-                        onChange={(e) => handleInputChange("phone", e.target.value)}
-                        required
                         className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
                       />
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-zinc-700 dark:text-zinc-300">
+                      <Lock className="inline h-4 w-4 mr-1" />
+                      Şifre <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      placeholder="Müşteri şifresi"
+                      required
+                      minLength={6}
+                      className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
+                    />
                   </div>
                 </CardContent>
               </Card>
             </BlurFade>
 
-            {/* Şirket Bilgileri - Kurumsal müşteri seçildiğinde göster */}
-            {formData.customerType === "corporate" && (
+            {customerType === "CORPORATE" && (
               <BlurFade delay={0.35}>
                 <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                   <CardHeader>
@@ -254,24 +250,21 @@ export default function AddCustomerPage() {
                       </Label>
                       <Input
                         id="companyName"
+                        name="companyName"
                         placeholder="Şirket adı"
-                        value={formData.companyName}
-                        onChange={(e) => handleInputChange("companyName", e.target.value)}
-                        required={formData.customerType === "corporate"}
+                        required={customerType === "CORPORATE"}
                         className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
                       />
                     </div>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label htmlFor="taxNumber" className="text-zinc-700 dark:text-zinc-300">
-                          Vergi Numarası <span className="text-red-500">*</span>
+                          Vergi Numarası
                         </Label>
                         <Input
                           id="taxNumber"
+                          name="taxNumber"
                           placeholder="1234567890"
-                          value={formData.taxNumber}
-                          onChange={(e) => handleInputChange("taxNumber", e.target.value)}
-                          required={formData.customerType === "corporate"}
                           className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
                         />
                       </div>
@@ -281,9 +274,8 @@ export default function AddCustomerPage() {
                         </Label>
                         <Input
                           id="taxOffice"
+                          name="taxOffice"
                           placeholder="Vergi dairesi adı"
-                          value={formData.taxOffice}
-                          onChange={(e) => handleInputChange("taxOffice", e.target.value)}
                           className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
                         />
                       </div>
@@ -293,7 +285,6 @@ export default function AddCustomerPage() {
               </BlurFade>
             )}
 
-            {/* Adres Bilgileri */}
             <BlurFade delay={0.4}>
               <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                 <CardHeader>
@@ -312,133 +303,34 @@ export default function AddCustomerPage() {
                     </Label>
                     <Textarea
                       id="address"
+                      name="address"
                       placeholder="Sokak, mahalle, bina no, daire no..."
-                      value={formData.address}
-                      onChange={(e) => handleInputChange("address", e.target.value)}
                       className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500 min-h-20"
                     />
                   </div>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="city" className="text-zinc-700 dark:text-zinc-300">
-                        İl
-                      </Label>
-                      <Select
-                        value={formData.city}
-                        onValueChange={(value) => handleInputChange("city", value)}
-                      >
-                        <SelectTrigger className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white">
-                          <SelectValue placeholder="İl seçin" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-                          {turkishCities.map((city) => (
-                            <SelectItem key={city} value={city}>
-                              {city}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="district" className="text-zinc-700 dark:text-zinc-300">
-                        İlçe
-                      </Label>
-                      <Input
-                        id="district"
-                        placeholder="İlçe adı"
-                        value={formData.district}
-                        onChange={(e) => handleInputChange("district", e.target.value)}
-                        className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="postalCode" className="text-zinc-700 dark:text-zinc-300">
-                        Posta Kodu
-                      </Label>
-                      <Input
-                        id="postalCode"
-                        placeholder="34000"
-                        value={formData.postalCode}
-                        onChange={(e) => handleInputChange("postalCode", e.target.value)}
-                        className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city" className="text-zinc-700 dark:text-zinc-300">
+                      İl
+                    </Label>
+                    <Select name="city">
+                      <SelectTrigger className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white">
+                        <SelectValue placeholder="İl seçin" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                        {turkishCities.map((city) => (
+                          <SelectItem key={city} value={city}>
+                            {city}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </CardContent>
               </Card>
             </BlurFade>
           </div>
 
-          {/* Right Column - Settings & Actions */}
           <div className="space-y-6">
-            {/* Hesap Durumu */}
-            <BlurFade delay={0.45}>
-              <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-                <CardHeader>
-                  <CardTitle className="text-zinc-900 dark:text-white text-base">Hesap Durumu</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-zinc-700 dark:text-zinc-300">Durum</Label>
-                    <Select
-                      value={formData.status}
-                      onValueChange={(value) => handleInputChange("status", value)}
-                    >
-                      <SelectTrigger className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-                        <SelectItem value="active">Aktif</SelectItem>
-                        <SelectItem value="pending">Beklemede</SelectItem>
-                        <SelectItem value="suspended">Askıda</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-zinc-900 dark:text-white">Hoş Geldin E-postası</p>
-                      <p className="text-xs text-zinc-500">Kayıt sonrası otomatik gönder</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleInputChange("sendWelcomeEmail", !formData.sendWelcomeEmail)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        formData.sendWelcomeEmail ? "bg-primary" : "bg-zinc-300 dark:bg-zinc-700"
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          formData.sendWelcomeEmail ? "translate-x-6" : "translate-x-1"
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </CardContent>
-              </Card>
-            </BlurFade>
-
-            {/* Notlar */}
-            <BlurFade delay={0.5}>
-              <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-                <CardHeader>
-                  <CardTitle className="text-zinc-900 dark:text-white text-base flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Notlar
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    placeholder="Müşteri hakkında özel notlar..."
-                    value={formData.notes}
-                    onChange={(e) => handleInputChange("notes", e.target.value)}
-                    className="bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500 min-h-24"
-                  />
-                </CardContent>
-              </Card>
-            </BlurFade>
-
-            {/* Action Buttons */}
             <BlurFade delay={0.55}>
               <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                 <CardContent className="p-4 space-y-3">

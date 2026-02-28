@@ -1,6 +1,3 @@
-"use client";
-
-import { useState } from "react";
 import {
   Building2,
   Mail,
@@ -8,7 +5,6 @@ import {
   Shield,
   Users,
   Key,
-  Globe,
   CreditCard,
   Save,
   Upload,
@@ -18,31 +14,205 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { getSettings, getAdminUsers, getApiKeys } from "@/lib/dal/settings";
+import { updateSettings } from "@/lib/actions/admin/settings";
+import { NotificationSwitches, SecuritySwitch } from "./settings-switches";
+import { redirect } from "next/navigation";
+import { SettingsFeedbackToast } from "./settings-feedback-toast";
 
-const adminUsers = [
-  { id: 1, name: "Admin", email: "admin@kleacore.com", role: "Super Admin", lastLogin: "2024-06-25 14:32" },
-  { id: 2, name: "Destek Uzmanı", email: "destek@kleacore.com", role: "Destek", lastLogin: "2024-06-25 10:15" },
-  { id: 3, name: "Muhasebe", email: "muhasebe@kleacore.com", role: "Finans", lastLogin: "2024-06-24 16:45" },
-];
+const allowedTabs = [
+  "general",
+  "email",
+  "notifications",
+  "payment",
+  "security",
+  "users",
+  "api",
+] as const;
 
-const apiKeys = [
-  { id: 1, name: "WHMCS Entegrasyon", key: "kl_live_**********************a8f2", created: "2024-01-15", lastUsed: "2024-06-25" },
-  { id: 2, name: "Payment Gateway", key: "kl_live_**********************b3c1", created: "2024-03-20", lastUsed: "2024-06-25" },
-];
+type SettingsTab = (typeof allowedTabs)[number];
 
-export default function SettingsPage() {
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [smsNotifications, setSmsNotifications] = useState(false);
-  const [autoInvoice, setAutoInvoice] = useState(true);
-  const [twoFactor, setTwoFactor] = useState(true);
+// Settings key'den value al, yoksa default dondur
+function getSettingValue(
+  settings: { key: string; value: string }[],
+  key: string,
+  defaultValue: string = ""
+): string {
+  return settings.find((s) => s.key === key)?.value ?? defaultValue;
+}
+
+function maskApiKey(key: string): string {
+  if (key.length <= 8) return "****";
+  return key.substring(0, 7) + "****" + key.substring(key.length - 4);
+}
+
+function getFormValue(formData: FormData, key: string, fallback = "") {
+  const value = formData.get(key);
+  return typeof value === "string" ? value : fallback;
+}
+
+async function saveGeneralSettings(formData: FormData) {
+  "use server";
+
+  const result = await updateSettings([
+    { key: "company_name", value: getFormValue(formData, "company_name") },
+    { key: "tax_number", value: getFormValue(formData, "tax_number") },
+    { key: "address", value: getFormValue(formData, "address") },
+    { key: "company_email", value: getFormValue(formData, "company_email") },
+    { key: "company_phone", value: getFormValue(formData, "company_phone") },
+  ]);
+
+  const params = new URLSearchParams({
+    tab: "general",
+    status: result.success ? "success" : "error",
+    message: result.success
+      ? "Genel ayarlar kaydedildi."
+      : result.error ?? "Genel ayarlar kaydedilemedi.",
+  });
+  redirect(`/yonetim/ayarlar?${params.toString()}`);
+}
+
+async function saveEmailSettings(formData: FormData) {
+  "use server";
+
+  const result = await updateSettings([
+    { key: "smtp_server", value: getFormValue(formData, "smtp_server") },
+    { key: "smtp_port", value: getFormValue(formData, "smtp_port") },
+    { key: "smtp_username", value: getFormValue(formData, "smtp_username") },
+    { key: "smtp_password", value: getFormValue(formData, "smtp_password") },
+  ]);
+
+  const params = new URLSearchParams({
+    tab: "email",
+    status: result.success ? "success" : "error",
+    message: result.success
+      ? "SMTP ayarlari kaydedildi."
+      : result.error ?? "SMTP ayarlari kaydedilemedi.",
+  });
+  redirect(`/yonetim/ayarlar?${params.toString()}`);
+}
+
+async function saveNotificationSettings(formData: FormData) {
+  "use server";
+
+  const result = await updateSettings([
+    {
+      key: "email_notifications",
+      value: getFormValue(formData, "email_notifications", "false"),
+    },
+    {
+      key: "sms_notifications",
+      value: getFormValue(formData, "sms_notifications", "false"),
+    },
+    {
+      key: "auto_invoice",
+      value: getFormValue(formData, "auto_invoice", "false"),
+    },
+  ]);
+
+  const params = new URLSearchParams({
+    tab: "notifications",
+    status: result.success ? "success" : "error",
+    message: result.success
+      ? "Bildirim ayarlari kaydedildi."
+      : result.error ?? "Bildirim ayarlari kaydedilemedi.",
+  });
+  redirect(`/yonetim/ayarlar?${params.toString()}`);
+}
+
+async function saveSecuritySettings(formData: FormData) {
+  "use server";
+
+  const result = await updateSettings([
+    { key: "two_factor", value: getFormValue(formData, "two_factor", "false") },
+  ]);
+
+  const params = new URLSearchParams({
+    tab: "security",
+    status: result.success ? "success" : "error",
+    message: result.success
+      ? "Guvenlik ayarlari kaydedildi."
+      : result.error ?? "Guvenlik ayarlari kaydedilemedi.",
+  });
+  redirect(`/yonetim/ayarlar?${params.toString()}`);
+}
+
+async function saveWebhookSettings(formData: FormData) {
+  "use server";
+
+  const result = await updateSettings([
+    { key: "webhook_orders", value: getFormValue(formData, "webhook_orders") },
+    {
+      key: "webhook_payments",
+      value: getFormValue(formData, "webhook_payments"),
+    },
+  ]);
+
+  const params = new URLSearchParams({
+    tab: "api",
+    status: result.success ? "success" : "error",
+    message: result.success
+      ? "Webhook ayarlari kaydedildi."
+      : result.error ?? "Webhook ayarlari kaydedilemedi.",
+  });
+  redirect(`/yonetim/ayarlar?${params.toString()}`);
+}
+
+function readSearchParam(
+  searchParams: Record<string, string | string[] | undefined>,
+  key: string
+) {
+  const value = searchParams[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function isSettingsTab(value: string | undefined): value is SettingsTab {
+  return value ? allowedTabs.includes(value as SettingsTab) : false;
+}
+
+interface SettingsPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function SettingsPage({ searchParams }: SettingsPageProps) {
+  const sp = await searchParams;
+  const activeTab = readSearchParam(sp, "tab");
+  const toastStatus = readSearchParam(sp, "status");
+  const toastMessage = readSearchParam(sp, "message");
+  const defaultTab: SettingsTab = isSettingsTab(activeTab) ? activeTab : "general";
+
+  const [settings, adminUsers, apiKeys] = await Promise.all([
+    getSettings(),
+    getAdminUsers(),
+    getApiKeys(),
+  ]);
+
+  // Settings'ten degerler
+  const companyName = getSettingValue(settings, "company_name", "KLEACORE");
+  const taxNumber = getSettingValue(settings, "tax_number", "");
+  const address = getSettingValue(settings, "address", "");
+  const companyEmail = getSettingValue(settings, "company_email", "");
+  const companyPhone = getSettingValue(settings, "company_phone", "");
+  const smtpServer = getSettingValue(settings, "smtp_server", "");
+  const smtpPort = getSettingValue(settings, "smtp_port", "587");
+  const smtpUsername = getSettingValue(settings, "smtp_username", "");
+  const smtpPassword = getSettingValue(settings, "smtp_password", "");
+  const emailNotifications = getSettingValue(settings, "email_notifications", "true") === "true";
+  const smsNotifications = getSettingValue(settings, "sms_notifications", "false") === "true";
+  const autoInvoice = getSettingValue(settings, "auto_invoice", "true") === "true";
+  const twoFactor = getSettingValue(settings, "two_factor", "true") === "true";
 
   return (
     <div className="space-y-6">
+      <SettingsFeedbackToast
+        status={toastStatus}
+        message={toastMessage}
+        activeTab={defaultTab}
+      />
       {/* Page Header */}
       <BlurFade delay={0}>
         <div>
@@ -52,7 +222,7 @@ export default function SettingsPage() {
       </BlurFade>
 
       <BlurFade delay={0.1}>
-      <Tabs defaultValue="general" className="w-full">
+      <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="general" className="data-[state=active]:bg-zinc-200 dark:data-[state=active]:bg-zinc-700">
             <Building2 className="mr-2 h-4 w-4" />
@@ -86,129 +256,152 @@ export default function SettingsPage() {
 
         {/* General Settings */}
         <TabsContent value="general" className="mt-6 space-y-6">
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">Şirket Bilgileri</CardTitle>
-              <CardDescription className="text-zinc-500">
-                Şirketinizin temel bilgilerini güncelleyin
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">Şirket Adı</Label>
-                  <Input
-                    defaultValue="KLEACORE"
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
+          <form action={saveGeneralSettings} className="space-y-6">
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardHeader>
+                <CardTitle className="text-zinc-900 dark:text-white">Şirket Bilgileri</CardTitle>
+                <CardDescription className="text-zinc-500">
+                  Şirketinizin temel bilgilerini güncelleyin
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-zinc-700 dark:text-zinc-300">Şirket Adı</Label>
+                    <Input
+                      name="company_name"
+                      defaultValue={companyName}
+                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-700 dark:text-zinc-300">Vergi Numarası</Label>
+                    <Input
+                      name="tax_number"
+                      defaultValue={taxNumber}
+                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">Vergi Numarası</Label>
-                  <Input
-                    defaultValue="36-5157418"
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
+                  <Label className="text-zinc-700 dark:text-zinc-300">Adres</Label>
+                  <Textarea
+                    name="address"
+                    defaultValue={address}
+                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white min-h-20"
                   />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-zinc-700 dark:text-zinc-300">Adres</Label>
-                <Textarea
-                  defaultValue="30 N Gould St Ste R, Sheridan, WY 82801, USA"
-                  className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white min-h-20"
-                />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">E-posta</Label>
-                  <Input
-                    defaultValue="support@kleacore.com"
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-zinc-700 dark:text-zinc-300">E-posta</Label>
+                    <Input
+                      name="company_email"
+                      defaultValue={companyEmail}
+                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-700 dark:text-zinc-300">Telefon</Label>
+                    <Input
+                      name="company_phone"
+                      defaultValue={companyPhone}
+                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">Telefon</Label>
-                  <Input
-                    defaultValue="+1 (307) 555-0123"
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">Logo</CardTitle>
-              <CardDescription className="text-zinc-500">
-                Site logonuzu güncelleyin
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-32 bg-zinc-200 dark:bg-zinc-800 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold">KLEACORE</span>
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardHeader>
+                <CardTitle className="text-zinc-900 dark:text-white">Logo</CardTitle>
+                <CardDescription className="text-zinc-500">
+                  Site logonuzu güncelleyin
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  <div className="h-16 w-32 bg-zinc-200 dark:bg-zinc-800 rounded-lg flex items-center justify-center">
+                    <span className="text-white font-bold">{companyName}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Logo Yükle
+                  </Button>
                 </div>
-                <Button variant="outline" className="border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-                  <Upload className="mr-2 h-4 w-4" />
-                  Logo Yükle
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <div className="flex justify-end">
-            <Button className="bg-primary hover:bg-primary/90">
-              <Save className="mr-2 h-4 w-4" />
-              Değişiklikleri Kaydet
-            </Button>
-          </div>
+            <div className="flex justify-end">
+              <Button type="submit" className="bg-primary hover:bg-primary/90">
+                <Save className="mr-2 h-4 w-4" />
+                Değişiklikleri Kaydet
+              </Button>
+            </div>
+          </form>
         </TabsContent>
 
         {/* Email Settings */}
         <TabsContent value="email" className="mt-6 space-y-6">
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">SMTP Ayarları</CardTitle>
-              <CardDescription className="text-zinc-500">
-                E-posta gönderimi için SMTP sunucunuzu yapılandırın
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">SMTP Sunucu</Label>
-                  <Input
-                    defaultValue="smtp.kleacore.com"
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
+          <form action={saveEmailSettings} className="space-y-6">
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardHeader>
+                <CardTitle className="text-zinc-900 dark:text-white">SMTP Ayarları</CardTitle>
+                <CardDescription className="text-zinc-500">
+                  E-posta gönderimi için SMTP sunucunuzu yapılandırın
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-zinc-700 dark:text-zinc-300">SMTP Sunucu</Label>
+                    <Input
+                      name="smtp_server"
+                      defaultValue={smtpServer}
+                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-700 dark:text-zinc-300">Port</Label>
+                    <Input
+                      name="smtp_port"
+                      defaultValue={smtpPort}
+                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">Port</Label>
-                  <Input
-                    defaultValue="587"
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-zinc-700 dark:text-zinc-300">Kullanıcı Adı</Label>
+                    <Input
+                      name="smtp_username"
+                      defaultValue={smtpUsername}
+                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-700 dark:text-zinc-300">Şifre</Label>
+                    <Input
+                      name="smtp_password"
+                      type="password"
+                      defaultValue={smtpPassword}
+                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">Kullanıcı Adı</Label>
-                  <Input
-                    defaultValue="noreply@kleacore.com"
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">Şifre</Label>
-                  <Input
-                    type="password"
-                    defaultValue="************"
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+            <div className="flex justify-end">
+              <Button type="submit" className="bg-primary hover:bg-primary/90">
+                <Save className="mr-2 h-4 w-4" />
+                SMTP Ayarlarını Kaydet
+              </Button>
+            </div>
+          </form>
 
           <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
             <CardHeader>
@@ -234,7 +427,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-medium text-zinc-900 dark:text-white">{template.name}</p>
                       <p className="text-xs text-zinc-500">{template.description}</p>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
+                    <Button type="button" variant="ghost" size="sm" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
                       Düzenle
                     </Button>
                   </div>
@@ -246,48 +439,29 @@ export default function SettingsPage() {
 
         {/* Notifications */}
         <TabsContent value="notifications" className="mt-6 space-y-6">
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">Bildirim Tercihleri</CardTitle>
-              <CardDescription className="text-zinc-500">
-                Hangi bildirimleri almak istediğinizi seçin
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-white">E-posta Bildirimleri</p>
-                  <p className="text-xs text-zinc-500">Önemli güncellemeler için e-posta alın</p>
-                </div>
-                <Switch
-                  checked={emailNotifications}
-                  onCheckedChange={setEmailNotifications}
+          <form action={saveNotificationSettings}>
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardHeader>
+                <CardTitle className="text-zinc-900 dark:text-white">Bildirim Tercihleri</CardTitle>
+                <CardDescription className="text-zinc-500">
+                  Hangi bildirimleri almak istediğinizi seçin
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <NotificationSwitches
+                  emailNotifications={emailNotifications}
+                  smsNotifications={smsNotifications}
+                  autoInvoice={autoInvoice}
                 />
-              </div>
-              <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-white">SMS Bildirimleri</p>
-                  <p className="text-xs text-zinc-500">Kritik durumlar için SMS alın</p>
+                <div className="flex justify-end">
+                  <Button type="submit" className="bg-primary hover:bg-primary/90">
+                    <Save className="mr-2 h-4 w-4" />
+                    Bildirim Ayarlarını Kaydet
+                  </Button>
                 </div>
-                <Switch
-                  checked={smsNotifications}
-                  onCheckedChange={setSmsNotifications}
-                />
-              </div>
-              <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-white">Otomatik Faturalama</p>
-                  <p className="text-xs text-zinc-500">Faturaları otomatik oluştur ve gönder</p>
-                </div>
-                <Switch
-                  checked={autoInvoice}
-                  onCheckedChange={setAutoInvoice}
-                />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </form>
         </TabsContent>
 
         {/* Payment Settings */}
@@ -332,46 +506,45 @@ export default function SettingsPage() {
 
         {/* Security */}
         <TabsContent value="security" className="mt-6 space-y-6">
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">Güvenlik Ayarları</CardTitle>
-              <CardDescription className="text-zinc-500">
-                Hesap güvenliğinizi yönetin
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-white">İki Faktörlü Doğrulama</p>
-                  <p className="text-xs text-zinc-500">Giriş için ek güvenlik katmanı</p>
+          <form action={saveSecuritySettings}>
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardHeader>
+                <CardTitle className="text-zinc-900 dark:text-white">Güvenlik Ayarları</CardTitle>
+                <CardDescription className="text-zinc-500">
+                  Hesap güvenliğinizi yönetin
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <SecuritySwitch twoFactor={twoFactor} />
+                <Separator className="bg-zinc-200 dark:bg-zinc-800" />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-900 dark:text-white">Şifre Değiştir</p>
+                    <p className="text-xs text-zinc-500">Son değişiklik: 3 ay önce</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
+                    Değiştir
+                  </Button>
                 </div>
-                <Switch
-                  checked={twoFactor}
-                  onCheckedChange={setTwoFactor}
-                />
-              </div>
-              <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-white">Şifre Değiştir</p>
-                  <p className="text-xs text-zinc-500">Son değişiklik: 3 ay önce</p>
+                <Separator className="bg-zinc-200 dark:bg-zinc-800" />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-900 dark:text-white">Aktif Oturumlar</p>
+                    <p className="text-xs text-zinc-500">2 aktif oturum</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
+                    Görüntüle
+                  </Button>
                 </div>
-                <Button variant="outline" size="sm" className="border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-                  Değiştir
-                </Button>
-              </div>
-              <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-white">Aktif Oturumlar</p>
-                  <p className="text-xs text-zinc-500">2 aktif oturum</p>
+                <div className="flex justify-end">
+                  <Button type="submit" className="bg-primary hover:bg-primary/90">
+                    <Save className="mr-2 h-4 w-4" />
+                    Güvenlik Ayarlarını Kaydet
+                  </Button>
                 </div>
-                <Button variant="outline" size="sm" className="border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-                  Görüntüle
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </form>
         </TabsContent>
 
         {/* Users */}
@@ -398,17 +571,21 @@ export default function SettingsPage() {
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white text-sm font-medium">
-                        {user.name.split(" ").map((n) => n[0]).join("")}
+                        {user.name.charAt(0)}{user.surname.charAt(0)}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-zinc-900 dark:text-white">{user.name}</p>
+                        <p className="text-sm font-medium text-zinc-900 dark:text-white">{user.name} {user.surname}</p>
                         <p className="text-xs text-zinc-500">{user.email}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right">
-                        <Badge variant="outline">{user.role}</Badge>
-                        <p className="text-xs text-zinc-500 mt-1">Son: {user.lastLogin}</p>
+                        <Badge variant="outline">Admin</Badge>
+                        {user.lastLoginAt && (
+                          <p className="text-xs text-zinc-500 mt-1">
+                            Son: {new Date(user.lastLoginAt).toLocaleDateString("tr-TR")}
+                          </p>
+                        )}
                       </div>
                       <Button variant="ghost" size="sm" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
                         Düzenle
@@ -438,19 +615,21 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {apiKeys.map((key) => (
+                {apiKeys.map((apiKey) => (
                   <div
-                    key={key.id}
+                    key={apiKey.id}
                     className="flex items-center justify-between p-4 rounded-lg bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800/50"
                   >
                     <div>
-                      <p className="text-sm font-medium text-zinc-900 dark:text-white">{key.name}</p>
-                      <p className="text-xs font-mono text-zinc-500">{key.key}</p>
+                      <p className="text-sm font-medium text-zinc-900 dark:text-white">{apiKey.name}</p>
+                      <p className="text-xs font-mono text-zinc-500">{maskApiKey(apiKey.key)}</p>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right text-xs text-zinc-500">
-                        <p>Oluşturulma: {key.created}</p>
-                        <p>Son kullanım: {key.lastUsed}</p>
+                        <p>Oluşturulma: {new Date(apiKey.createdAt).toLocaleDateString("tr-TR")}</p>
+                        {apiKey.lastUsedAt && (
+                          <p>Son kullanım: {new Date(apiKey.lastUsedAt).toLocaleDateString("tr-TR")}</p>
+                        )}
                       </div>
                       <Button variant="destructive" size="sm">
                         İptal Et
@@ -469,25 +648,31 @@ export default function SettingsPage() {
                 Olayları harici sistemlere bildirin
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-zinc-700 dark:text-zinc-300">Sipariş Webhook</Label>
-                <Input
-                  placeholder="https://example.com/webhook/orders"
-                  className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-600"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-zinc-700 dark:text-zinc-300">Ödeme Webhook</Label>
-                <Input
-                  placeholder="https://example.com/webhook/payments"
-                  className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-600"
-                />
-              </div>
-              <Button className="bg-primary hover:bg-primary/90">
-                <Save className="mr-2 h-4 w-4" />
-                Kaydet
-              </Button>
+            <CardContent>
+              <form action={saveWebhookSettings} className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-zinc-700 dark:text-zinc-300">Sipariş Webhook</Label>
+                  <Input
+                    name="webhook_orders"
+                    defaultValue={getSettingValue(settings, "webhook_orders", "")}
+                    placeholder="https://example.com/webhook/orders"
+                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-600"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-zinc-700 dark:text-zinc-300">Ödeme Webhook</Label>
+                  <Input
+                    name="webhook_payments"
+                    defaultValue={getSettingValue(settings, "webhook_payments", "")}
+                    placeholder="https://example.com/webhook/payments"
+                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-600"
+                  />
+                </div>
+                <Button type="submit" className="bg-primary hover:bg-primary/90">
+                  <Save className="mr-2 h-4 w-4" />
+                  Kaydet
+                </Button>
+              </form>
             </CardContent>
           </Card>
         </TabsContent>

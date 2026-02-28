@@ -1,14 +1,18 @@
 import Link from "next/link";
 import Image from "next/image";
+import { auth } from "@/lib/auth";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { AdminFooter } from "@/components/admin/admin-footer";
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+  const user = session?.user;
+
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950 flex flex-col">
       {/* Top Bar with Logo */}
@@ -17,7 +21,6 @@ export default function AdminLayout({
           {/* Logo - Absolutely Centered */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
             <Link href="/yonetim" className="flex items-center gap-3">
-              {/* Light mode: invert logo to dark, Dark mode: keep white */}
               <Image
                 src="/logo.svg"
                 alt="KLEACORE"
@@ -32,8 +35,8 @@ export default function AdminLayout({
             </Link>
           </div>
 
-          {/* Header Actions (Search, Notifications, User) */}
-          <AdminHeader />
+          {/* Header Actions */}
+          <AdminHeader userName={user?.name || "Admin"} />
         </div>
 
         {/* Horizontal Navigation */}

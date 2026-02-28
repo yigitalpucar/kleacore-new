@@ -6,6 +6,26 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { searchDomainAvailability } from "@/lib/actions/public/domains";
+const HOME_DOMAIN_SEARCH_EXTENSIONS = [
+  ".com",
+  ".net",
+  ".org",
+  ".com.tr",
+  ".io",
+  ".co",
+] as const;
+
+const HOME_TLD_PRICES: Record<string, { price: number; renewPrice: number }> = {
+  ".com": { price: 149, renewPrice: 199 },
+  ".net": { price: 179, renewPrice: 229 },
+  ".org": { price: 189, renewPrice: 239 },
+  ".com.tr": { price: 99, renewPrice: 149 },
+  ".io": { price: 499, renewPrice: 599 },
+  ".co": { price: 299, renewPrice: 399 },
+};
+import { toast } from "@/lib/toast";
+import { useCartStore } from "@/store/cart-store";
 
 interface DomainResult {
   domain: string;
@@ -14,20 +34,21 @@ interface DomainResult {
   renewPrice: number;
 }
 
-const tlds = [
-  { ext: ".com", price: 149, renewPrice: 199 },
-  { ext: ".net", price: 179, renewPrice: 229 },
-  { ext: ".org", price: 189, renewPrice: 239 },
-  { ext: ".com.tr", price: 99, renewPrice: 149 },
-  { ext: ".io", price: 499, renewPrice: 599 },
-  { ext: ".co", price: 299, renewPrice: 399 },
-];
+const tlds = HOME_DOMAIN_SEARCH_EXTENSIONS.map((ext) => {
+  const pricing = HOME_TLD_PRICES[ext];
+  return {
+    ext,
+    price: pricing?.price ?? 0,
+    renewPrice: pricing?.renewPrice ?? 0,
+  };
+});
 
 export function DomainSearchSection() {
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<DomainResult[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const addDomain = useCartStore((state) => state.addDomain);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -35,18 +56,44 @@ export function DomainSearchSection() {
     setIsSearching(true);
     setHasSearched(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const result = await searchDomainAvailability(
+        query,
+        tlds.map((tld) => tld.ext),
+      );
 
-    const domainName = query.toLowerCase().replace(/\s+/g, "").split(".")[0];
-    const mockResults: DomainResult[] = tlds.map((tld) => ({
-      domain: `${domainName}${tld.ext}`,
-      available: Math.random() > 0.4,
-      price: tld.price,
-      renewPrice: tld.renewPrice,
-    }));
+      if (!result.success || !result.data) {
+        setResults([]);
+        toast.error(result.error ?? "Domain sorgusu tamamlanamadı");
+        return;
+      }
 
-    setResults(mockResults);
-    setIsSearching(false);
+      setResults(
+        result.data.results.map((item) => ({
+          domain: item.domain,
+          available: item.available,
+          price: item.price,
+          renewPrice: item.renewPrice,
+        })),
+      );
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleAddToCart = (result: DomainResult) => {
+    const wasAdded = addDomain({
+      domain: result.domain,
+      price: result.price,
+      renewPrice: result.renewPrice,
+    });
+
+    if (wasAdded) {
+      toast.success(`${result.domain} sepete eklendi.`);
+      return;
+    }
+
+    toast.info("Bu domain zaten sepetinizde.");
   };
 
   return (
@@ -174,7 +221,7 @@ export function DomainSearchSection() {
                           Yenileme: ₺{result.renewPrice}/yıl
                         </p>
                       </div>
-                      <Button>
+                      <Button onClick={() => handleAddToCart(result)}>
                         <ShoppingCart className="mr-2 h-4 w-4" />
                         Sepete Ekle
                       </Button>

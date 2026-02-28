@@ -33,6 +33,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useCartStore } from "@/store/cart-store";
 
 const menuItems = [
   {
@@ -230,6 +231,8 @@ export function Header() {
   const [isOpen, setIsOpen] = React.useState(false);
   const [scrolled, setScrolled] = React.useState(false);
   const [activeMenu, setActiveMenu] = React.useState<string | null>(null);
+  const totalItems = useCartStore((state) => state.getTotalItems());
+  const hasHydrated = useCartStore((state) => state.hasHydrated);
 
   React.useEffect(() => {
     const handleScroll = () => {
@@ -317,8 +320,15 @@ export function Header() {
             <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
 
-          <Button variant="ghost" size="icon" className="hidden sm:flex relative">
-            <ShoppingCart className="h-5 w-5" />
+          <Button variant="ghost" size="icon" className="hidden sm:flex relative" asChild>
+            <Link href="/sepet" aria-label="Sepet">
+              <ShoppingCart className="h-5 w-5" />
+              {hasHydrated && totalItems > 0 ? (
+                <span className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold px-1 flex items-center justify-center">
+                  {totalItems > 99 ? "99+" : totalItems}
+                </span>
+              ) : null}
+            </Link>
           </Button>
 
           {/* Mobile Menu */}

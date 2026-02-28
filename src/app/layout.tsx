@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthSessionProvider } from "@/components/auth/session-provider";
 import { AnnouncementPopup } from "@/components/announcement-popup";
+import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -35,15 +37,18 @@ export default function RootLayout({
       <body
         className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
-          <AnnouncementPopup />
-        </ThemeProvider>
+        <AuthSessionProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+            <Toaster />
+            <AnnouncementPopup />
+          </ThemeProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );

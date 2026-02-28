@@ -6,6 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { searchDomainAvailability } from "@/lib/actions/public/domains";
+import { toast } from "@/lib/toast";
+import { useCartStore } from "@/store/cart-store";
 
 interface DomainResult {
   domain: string;
@@ -30,6 +33,7 @@ export function DomainSearch() {
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<DomainResult[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const addDomain = useCartStore((state) => state.addDomain);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -37,26 +41,50 @@ export function DomainSearch() {
     setIsSearching(true);
     setHasSearched(true);
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const result = await searchDomainAvailability(
+        query,
+        tlds.map((tld) => tld.ext),
+      );
 
-    // Mock results
-    const domainName = query.toLowerCase().replace(/\s+/g, "").split(".")[0];
-    const mockResults: DomainResult[] = tlds.map((tld) => ({
-      domain: `${domainName}${tld.ext}`,
-      available: Math.random() > 0.4,
-      price: tld.price,
-      renewPrice: tld.renewPrice,
-    }));
+      if (!result.success || !result.data) {
+        setResults([]);
+        toast.error(result.error ?? "Domain sorgusu tamamlanamadı");
+        return;
+      }
 
-    setResults(mockResults);
-    setIsSearching(false);
+      setResults(
+        result.data.results.map((item) => ({
+          domain: item.domain,
+          available: item.available,
+          price: item.price,
+          renewPrice: item.renewPrice,
+        })),
+      );
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       handleSearch();
     }
+  };
+
+  const handleAddToCart = (result: DomainResult) => {
+    const wasAdded = addDomain({
+      domain: result.domain,
+      price: result.price,
+      renewPrice: result.renewPrice,
+    });
+
+    if (wasAdded) {
+      toast.success(`${result.domain} sepete eklendi.`);
+      return;
+    }
+
+    toast.info("Bu domain zaten sepetinizde.");
   };
 
   return (
@@ -144,7 +172,7 @@ export function DomainSearch() {
                           Yenileme: ₺{result.renewPrice}/yıl
                         </p>
                       </div>
-                      <Button>
+                      <Button onClick={() => handleAddToCart(result)}>
                         <ShoppingCart className="mr-2 h-4 w-4" />
                         Sepete Ekle
                       </Button>

@@ -1,0 +1,162 @@
+"use server";
+
+import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { hash } from "bcryptjs";
+import { revalidatePath } from "next/cache";
+
+export async function createCustomer(formData: FormData) {
+  await requireAdmin();
+
+  try {
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+    const name = formData.get("name") as string;
+    const surname = formData.get("surname") as string;
+    const phone = (formData.get("phone") as string) || null;
+    const customerType = (formData.get("customerType") as "INDIVIDUAL" | "CORPORATE") || "INDIVIDUAL";
+    const companyName = (formData.get("companyName") as string) || null;
+    const taxNumber = (formData.get("taxNumber") as string) || null;
+    const taxOffice = (formData.get("taxOffice") as string) || null;
+    const address = (formData.get("address") as string) || null;
+    const city = (formData.get("city") as string) || null;
+
+    if (!email || !password || !name) {
+      return { success: false, error: "E-posta, şifre ve ad zorunludur" };
+    }
+
+    const existing = await db.user.findUnique({ where: { email } });
+    if (existing) {
+      return { success: false, error: "Bu e-posta adresi zaten kayıtlı" };
+    }
+
+    const hashedPassword = await hash(password, 12);
+
+    const user = await db.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        surname: surname || "",
+        phone,
+        customerType,
+        companyName,
+        taxNumber,
+        taxOffice,
+        address,
+        city,
+        role: "CUSTOMER",
+        status: "ACTIVE",
+      },
+    });
+
+    revalidatePath("/yonetim/musteriler");
+    return { success: true, data: { id: user.id } };
+  } catch {
+    return { success: false, error: "Müşteri oluşturulurken bir hata oluştu" };
+  }
+}
+
+export async function updateCustomer(id: string, formData: FormData) {
+  await requireAdmin();
+
+  try {
+    const name = formData.get("name") as string;
+    const surname = formData.get("surname") as string;
+    const phone = (formData.get("phone") as string) || null;
+    const customerType = (formData.get("customerType") as "INDIVIDUAL" | "CORPORATE") || undefined;
+    const companyName = (formData.get("companyName") as string) || null;
+    const taxNumber = (formData.get("taxNumber") as string) || null;
+    const taxOffice = (formData.get("taxOffice") as string) || null;
+    const address = (formData.get("address") as string) || null;
+    const city = (formData.get("city") as string) || null;
+
+    const user = await db.user.findUnique({ where: { id } });
+    if (!user) {
+      return { success: false, error: "Müşteri bulunamadı" };
+    }
+
+    await db.user.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(surname && { surname }),
+        phone,
+        ...(customerType && { customerType }),
+        companyName,
+        taxNumber,
+        taxOffice,
+        address,
+        city,
+      },
+    });
+
+    revalidatePath("/yonetim/musteriler");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Müşteri güncellenirken bir hata oluştu" };
+  }
+}
+
+export async function suspendCustomer(id: string) {
+  await requireAdmin();
+
+  try {
+    const user = await db.user.findUnique({ where: { id } });
+    if (!user) {
+      return { success: false, error: "Müşteri bulunamadı" };
+    }
+
+    await db.user.update({
+      where: { id },
+      data: { status: "SUSPENDED" },
+    });
+
+    revalidatePath("/yonetim/musteriler");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Müşteri askıya alınırken bir hata oluştu" };
+  }
+}
+
+export async function activateCustomer(id: string) {
+  await requireAdmin();
+
+  try {
+    const user = await db.user.findUnique({ where: { id } });
+    if (!user) {
+      return { success: false, error: "Müşteri bulunamadı" };
+    }
+
+    await db.user.update({
+      where: { id },
+      data: { status: "ACTIVE" },
+    });
+
+    revalidatePath("/yonetim/musteriler");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Müşteri aktifleştirilirken bir hata oluştu" };
+  }
+}
+
+export async function deleteCustomer(id: string) {
+  await requireAdmin();
+
+  try {
+    const user = await db.user.findUnique({ where: { id } });
+    if (!user) {
+      return { success: false, error: "Müşteri bulunamadı" };
+    }
+
+    await db.user.update({
+      where: { id },
+      data: { status: "CLOSED" },
+    });
+
+    revalidatePath("/yonetim/musteriler");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Müşteri silinirken bir hata oluştu" };
+  }
+}

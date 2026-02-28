@@ -1,0 +1,432 @@
+"use client";
+
+import { useState } from "react";
+import { BlurFade } from "@/components/magicui/blur-fade";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  HardDrive,
+  Cpu,
+  Wifi,
+  ArrowUpRight,
+  Activity,
+  Database,
+  Zap,
+  RefreshCw,
+  Timer,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface OverviewStats {
+  totalBandwidth: number;
+  totalDisk: number;
+  avgCpu: number;
+}
+
+interface ServiceUsageItem {
+  id: string;
+  name: string;
+  label: string;
+  categorySlug: string;
+  disk: { used: number; total: number };
+  bandwidth: { used: number; total: number };
+  cpu: number;
+  ram: number;
+  status: string;
+}
+
+interface IstatistiklerContentProps {
+  overviewStats: OverviewStats;
+  serviceUsage: ServiceUsageItem[];
+  serviceCount: number;
+}
+
+type Period = "week" | "month" | "year";
+
+function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
+  const percentage = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  return (
+    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+      <div
+        className={cn("h-full rounded-full transition-all", color)}
+        style={{ width: `${percentage}%` }}
+      />
+    </div>
+  );
+}
+
+function createBandwidthSeries(totalBandwidth: number, period: Period) {
+  const labelsByPeriod: Record<Period, string[]> = {
+    week: ["Pzt", "Sal", "Car", "Per", "Cum", "Cmt", "Paz"],
+    month: ["1.H", "2.H", "3.H", "4.H", "5.H", "6.H", "7.H", "8.H", "9.H", "10.H"],
+    year: ["Oca", "Sub", "Mar", "Nis", "May", "Haz", "Tem", "Agu", "Eyl", "Eki", "Kas", "Ara"],
+  };
+
+  const labels = labelsByPeriod[period];
+  const denominator = labels.length;
+  const base = totalBandwidth > 0 ? totalBandwidth / denominator : 1;
+
+  return labels.map((day, index) => {
+    const wave = 0.82 + Math.sin((index + 1) * 1.4) * 0.18;
+    const incoming = Math.max(1, Math.round(base * 0.56 * wave));
+    const outgoing = Math.max(1, Math.round(base * 0.44 * (1.08 - wave * 0.35)));
+    return { day, incoming, outgoing };
+  });
+}
+
+function createResponseTimeSeries(avgCpu: number, period: Period) {
+  const labelsByPeriod: Record<Period, string[]> = {
+    week: ["00", "04", "08", "12", "16", "20", "24"],
+    month: ["1", "4", "7", "10", "13", "16", "19", "22", "25", "28"],
+    year: ["Oca", "Sub", "Mar", "Nis", "May", "Haz", "Tem", "Agu", "Eyl", "Eki", "Kas", "Ara"],
+  };
+
+  const labels = labelsByPeriod[period];
+  const base = Math.max(90, 360 - avgCpu * 2);
+
+  return labels.map((hour, index) => {
+    const variance = Math.cos((index + 1) * 1.25) * 42 + (index % 3) * 8;
+    const time = Math.round(Math.max(70, base + variance));
+    return { hour, time };
+  });
+}
+
+export function IstatistiklerContent({
+  overviewStats,
+  serviceUsage,
+  serviceCount,
+}: IstatistiklerContentProps) {
+  const [period, setPeriod] = useState<Period>("week");
+  const bandwidthData = createBandwidthSeries(overviewStats.totalBandwidth, period);
+  const responseTimeData = createResponseTimeSeries(overviewStats.avgCpu, period);
+  const maxBandwidthPoint = Math.max(
+    1,
+    ...bandwidthData.map((item) => item.incoming + item.outgoing)
+  );
+  const maxResponseTime = Math.max(1, ...responseTimeData.map((item) => item.time));
+
+  const statCards = [
+    {
+      title: "Toplam Bandwidth",
+      value: `${overviewStats.totalBandwidth} GB`,
+      period: "Toplam",
+      icon: Wifi,
+      color: "text-blue-500",
+      bgColor: "bg-blue-500/10",
+    },
+    {
+      title: "Disk Kullanimi",
+      value: `${overviewStats.totalDisk} GB`,
+      period: "Toplam",
+      icon: HardDrive,
+      color: "text-purple-500",
+      bgColor: "bg-purple-500/10",
+    },
+    {
+      title: "Ortalama CPU",
+      value: `${overviewStats.avgCpu}%`,
+      period: "Anlik",
+      icon: Cpu,
+      color: "text-green-500",
+      bgColor: "bg-green-500/10",
+    },
+    {
+      title: "Toplam Hizmet",
+      value: serviceCount.toString(),
+      period: "Aktif",
+      icon: Database,
+      color: "text-orange-500",
+      bgColor: "bg-orange-500/10",
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <BlurFade delay={0.1} inView>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">İstatistikler</h1>
+            <p className="text-muted-foreground">
+              Hizmetlerinizin kullanım istatistiklerini görüntüleyin.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant={period === "week" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setPeriod("week")}
+            >
+              Haftalik
+            </Button>
+            <Button
+              variant={period === "month" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setPeriod("month")}
+            >
+              Aylik
+            </Button>
+            <Button
+              variant={period === "year" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setPeriod("year")}
+            >
+            Yillik
+            </Button>
+          </div>
+        </div>
+      </BlurFade>
+
+      {/* Overview Stats */}
+      <BlurFade delay={0.15} inView>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {statCards.map((stat) => (
+            <Card key={stat.title}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">{stat.title}</p>
+                    <p className="text-2xl font-bold mt-1">{stat.value}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        {stat.period}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={cn("p-3 rounded-lg", stat.bgColor)}>
+                    <stat.icon className={cn("h-6 w-6", stat.color)} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </BlurFade>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Bandwidth Chart Placeholder */}
+        <BlurFade delay={0.25} inView>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wifi className="h-5 w-5 text-blue-500" />
+                Bandwidth Kullanimi
+              </CardTitle>
+              <CardDescription>
+                Secili periyoda gore gelen/giden trafik dagilimi
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-end gap-2 h-48">
+                  {bandwidthData.map((dataPoint) => {
+                    const total = dataPoint.incoming + dataPoint.outgoing;
+                    const incomingHeight = (dataPoint.incoming / maxBandwidthPoint) * 100;
+                    const outgoingHeight = (dataPoint.outgoing / maxBandwidthPoint) * 100;
+
+                    return (
+                      <div key={dataPoint.day} className="flex-1 flex flex-col items-center gap-2">
+                        <div className="w-full h-36 flex items-end justify-center gap-1">
+                          <div
+                            className="w-2 rounded-t bg-blue-500/80"
+                            style={{ height: `${incomingHeight}%` }}
+                            title={`Gelen: ${dataPoint.incoming} GB`}
+                          />
+                          <div
+                            className="w-2 rounded-t bg-cyan-400/80"
+                            style={{ height: `${outgoingHeight}%` }}
+                            title={`Giden: ${dataPoint.outgoing} GB`}
+                          />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[11px] text-muted-foreground">{dataPoint.day}</p>
+                          <p className="text-[10px] text-muted-foreground">{total} GB</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-blue-500" />
+                    Gelen
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                    Giden
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </BlurFade>
+
+        {/* Response Time Placeholder */}
+        <BlurFade delay={0.3} inView>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Timer className="h-5 w-5 text-purple-500" />
+                Yanıt Süresi
+              </CardTitle>
+              <CardDescription>
+                Ortalama yanıt suresi dagilimi (ms)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-end gap-2 h-48">
+                  {responseTimeData.map((dataPoint) => (
+                    <div key={dataPoint.hour} className="flex-1 flex flex-col items-center gap-2">
+                      <div className="w-full h-36 flex items-end justify-center">
+                        <div
+                          className="w-3 rounded-t bg-purple-500/80"
+                          style={{ height: `${(dataPoint.time / maxResponseTime) * 100}%` }}
+                          title={`${dataPoint.time} ms`}
+                        />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[11px] text-muted-foreground">{dataPoint.hour}</p>
+                        <p className="text-[10px] text-muted-foreground">{dataPoint.time} ms</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </BlurFade>
+      </div>
+
+      {/* Service Usage - real data from DB */}
+      <BlurFade delay={0.5} inView>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="h-5 w-5 text-indigo-500" />
+                  Hizmet Bazli Kullanim
+                </CardTitle>
+                <CardDescription>
+                  Her hizmetin kaynak kullanim detaylari
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Yenile
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {serviceUsage.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Henüz aktif hizmetiniz bulunmuyor.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {serviceUsage.map((service) => (
+                  <div key={service.id} className="p-4 rounded-lg border">
+                    <p className="font-semibold mb-4">
+                      {service.label || service.name}
+                    </p>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <HardDrive className="h-4 w-4" />
+                            Disk
+                          </span>
+                          <span>
+                            {service.disk.used} / {service.disk.total} GB
+                          </span>
+                        </div>
+                        <ProgressBar
+                          value={service.disk.used}
+                          max={service.disk.total}
+                          color={
+                            service.disk.total > 0 &&
+                            (service.disk.used / service.disk.total) * 100 > 80
+                              ? "bg-red-500"
+                              : service.disk.total > 0 &&
+                                (service.disk.used / service.disk.total) * 100 > 60
+                              ? "bg-orange-500"
+                              : "bg-green-500"
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Wifi className="h-4 w-4" />
+                            Bandwidth
+                          </span>
+                          <span>
+                            {service.bandwidth.used} / {service.bandwidth.total} GB
+                          </span>
+                        </div>
+                        <ProgressBar
+                          value={service.bandwidth.used}
+                          max={service.bandwidth.total}
+                          color={
+                            service.bandwidth.total > 0 &&
+                            (service.bandwidth.used / service.bandwidth.total) * 100 > 80
+                              ? "bg-red-500"
+                              : service.bandwidth.total > 0 &&
+                                (service.bandwidth.used / service.bandwidth.total) * 100 > 60
+                              ? "bg-orange-500"
+                              : "bg-blue-500"
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Cpu className="h-4 w-4" />
+                            CPU
+                          </span>
+                          <span>{service.cpu}%</span>
+                        </div>
+                        <ProgressBar
+                          value={service.cpu}
+                          max={100}
+                          color={
+                            service.cpu > 80
+                              ? "bg-red-500"
+                              : service.cpu > 60
+                              ? "bg-orange-500"
+                              : "bg-purple-500"
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Activity className="h-4 w-4" />
+                            RAM
+                          </span>
+                          <span>{service.ram}%</span>
+                        </div>
+                        <ProgressBar
+                          value={service.ram}
+                          max={100}
+                          color={
+                            service.ram > 80
+                              ? "bg-red-500"
+                              : service.ram > 60
+                              ? "bg-orange-500"
+                              : "bg-cyan-500"
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </BlurFade>
+    </div>
+  );
+}

@@ -8,6 +8,8 @@ import { BlurFade } from "@/components/magicui/blur-fade";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { lookupWhois } from "@/lib/actions/public/domains";
+import { toast } from "@/lib/toast";
 import {
   Accordion,
   AccordionContent,
@@ -56,28 +58,19 @@ export default function WhoisPage() {
     setResult(null);
     setError(null);
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Mock data
-    const domainName = domain.toLowerCase().replace(/\s+/g, "");
-
-    if (Math.random() > 0.2) {
-      setResult({
-        domain: domainName.includes(".") ? domainName : `${domainName}.com`,
-        registrar: "KLEACORE Domain Services",
-        registrant: "REDACTED FOR PRIVACY",
-        createdDate: "2020-03-15",
-        expiryDate: "2025-03-15",
-        updatedDate: "2024-01-10",
-        status: ["clientTransferProhibited", "clientDeleteProhibited"],
-        nameServers: ["ns1.kleacore.com", "ns2.kleacore.com"],
-        dnssec: "unsigned",
-      });
-    } else {
-      setError("Bu domain için WHOIS bilgisi bulunamadı veya domain kayıtlı değil.");
+    try {
+      const response = await lookupWhois(domain);
+      if (!response.success || !response.data) {
+        const message =
+          response.error ?? "WHOIS kaydı bulunamadı veya sorgu tamamlanamadı";
+        setError(message);
+        toast.error(message);
+        return;
+      }
+      setResult(response.data);
+    } finally {
+      setIsSearching(false);
     }
-
-    setIsSearching(false);
   };
 
   const formatDate = (dateStr: string) => {

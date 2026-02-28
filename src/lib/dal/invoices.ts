@@ -1,0 +1,132 @@
+import { db } from "@/lib/db";
+import {
+  type PaginationParams,
+  paginationMeta,
+} from "@/lib/utils/pagination";
+import type { InvoiceStatus } from "@prisma/client";
+
+interface GetInvoicesParams extends PaginationParams {
+  status?: InvoiceStatus;
+  customerId?: string;
+}
+
+export async function getInvoices(params: GetInvoicesParams) {
+  const { page, perPage, search, sortBy, sortOrder, status, customerId } =
+    params;
+
+  const where = {
+    ...(status && { status }),
+    ...(customerId && { customerId }),
+    ...(search && {
+      OR: [
+        { invoiceNumber: { contains: search, mode: "insensitive" as const } },
+        {
+          customer: {
+            OR: [
+              { name: { contains: search, mode: "insensitive" as const } },
+              { email: { contains: search, mode: "insensitive" as const } },
+            ],
+          },
+        },
+      ],
+    }),
+  };
+
+  const [data, total] = await Promise.all([
+    db.invoice.findMany({
+      where,
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            surname: true,
+            email: true,
+          },
+        },
+        items: true,
+        _count: {
+          select: { payments: true },
+        },
+      },
+      orderBy: { [sortBy || "createdAt"]: sortOrder || "desc" },
+      skip: (page - 1) * perPage,
+      take: perPage,
+    }),
+    db.invoice.count({ where }),
+  ]);
+
+  return { data, ...paginationMeta(total, params) };
+}
+
+export async function getInvoiceById(id: string) {
+  return db.invoice.findUnique({
+    where: { id },
+    include: {
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          surname: true,
+          email: true,
+          phone: true,
+          companyName: true,
+          taxNumber: true,
+          taxOffice: true,
+          address: true,
+          city: true,
+          country: true,
+        },
+      },
+      order: {
+        select: {
+          id: true,
+          orderNumber: true,
+        },
+      },
+      items: true,
+      payments: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+}
+
+export async function getInvoiceStats() {
+  const [total, pending, paid, overdue, totalAmount, paidAmount] =
+    await Promise.all([
+      db.invoice.count(),
+      db.invoice.count({ where: { status: "PENDING" } }),
+      db.invoice.count({ where: { status: "PAID" } }),
+      db.invoice.count({ where: { status: "OVERDUE" } }),
+      db.invoice.aggregate({ _sum: { totalAmount: true } }),
+      db.invoice.aggregate({
+        where: { status: "PAID" },
+        _sum: { paidAmount: true },
+      }),
+    ]);
+
+  return {
+    total,
+    pending,
+    paid,
+    overdue,
+    totalAmount: totalAmount._sum.totalAmount ?? 0,
+    paidAmount: paidAmount._sum.paidAmount ?? 0,
+    unpaidAmount:
+      (totalAmount._sum.totalAmount ?? 0) - (paidAmount._sum.paidAmount ?? 0),
+  };
+}
+
+export async function getInvoicesByCustomer(customerId: string) {
+  return db.invoice.findMany({
+    where: { customerId },
+    include: {
+      items: true,
+      _count: {
+        select: { payments: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
