@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   User,
   Lock,
@@ -17,7 +17,6 @@ import { toast } from "@/lib/toast";
 import { loginAction } from "@/lib/actions/auth";
 
 export function LoginForm({ onSwitch }: { onSwitch: () => void }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/musteri/panel";
   const [error, setError] = useState("");
@@ -41,8 +40,7 @@ export function LoginForm({ onSwitch }: { onSwitch: () => void }) {
       setLoading(false);
     } else {
       toast.success("Giriş başarılı, yönlendiriliyorsunuz.");
-      router.push(callbackUrl);
-      router.refresh();
+      window.location.href = callbackUrl;
     }
   };
 

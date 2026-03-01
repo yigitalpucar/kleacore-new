@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth";
 import { toast } from "@/lib/toast";
 
 export function LogoutButton({ className }: { className?: string }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   const handleLogout = async () => {
@@ -22,9 +20,7 @@ export function LogoutButton({ className }: { className?: string }) {
     }
 
     toast.success("Çıkış yapıldı");
-    router.push("/");
-    router.refresh();
-    setLoading(false);
+    window.location.href = "/";
   };
 
   return (
