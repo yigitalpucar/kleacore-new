@@ -5,7 +5,7 @@ import { BlurFade } from "@/components/magicui/blur-fade";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useCartStore } from "@/store/cart-store";
-import { ShoppingCart, Trash2, ArrowRight } from "lucide-react";
+import { ShoppingCart, Trash2, ArrowRight, Globe, Package } from "lucide-react";
 import { toast } from "@/lib/toast";
 
 function formatPrice(value: number) {
@@ -88,13 +88,47 @@ export function SepetContent() {
                       key={item.id}
                       className="rounded-lg border p-4 flex items-start justify-between gap-4"
                     >
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <p className="font-semibold">{item.title}</p>
+                        {item.metadata?.billingPeriod && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {item.metadata.billingPeriod === "yearly" ? "Yıllık" : "Aylık"} faturalandırma
+                          </p>
+                        )}
                         {item.type === "domain" && item.metadata?.renewPrice ? (
                           <p className="text-sm text-muted-foreground mt-1">
                             Yenileme: {formatPrice(item.metadata.renewPrice)}/yıl
                           </p>
                         ) : null}
+                        {item.type === "hosting" && item.metadata?.domainChoice && (
+                          <div className="mt-2 space-y-1">
+                            {item.metadata.domainChoice.type === "new" && item.metadata.domainChoice.domain && (
+                              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                <Globe className="h-3.5 w-3.5" />
+                                Yeni domain: {item.metadata.domainChoice.domain}
+                              </p>
+                            )}
+                            {item.metadata.domainChoice.type === "existing" && item.metadata.domainChoice.domain && (
+                              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                <Globe className="h-3.5 w-3.5" />
+                                Mevcut domain: {item.metadata.domainChoice.domain}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {item.type === "hosting" && item.metadata?.addons && item.metadata.addons.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {item.metadata.addons.map((addon) => (
+                              <span
+                                key={addon.sku}
+                                className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full"
+                              >
+                                <Package className="h-3 w-3" />
+                                {addon.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="font-semibold">

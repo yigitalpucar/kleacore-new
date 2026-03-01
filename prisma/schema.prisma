@@ -1136,6 +1136,33 @@ model SystemIncident {
 }
 
 // =====================
+// PRODUCT ADDONS
+// =====================
+
+model ProductAddon {
+  id               String              @id @default(cuid())
+  sku              String              @unique
+  name             String
+  slug             String              @unique
+  description      String              @default("")
+  categorySlug     ProductCategorySlug
+  applicableSubTypes Json              @default("[]")
+  monthlyPrice     Float               @default(0)
+  yearlyPrice      Float               @default(0)
+  setupFee         Float               @default(0)
+  icon             String              @default("Package")
+  badge            String?
+  isRequired       Boolean             @default(false)
+  isPopular        Boolean             @default(false)
+  displayOrder     Int                 @default(0)
+  isActive         Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@map("product_addons")
+}
+
+// =====================
 // DOMAIN TLD PRICING
 // =====================
 

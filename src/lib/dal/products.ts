@@ -124,6 +124,39 @@ export async function getProductStats() {
   return { totalProducts, activeProducts, draftProducts, totalCategories };
 }
 
+export async function getProductBySlug(slug: string) {
+  return db.product.findUnique({
+    where: { slug },
+    include: {
+      category: true,
+      pricingTiers: {
+        where: { isActive: true },
+        orderBy: { price: "asc" },
+      },
+    },
+  });
+}
+
+export async function getAddonsByCategory(
+  categorySlug: ProductCategorySlug,
+  subType?: string
+) {
+  const addons = await db.productAddon.findMany({
+    where: {
+      categorySlug,
+      isActive: true,
+    },
+    orderBy: { displayOrder: "asc" },
+  });
+
+  if (!subType) return addons;
+
+  return addons.filter((addon) => {
+    const applicable = addon.applicableSubTypes as string[];
+    return applicable.length === 0 || applicable.includes(subType);
+  });
+}
+
 export async function getProductCategoryCounts() {
   const categories = await db.productCategory.findMany({
     where: { isActive: true },

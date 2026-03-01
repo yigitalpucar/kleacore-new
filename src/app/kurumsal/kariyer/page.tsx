@@ -221,7 +221,7 @@ export default function KariyerPage() {
                         <div>
                           <h3 className="font-semibold text-lg mb-2">
                             <Link
-                              href={`/kariyer/${position.slug}`}
+                              href={`/iletisim?konu=Kariyer Başvurusu: ${position.title}`}
                               className="hover:text-primary transition-colors"
                             >
                               {position.title}
@@ -247,7 +247,7 @@ export default function KariyerPage() {
                           </div>
                         </div>
                         <Button asChild>
-                          <Link href={`/kariyer/${position.slug}`}>
+                          <Link href={`/iletisim?konu=Kariyer Başvurusu: ${position.title}`}>
                             Başvur
                             <ArrowRight className="ml-2 h-4 w-4" />
                           </Link>

@@ -5,6 +5,13 @@ import { persist, createJSONStorage } from "zustand/middleware";
 
 export type CartItemType = "domain" | "hosting" | "server" | "ssl" | "datacenter";
 
+export interface CartAddon {
+  sku: string;
+  name: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+}
+
 export interface CartItem {
   id: string;
   type: CartItemType;
@@ -20,6 +27,13 @@ export interface CartItem {
     billingPeriod?: "monthly" | "yearly";
     location?: string;
     subType?: string;
+    domainChoice?: {
+      type: "new" | "existing" | "later";
+      domain?: string;
+      price?: number;
+      renewPrice?: number;
+    };
+    addons?: CartAddon[];
   };
 }
 
@@ -45,6 +59,20 @@ interface AddServerPlanPayload {
   location?: string;
 }
 
+interface AddHostingBundlePayload {
+  sku: string;
+  title: string;
+  price: number;
+  billingPeriod: "monthly" | "yearly";
+  domainChoice: {
+    type: "new" | "existing" | "later";
+    domain?: string;
+    price?: number;
+    renewPrice?: number;
+  };
+  addons: CartAddon[];
+}
+
 interface AddProductPayload {
   type: "ssl" | "datacenter";
   sku: string;
@@ -60,6 +88,7 @@ interface CartState {
   setHasHydrated: (value: boolean) => void;
   addDomain: (payload: AddDomainPayload) => boolean;
   addHosting: (payload: AddHostingPayload) => boolean;
+  addHostingBundle: (payload: AddHostingBundlePayload) => boolean;
   addServerPlan: (payload: AddServerPlanPayload) => boolean;
   addProduct: (payload: AddProductPayload) => boolean;
   removeItem: (id: string) => void;
@@ -133,6 +162,66 @@ export const useCartStore = create<CartState>()(
           };
 
           return { items: [...state.items, nextItem] };
+        });
+
+        return wasAdded;
+      },
+
+      addHostingBundle: ({ sku, title, price, billingPeriod, domainChoice, addons }) => {
+        const normalizedSku = sku.trim().toUpperCase();
+        if (!normalizedSku) return false;
+
+        let wasAdded = false;
+
+        set((state) => {
+          const id = `hosting:${normalizedSku}:${billingPeriod}`;
+          const exists = state.items.some((item) => item.id === id);
+          if (exists) return state;
+
+          wasAdded = true;
+
+          const addonTotal = addons.reduce(
+            (sum, a) => sum + (billingPeriod === "yearly" ? a.yearlyPrice : a.monthlyPrice),
+            0
+          );
+          const domainPrice = domainChoice.type === "new" ? (domainChoice.price ?? 0) : 0;
+
+          const nextItems: CartItem[] = [
+            {
+              id,
+              type: "hosting",
+              title,
+              unitPrice: price + addonTotal,
+              quantity: 1,
+              createdAt: new Date().toISOString(),
+              metadata: {
+                planCode: sku,
+                billingPeriod,
+                domainChoice,
+                addons,
+              },
+            },
+          ];
+
+          if (domainChoice.type === "new" && domainChoice.domain) {
+            const domainId = `domain:${domainChoice.domain.toLowerCase()}`;
+            if (!state.items.some((item) => item.id === domainId)) {
+              nextItems.push({
+                id: domainId,
+                type: "domain",
+                title: domainChoice.domain.toLowerCase(),
+                unitPrice: domainPrice,
+                quantity: 1,
+                createdAt: new Date().toISOString(),
+                metadata: {
+                  domain: domainChoice.domain.toLowerCase(),
+                  renewPrice: domainChoice.renewPrice ?? 0,
+                },
+              });
+            }
+          }
+
+          return { items: [...state.items, ...nextItems] };
         });
 
         return wasAdded;

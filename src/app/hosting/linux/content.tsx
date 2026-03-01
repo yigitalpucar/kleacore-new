@@ -48,6 +48,7 @@ const mapProductToHostingPlan = (product: ProductWithPricing): HostingPlan => {
 
   return {
     sku: product.sku,
+    slug: product.slug,
     name: product.name,
     description: product.shortDescription,
     price: monthlyTier?.price ?? product.basePrice,

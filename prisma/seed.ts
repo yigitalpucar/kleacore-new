@@ -8,6 +8,7 @@ import { seedVdsProducts, seedVpsProducts, seedCloudProducts, seedServerProducts
 import { seedSslProducts } from "./seed-data/ssl";
 import { seedDatacenterProducts } from "./seed-data/datacenter";
 import { seedDomainTlds } from "./seed-data/domain-tlds";
+import { seedHostingAddons } from "./seed-data/addons";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -44,6 +45,7 @@ async function main() {
   await prisma.order.deleteMany();
   await prisma.service.deleteMany();
   await prisma.server.deleteMany();
+  await prisma.productAddon.deleteMany();
   await prisma.pricingTier.deleteMany();
   await prisma.product.deleteMany();
   await prisma.productFeature.deleteMany();
@@ -461,6 +463,9 @@ async function main() {
   // =====================
   await seedHostingProducts(prisma, catHosting.id);
   console.log("Hosting products seeded (linux/wordpress/reseller/kurumsal)");
+
+  await seedHostingAddons(prisma);
+  console.log("Hosting addons seeded");
 
   await seedVdsProducts(prisma, catVds.id);
   await seedVpsProducts(prisma, catVps.id);
