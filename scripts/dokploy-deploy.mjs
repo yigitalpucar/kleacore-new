@@ -82,7 +82,16 @@ function buildEnv({
 
 async function main() {
   const projects = await apiGet("project.all");
-  const existing = projects.find((project) => project.name === "kleacore");
+  const kleacoreProjects = projects.filter((project) => project.name === "kleacore");
+  const existing =
+    kleacoreProjects.find((project) =>
+      project.description?.includes("KLEACORE hosting platform")
+    ) ??
+    kleacoreProjects.find((project) =>
+      (project.environments?.[0]?.applications?.length ?? 0) > 0 ||
+      (project.environments?.[0]?.postgres?.length ?? 0) > 0
+    ) ??
+    kleacoreProjects[0];
 
   let projectId;
   let environmentId;
@@ -92,12 +101,14 @@ async function main() {
     environmentId = existing.environments[0]?.environmentId;
     console.log(`Using existing project kleacore (${projectId})`);
   } else {
-    const project = await api("project.create", {
+    const created = await api("project.create", {
       name: "kleacore",
       description: "KLEACORE hosting platform",
     });
-    projectId = project.projectId;
-    environmentId = project.environments?.[0]?.environmentId;
+    projectId = created.project?.projectId ?? created.projectId;
+    environmentId =
+      created.environment?.environmentId ??
+      created.environments?.[0]?.environmentId;
     console.log(`Created project kleacore (${projectId})`);
   }
 
@@ -141,15 +152,10 @@ async function main() {
       `postgres.one?postgresId=${existingPostgres.postgresId}`
     );
     postgresAppName = pg.appName;
+    dbPassword = pg.databasePassword;
   }
 
-  const databaseUrl = reusingPostgres
-    ? process.env.DATABASE_URL
-    : `postgresql://kleacore:${dbPassword}@${postgresAppName}:5432/kleacore`;
-
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is required when reusing existing postgres");
-  }
+  const databaseUrl = `postgresql://kleacore:${dbPassword}@${postgresAppName}:5432/kleacore`;
 
   let applicationId = existingApp?.applicationId;
   if (!applicationId) {
@@ -171,6 +177,7 @@ async function main() {
     customGitBranch: GIT_BRANCH,
     customGitBuildPath: "/",
     customGitSSHKeyId: GIT_SSH_KEY_ID,
+    watchPaths: [],
     enableSubmodules: false,
   });
   console.log("Git provider configured");
@@ -181,6 +188,8 @@ async function main() {
     dockerfile: "Dockerfile",
     dockerContextPath: null,
     dockerBuildStage: null,
+    herokuVersion: "24",
+    railpackVersion: "0.15.4",
   });
   console.log("Build type configured");
 
@@ -193,6 +202,9 @@ async function main() {
       encryptionKey,
       seedAdminPassword,
     }),
+    buildArgs: "",
+    buildSecrets: "",
+    createEnvFile: true,
   });
   console.log("Environment variables saved");
 
