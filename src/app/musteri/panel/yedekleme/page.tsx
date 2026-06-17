@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { getBackupsByCustomer, getSchedulesByCustomer } from "@/lib/dal/backups";
 import { YedeklemeContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function YedeklemePage() {
   const session = await auth();
   const userId = session!.user.id;

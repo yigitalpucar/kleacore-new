@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
 const DOMAIN_SEARCH_EXTENSIONS = [
   ".com",
   ".net",
@@ -13,13 +14,21 @@ const DOMAIN_SEARCH_EXTENSIONS = [
   ".dev",
   ".app",
 ] as const;
-import { generateTicketNumber } from "@/lib/utils/number-generators";
-import { revalidatePath } from "next/cache";
+import { checkDomainsAvailability, getRegistrarProvider } from "@/lib/integrations/registrar";
+import {
+  getRegistrarConfig,
+  isGriRegistrarEnabled,
+} from "@/lib/integrations/registrar/config";
+import {
+  createManualDomainTransferTicket,
+  processAutomatedDomainTransfer,
+} from "@/lib/actions/customer/domain-transfer";
 import type { DomainStatus } from "@prisma/client";
 
 const DOMAIN_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const FULL_DOMAIN_REGEX =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+const RDAP_TIMEOUT_MS = 3500;
 
 function normalizeDomainInput(value: string): string {
   return value
@@ -89,6 +98,104 @@ function mapWhoisStatus(status: DomainStatus): string[] {
   }
 }
 
+interface RdapEvent {
+  eventAction?: string;
+  eventDate?: string;
+}
+
+interface RdapNameserver {
+  ldhName?: string;
+  unicodeName?: string;
+}
+
+interface RdapEntity {
+  roles?: string[];
+  vcardArray?: unknown;
+}
+
+interface RdapDomainResponse {
+  objectClassName?: string;
+  ldhName?: string;
+  unicodeName?: string;
+  status?: string[];
+  events?: RdapEvent[];
+  nameservers?: RdapNameserver[];
+  entities?: RdapEntity[];
+  secureDNS?: {
+    delegationSigned?: boolean;
+  };
+}
+
+async function fetchRdapDomain(domain: string): Promise<RdapDomainResponse | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), RDAP_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`, {
+      headers: { accept: "application/rdap+json, application/json" },
+      next: { revalidate: 300 },
+      signal: controller.signal,
+    });
+
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`RDAP_${response.status}`);
+
+    return (await response.json()) as RdapDomainResponse;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function isRegisteredViaRdap(domain: string) {
+  try {
+    const rdap = await fetchRdapDomain(domain);
+    return rdap?.objectClassName === "domain" || Boolean(rdap?.ldhName || rdap?.unicodeName);
+  } catch {
+    return false;
+  }
+}
+
+async function isDomainRegistered(
+  domain: string,
+  registrarProvider: Awaited<ReturnType<typeof getRegistrarProvider>>
+) {
+  const availability = await registrarProvider.checkDomainAvailability(domain);
+
+  if (!availability.skipped && availability.ok && availability.data) {
+    return !availability.data.available;
+  }
+
+  return isRegisteredViaRdap(domain);
+}
+
+function getRdapEventDate(rdap: RdapDomainResponse, actions: string[]) {
+  const normalizedActions = actions.map((action) => action.toLowerCase());
+  return (
+    rdap.events?.find((event) =>
+      normalizedActions.includes((event.eventAction ?? "").toLowerCase())
+    )?.eventDate ?? ""
+  );
+}
+
+function getVcardValue(entity: RdapEntity, fieldName: string): string | null {
+  const vcardArray = entity.vcardArray;
+  if (!Array.isArray(vcardArray) || !Array.isArray(vcardArray[1])) return null;
+
+  const entry = vcardArray[1].find(
+    (item): item is unknown[] => Array.isArray(item) && item[0] === fieldName
+  );
+
+  const value = entry?.[3];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function getRdapRegistrar(rdap: RdapDomainResponse) {
+  const registrar = rdap.entities?.find((entity) => entity.roles?.includes("registrar"));
+  if (!registrar) return "Bilinmiyor";
+
+  return getVcardValue(registrar, "fn") ?? getVcardValue(registrar, "org") ?? "Bilinmiyor";
+}
+
 export interface DomainAvailabilityResult {
   domain: string;
   available: boolean;
@@ -101,6 +208,15 @@ export async function searchDomainAvailability(
   query: string,
   extensions?: readonly string[]
 ) {
+  const limit = await checkRateLimit({
+    key: `domain-search:${normalizeRateLimitKey(query)}`,
+    limit: 30,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    return { success: false, error: "Çok fazla domain sorgusu yapıldı. Lütfen biraz sonra tekrar deneyin." as const };
+  }
+
   const label = extractDomainLabel(query);
   if (!label) {
     return { success: false, error: "Geçerli bir domain adı girin" as const };
@@ -138,13 +254,48 @@ export async function searchDomainAvailability(
   );
   const tldMap = new Map(tldRecords.map((t) => [t.ext, t]));
 
+  const externallyRegisteredDomains = new Set<string>();
+
+  for (const domain of domainsToCheck) {
+    if (registeredDomains.has(domain)) {
+      externallyRegisteredDomains.add(domain);
+    }
+  }
+
+  const uncheckedDomains = domainsToCheck.filter((domain) => !registeredDomains.has(domain));
+
+  if (uncheckedDomains.length > 0) {
+    const batch = await checkDomainsAvailability(uncheckedDomains);
+
+    if (batch.ok && batch.data) {
+      for (const item of batch.data) {
+        if (!item.available) {
+          externallyRegisteredDomains.add(item.domain.toLowerCase());
+        }
+      }
+    } else {
+      const registrarProvider = await getRegistrarProvider();
+      const externalRegistered = await Promise.all(
+        uncheckedDomains.map(async (domain) => ({
+          domain,
+          registered: await isDomainRegistered(domain, registrarProvider),
+        }))
+      );
+      for (const item of externalRegistered) {
+        if (item.registered) {
+          externallyRegisteredDomains.add(item.domain);
+        }
+      }
+    }
+  }
+
   const results: DomainAvailabilityResult[] = normalizedExtensions.map((ext) => {
     const domain = `${label}${ext}`;
     const tld = tldMap.get(ext);
 
     return {
       domain,
-      available: !registeredDomains.has(domain),
+      available: !externallyRegisteredDomains.has(domain),
       price: tld?.registerPrice ?? 0,
       renewPrice: tld?.renewPrice ?? 0,
       transfer: tld?.transferPrice ?? 0,
@@ -173,6 +324,15 @@ export interface WhoisLookupResult {
 }
 
 export async function lookupWhois(domainInput: string) {
+  const limit = await checkRateLimit({
+    key: `whois:${normalizeRateLimitKey(domainInput)}`,
+    limit: 20,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    return { success: false, error: "Çok fazla WHOIS sorgusu yapıldı. Lütfen biraz sonra tekrar deneyin." as const };
+  }
+
   const normalizedDomain = normalizeFullDomain(domainInput);
   if (!normalizedDomain) {
     return { success: false, error: "Geçerli bir domain adı girin" as const };
@@ -192,6 +352,27 @@ export async function lookupWhois(domainInput: string) {
   });
 
   if (!domain) {
+    const rdap = await fetchRdapDomain(normalizedDomain);
+
+    if (rdap) {
+      const data: WhoisLookupResult = {
+        domain: rdap.ldhName?.toLowerCase() ?? normalizedDomain,
+        registrar: getRdapRegistrar(rdap),
+        registrant: "REDACTED FOR PRIVACY",
+        createdDate: getRdapEventDate(rdap, ["registration", "registered"]),
+        expiryDate: getRdapEventDate(rdap, ["expiration", "expiry"]),
+        updatedDate: getRdapEventDate(rdap, ["last changed", "last update of rdap database"]),
+        status: rdap.status ?? ["unknown"],
+        nameServers:
+          rdap.nameservers
+            ?.map((nameserver) => nameserver.ldhName ?? nameserver.unicodeName)
+            .filter((value): value is string => Boolean(value)) ?? [],
+        dnssec: rdap.secureDNS?.delegationSigned ? "signed" : "unsigned",
+      };
+
+      return { success: true, data };
+    }
+
     return {
       success: false,
       error: "Bu domain için WHOIS kaydı bulunamadı veya domain kayıtlı değil",
@@ -247,6 +428,15 @@ export async function requestDomainTransfer(formData: FormData) {
     };
   }
 
+  const transferLimit = await checkRateLimit({
+    key: `domain-transfer:${normalizeRateLimitKey(parsed.data.email)}:${normalizeRateLimitKey(parsed.data.domain)}`,
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!transferLimit.allowed) {
+    return { success: false, error: "Çok fazla transfer talebi oluşturuldu. Lütfen daha sonra tekrar deneyin." };
+  }
+
   const normalizedDomain = normalizeFullDomain(parsed.data.domain);
   if (!normalizedDomain) {
     return { success: false, error: "Geçerli bir domain adı girin" };
@@ -273,6 +463,12 @@ export async function requestDomainTransfer(formData: FormData) {
         id: true,
         name: true,
         surname: true,
+        email: true,
+        phone: true,
+        address: true,
+        city: true,
+        country: true,
+        companyName: true,
       },
     });
 
@@ -280,63 +476,34 @@ export async function requestDomainTransfer(formData: FormData) {
       return { success: false, error: "Kullanıcı bulunamadı" };
     }
 
-    const existingOpenTicket = await db.supportTicket.findFirst({
-      where: {
-        customerId: user.id,
-        subject: `Domain transfer talebi: ${normalizedDomain}`,
-        status: {
-          not: "CLOSED",
-        },
-      },
-      select: {
-        id: true,
-        ticketNumber: true,
-      },
-    });
+    const transferInput = {
+      domain: normalizedDomain,
+      eppCode: parsed.data.eppCode,
+      email: parsed.data.email,
+    };
 
-    if (existingOpenTicket) {
-      return {
-        success: true,
-        message: "Bu domain için açık transfer talebiniz zaten mevcut",
-        data: {
-          ticketNumber: existingOpenTicket.ticketNumber,
-        },
-      };
+    const registrarConfig = await getRegistrarConfig();
+    if (isGriRegistrarEnabled(registrarConfig)) {
+      try {
+        return await processAutomatedDomainTransfer(user, transferInput);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message.startsWith("DOMAIN_TLD_NOT_FOUND")) {
+            return { success: false, error: "Bu domain uzantısı için transfer fiyatı bulunamadı" };
+          }
+          if (error.message === "DOMAIN_TRANSFER_PRICE_UNAVAILABLE") {
+            return { success: false, error: "Bu domain uzantısı için transfer fiyatı tanımlı değil" };
+          }
+          if (error.message === "DOMAIN_PRODUCT_NOT_FOUND") {
+            return { success: false, error: "Domain ürünü yapılandırması eksik" };
+          }
+        }
+
+        return { success: false, error: "Domain transferi başlatılırken bir hata oluştu" };
+      }
     }
 
-    const senderName = `${user.name} ${user.surname}`.trim() || "Müşteri";
-    const ticketNumber = generateTicketNumber();
-
-    await db.supportTicket.create({
-      data: {
-        ticketNumber,
-        customerId: user.id,
-        subject: `Domain transfer talebi: ${normalizedDomain}`,
-        department: "SALES",
-        priority: "MEDIUM",
-        status: "OPEN",
-        messages: {
-          create: {
-            senderId: user.id,
-            senderName,
-            senderRole: "CUSTOMER",
-            message:
-              `Domain: ${normalizedDomain}\n` +
-              `EPP/Auth Kodu: ${parsed.data.eppCode}\n` +
-              `İletişim E-postası: ${parsed.data.email}`,
-          },
-        },
-      },
-    });
-
-    revalidatePath("/musteri/panel/destek");
-    revalidatePath("/yonetim/destek");
-
-    return {
-      success: true,
-      message: "Transfer talebiniz alındı. Destek talebi oluşturuldu.",
-      data: { ticketNumber },
-    };
+    return createManualDomainTransferTicket(user, transferInput);
   }
 
   await db.contactMessage.create({

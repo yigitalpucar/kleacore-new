@@ -1,12 +1,24 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useCartStore } from "@/store/cart-store";
-import { ShoppingCart, Trash2, ArrowRight, Globe, Package } from "lucide-react";
+import { checkoutCart } from "@/lib/actions/customer/checkout";
+import { ShoppingCart, Trash2, ArrowRight, Globe, Package, WalletCards } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { redirectToCheckoutUrl } from "@/lib/utils/safe-redirect";
 
 function formatPrice(value: number) {
   return new Intl.NumberFormat("tr-TR", {
@@ -17,12 +29,16 @@ function formatPrice(value: number) {
 }
 
 export function SepetContent() {
+  const router = useRouter();
   const items = useCartStore((state) => state.items);
   const hasHydrated = useCartStore((state) => state.hasHydrated);
   const removeItem = useCartStore((state) => state.removeItem);
   const clearCart = useCartStore((state) => state.clearCart);
   const subtotal = useCartStore((state) => state.getSubtotal());
   const totalItems = useCartStore((state) => state.getTotalItems());
+  const [paymentMethod, setPaymentMethod] = useState<"BANK_TRANSFER" | "CREDIT_CARD">("CREDIT_CARD");
+  const [promoCode, setPromoCode] = useState("");
+  const [isPending, startTransition] = useTransition();
 
   const handleRemove = (id: string, title: string) => {
     removeItem(id);
@@ -32,6 +48,46 @@ export function SepetContent() {
   const handleClear = () => {
     clearCart();
     toast.info("Sepet temizlendi.");
+  };
+
+  const handleCheckout = () => {
+    startTransition(async () => {
+      const result = await checkoutCart({
+        paymentMethod,
+        promoCode,
+        items: items.map((item) => ({
+          id: item.id,
+          type: item.type,
+          quantity: item.quantity,
+          metadata: item.metadata,
+        })),
+      });
+
+      if (!result.success) {
+        if (result.code === "LOGIN_REQUIRED") {
+          toast.info("Ödeme için giriş yapmalısınız.");
+          router.push("/musteri/giris");
+          return;
+        }
+
+        toast.error(result.error ?? "Sipariş oluşturulurken bir hata oluştu.");
+        return;
+      }
+
+      clearCart();
+      const checkoutUrl =
+        result.data && "checkoutUrl" in result.data ? result.data.checkoutUrl : null;
+      if (checkoutUrl && redirectToCheckoutUrl(checkoutUrl)) {
+        return;
+      }
+
+      toast.success(
+        paymentMethod === "CREDIT_CARD"
+          ? "Ödeme sayfasına yönlendiriliyorsunuz."
+          : "Siparişiniz oluşturuldu. Banka havalesi onayı bekleniyor."
+      );
+      router.push("/musteri/panel/faturalar");
+    });
   };
 
   return (
@@ -167,11 +223,47 @@ export function SepetContent() {
                     <span>Toplam</span>
                     <span>{formatPrice(subtotal)}</span>
                   </div>
-                  <Button className="w-full" asChild>
-                    <Link href="/musteri/giris">
-                      Ödemeye Geç
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Link>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="promo-code">
+                      Promosyon Kodu
+                    </label>
+                    <Input
+                      id="promo-code"
+                      value={promoCode}
+                      onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
+                      placeholder="Kupon kodu"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Kupon ödeme sırasında doğrulanır.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Ödeme Yöntemi</label>
+                    <Select
+                      value={paymentMethod}
+                      onValueChange={(value) =>
+                        setPaymentMethod(value as "BANK_TRANSFER" | "CREDIT_CARD")
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CREDIT_CARD">Kredi Kartı</SelectItem>
+                        <SelectItem value="BANK_TRANSFER">Banka Havalesi</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button className="w-full" onClick={handleCheckout} disabled={isPending}>
+                    {isPending ? (
+                      "Sipariş oluşturuluyor..."
+                    ) : (
+                      <>
+                        <WalletCards className="mr-2 h-4 w-4" />
+                        Ödemeye Geç
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
                   </Button>
                 </CardContent>
               </Card>

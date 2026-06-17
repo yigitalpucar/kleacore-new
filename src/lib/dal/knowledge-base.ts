@@ -50,6 +50,15 @@ export async function getArticleBySlug(slug: string) {
   });
 }
 
+export async function getArticleById(id: string) {
+  return db.knowledgeBaseArticle.findUnique({
+    where: { id },
+    include: {
+      category: true,
+    },
+  });
+}
+
 export async function getCategories() {
   return db.knowledgeBaseCategory.findMany({
     include: {

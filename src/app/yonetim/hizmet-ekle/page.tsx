@@ -3,6 +3,8 @@ import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { AddServiceContent } from "./content";
 import type { BillingPeriod, ProductCategorySlug } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string");

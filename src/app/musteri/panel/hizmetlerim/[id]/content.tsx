@@ -1,15 +1,29 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Package,
   Server,
   Shield,
   Cloud,
   ArrowLeft,
+  ArrowUpDown,
   CheckCircle2,
   AlertCircle,
   Clock,
@@ -36,8 +50,12 @@ import {
   Users,
   Lock,
   Zap,
+  Loader2,
+  Ban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { submitCancellationRequest } from "@/lib/actions/customer/cancellation";
+import { toast } from "@/lib/toast";
 
 const statusConfig: Record<string, {
   label: string;
@@ -135,6 +153,11 @@ interface ServiceData {
     completedAt: string | null;
     createdAt: string;
   }[];
+  pendingCancellation: {
+    id: string;
+    reason: string;
+    createdAt: string;
+  } | null;
 }
 
 interface HizmetDetayContentProps {
@@ -142,6 +165,11 @@ interface HizmetDetayContentProps {
 }
 
 export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
+  const router = useRouter();
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+
   const categorySlug = service.product.category?.slug ?? "hosting";
   const isHosting = categorySlug === "hosting";
   const isServer = ["vds", "vps", "server"].includes(categorySlug);
@@ -150,6 +178,29 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
   const status = statusConfig[service.status] || statusConfig.ACTIVE;
   const StatusIcon = status.icon;
   const TypeIcon = categoryIcons[categorySlug] || Package;
+  const canRequestCancellation =
+    !service.pendingCancellation &&
+    service.status !== "CANCELLED" &&
+    service.status !== "EXPIRED";
+
+  const handleSubmitCancellation = async () => {
+    if (isSubmittingCancel) return;
+
+    setIsSubmittingCancel(true);
+    const result = await submitCancellationRequest(service.id, cancelReason);
+
+    if (!result.success) {
+      toast.error(result.error ?? "İptal talebi gönderilemedi");
+      setIsSubmittingCancel(false);
+      return;
+    }
+
+    toast.success("İptal talebiniz alındı. En kısa sürede değerlendirilecektir.");
+    setIsCancelDialogOpen(false);
+    setCancelReason("");
+    router.refresh();
+    setIsSubmittingCancel(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -205,6 +256,14 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
                   Yenile
                 </Link>
               </Button>
+              {service.status === "ACTIVE" && (
+                <Button variant="outline" asChild>
+                  <Link href={`/musteri/panel/hizmetlerim/${service.id}/yukselt`}>
+                    <ArrowUpDown className="mr-2 h-4 w-4" />
+                    Paket Değiştir
+                  </Link>
+                </Button>
+              )}
               <Button>
                 <Settings className="mr-2 h-4 w-4" />
                 Yönet
@@ -232,11 +291,20 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
                     </div>
                   </Button>
                   <Button variant="outline" className="justify-start h-auto py-3" asChild>
+                    <Link href={`/musteri/panel/hizmetlerim/${service.id}/eposta`}>
+                      <Mail className="mr-2 h-4 w-4 text-primary" />
+                      <div className="text-left">
+                        <p className="font-medium">E-posta Hesapları</p>
+                        <p className="text-xs text-muted-foreground">cPanel e-posta yönetimi</p>
+                      </div>
+                    </Link>
+                  </Button>
+                  <Button variant="outline" className="justify-start h-auto py-3" asChild>
                     <Link href="/musteri/panel/webmail">
                       <Mail className="mr-2 h-4 w-4 text-primary" />
                       <div className="text-left">
                         <p className="font-medium">Webmail</p>
-                        <p className="text-xs text-muted-foreground">E-posta yönetimi</p>
+                        <p className="text-xs text-muted-foreground">Gelen kutusu erişimi</p>
                       </div>
                     </Link>
                   </Button>
@@ -591,6 +659,20 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
                   )}
                 </div>
 
+                {service.pendingCancellation && (
+                  <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-3 text-sm">
+                    <p className="font-medium text-orange-600 dark:text-orange-400">
+                      İptal talebi bekliyor
+                    </p>
+                    <p className="text-muted-foreground mt-1">
+                      {new Date(service.pendingCancellation.createdAt).toLocaleDateString("tr-TR")} tarihinde gönderildi
+                    </p>
+                    <p className="text-muted-foreground mt-2 line-clamp-3">
+                      {service.pendingCancellation.reason}
+                    </p>
+                  </div>
+                )}
+
                 <div className="pt-4 border-t space-y-2">
                   <Button className="w-full" variant="outline" asChild>
                     <Link href={`/musteri/panel/hizmetlerim/${service.id}/yenile`}>
@@ -598,12 +680,70 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
                       Hizmeti Yenile
                     </Link>
                   </Button>
+                  {service.status === "ACTIVE" && (
+                    <Button className="w-full" variant="outline" asChild>
+                      <Link href={`/musteri/panel/hizmetlerim/${service.id}/yukselt`}>
+                        <ArrowUpDown className="mr-2 h-4 w-4" />
+                        Paket Değiştir
+                      </Link>
+                    </Button>
+                  )}
                   <Button className="w-full" variant="outline" asChild>
                     <Link href={`/musteri/panel/hizmetlerim/${service.id}/fatura`}>
                       <CreditCard className="mr-2 h-4 w-4" />
                       Faturayı Görüntüle
                     </Link>
                   </Button>
+                  {canRequestCancellation && (
+                    <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="w-full" variant="outline">
+                          <Ban className="mr-2 h-4 w-4 text-red-500" />
+                          İptal Talebi Gönder
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Hizmet İptal Talebi</DialogTitle>
+                          <DialogDescription>
+                            İptal talebiniz yönetici onayından sonra işleme alınır. Lütfen iptal nedeninizi açıklayın.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-2 py-2">
+                          <Label htmlFor="cancel-reason">İptal Nedeni</Label>
+                          <Textarea
+                            id="cancel-reason"
+                            placeholder="İptal nedeninizi en az 10 karakter olacak şekilde yazın..."
+                            value={cancelReason}
+                            onChange={(e) => setCancelReason(e.target.value)}
+                            rows={4}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {cancelReason.trim().length}/1000 karakter (minimum 10)
+                          </p>
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            variant="outline"
+                            onClick={() => setIsCancelDialogOpen(false)}
+                            disabled={isSubmittingCancel}
+                          >
+                            Vazgeç
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={() => void handleSubmitCancellation()}
+                            disabled={isSubmittingCancel || cancelReason.trim().length < 10}
+                          >
+                            {isSubmittingCancel && (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            )}
+                            {isSubmittingCancel ? "Gönderiliyor..." : "Talebi Gönder"}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  )}
                 </div>
               </CardContent>
             </Card>

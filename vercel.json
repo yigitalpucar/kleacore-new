@@ -1,0 +1,28 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily-billing",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/overdue-invoices",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/suspend-services",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/retry-provisioning",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/ssl-expiry",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/run-backups",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

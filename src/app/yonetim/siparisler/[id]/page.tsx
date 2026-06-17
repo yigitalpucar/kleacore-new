@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
 import { getOrderById } from "@/lib/dal/orders";
 import { OrderDetailActions } from "./content";
 
+export const dynamic = "force-dynamic";
+
 const statusConfig: Record<string, { label: string; color: string; bgColor: string }> = {
   PENDING: { label: "Beklemede", color: "text-yellow-500", bgColor: "bg-yellow-500/10" },
   APPROVED: { label: "Onaylandı", color: "text-blue-500", bgColor: "bg-blue-500/10" },

@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { getProductById } from "@/lib/dal/products";
 import { PackageDetailContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function ProductDetailPage({
   params,
 }: {

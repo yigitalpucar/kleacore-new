@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { getAdminDashboardStats } from "@/lib/dal/dashboard";
 
+export const dynamic = "force-dynamic";
+
 const orderStatusConfig: Record<string, { label: string; color: string }> = {
   PENDING: { label: "Beklemede", color: "bg-yellow-500/10 text-yellow-500" },
   APPROVED: { label: "Onaylandı", color: "bg-blue-500/10 text-blue-500" },

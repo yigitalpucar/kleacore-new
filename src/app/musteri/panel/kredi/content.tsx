@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import {
   Wallet,
   CreditCard,
-  Building2,
   Plus,
   Check,
   ArrowUpRight,
@@ -21,7 +20,9 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { loadBalance } from "@/lib/actions/customer/balance";
+import { initiateBalanceTopUp } from "@/lib/actions/customer/balance";
+import { redirectToCheckoutUrl } from "@/lib/utils/safe-redirect";
+import { toast } from "sonner";
 
 const creditPackages = [
   { id: 1, amount: 100, bonus: 0, popular: false },
@@ -36,14 +37,8 @@ const paymentMethods = [
   {
     id: "credit-card",
     name: "Kredi Karti",
-    description: "Visa, Mastercard, Troy",
+    description: "Visa, Mastercard, Troy ile güvenli ödeme",
     icon: CreditCard,
-  },
-  {
-    id: "bank-transfer",
-    name: "Havale/EFT",
-    description: "Banka havalesi ile odeme",
-    icon: Building2,
   },
 ];
 
@@ -122,10 +117,20 @@ export function KrediContent({ transactions, balance }: KrediContentProps) {
   const handleLoadBalance = async () => {
     if (finalAmount < 50) return;
     setLoading(true);
-    await loadBalance(finalAmount);
+
+    const result = await initiateBalanceTopUp(finalAmount);
+    if (!result.success) {
+      toast.error(result.error ?? "Ödeme başlatılamadı");
+      setLoading(false);
+      return;
+    }
+
+    if (result.data?.checkoutUrl && redirectToCheckoutUrl(result.data.checkoutUrl)) {
+      return;
+    }
+
+    toast.error("Ödeme sayfası oluşturulamadı");
     setLoading(false);
-    setSelectedPackage(null);
-    setCustomAmount("");
   };
 
   return (

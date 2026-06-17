@@ -27,15 +27,23 @@ import {
   Puzzle,
   MessageSquareX,
   UserPlus,
+  Store,
   Building2,
   UserCheck,
   UserX,
   AlertTriangle,
   FilePlus,
   Receipt,
+  HandCoins,
   Package,
   PlusCircle,
   Timer,
+  ScrollText,
+  Cog,
+  BookOpen,
+  Newspaper,
+  Plug,
+  FileCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -70,6 +78,8 @@ const navItems: NavItem[] = [
       { title: "Askıda", href: "/yonetim/musteriler/askida", icon: Pause },
       { title: "Kapalı Hesaplar", href: "/yonetim/musteriler/kapali", icon: UserX },
       { title: "Müşteri Ekle", href: "/yonetim/musteri-ekle", icon: UserPlus },
+      { title: "Bayiler", href: "/yonetim/bayiler", icon: Store },
+      { title: "Affiliate Ödemeleri", href: "/yonetim/affiliate-odemeleri", icon: HandCoins },
     ],
   },
   {
@@ -115,6 +125,17 @@ const navItems: NavItem[] = [
   },
   { title: "Sunucular", href: "/yonetim/sunucular", icon: Server },
   {
+    title: "İçerik",
+    href: "/yonetim/icerik/blog",
+    icon: Newspaper,
+    children: [
+      { title: "Blog Yazıları", href: "/yonetim/icerik/blog", icon: FileText },
+      { title: "Yeni Blog Yazısı", href: "/yonetim/icerik/blog/yeni", icon: PlusCircle },
+      { title: "Bilgi Bankası", href: "/yonetim/icerik/bilgi-bankasi", icon: BookOpen },
+      { title: "Yeni Makale", href: "/yonetim/icerik/bilgi-bankasi/yeni", icon: PlusCircle },
+    ],
+  },
+  {
     title: "Destek",
     href: "/yonetim/destek",
     icon: Headphones,
@@ -137,10 +158,20 @@ const navItems: NavItem[] = [
       { title: "Gecikmiş", href: "/yonetim/faturalar/gecikmis", icon: AlertTriangle },
       { title: "İptal Edilen", href: "/yonetim/faturalar/iptal", icon: XCircle },
       { title: "Fatura Oluştur", href: "/yonetim/faturalar/olustur", icon: FilePlus },
+      { title: "E-Fatura / E-Arşiv", href: "/yonetim/efatura", icon: FileCheck },
     ],
   },
   { title: "Raporlar", href: "/yonetim/raporlar", icon: BarChart3 },
-  { title: "Ayarlar", href: "/yonetim/ayarlar", icon: Settings },
+  {
+    title: "Sistem",
+    href: "/yonetim/aktivite",
+    icon: Cog,
+    children: [
+      { title: "Aktivite Logları", href: "/yonetim/aktivite", icon: ScrollText },
+      { title: "Entegrasyonlar", href: "/yonetim/entegrasyonlar", icon: Plug },
+      { title: "Ayarlar", href: "/yonetim/ayarlar", icon: Settings },
+    ],
+  },
 ];
 
 export function AdminNav() {
@@ -148,12 +179,20 @@ export function AdminNav() {
 
   const isActive = (href: string, children?: NavItem["children"]) => {
     if (children) {
-      return children.some((child) => pathname === child.href) || pathname === href;
+      return (
+        children.some(
+          (child) =>
+            pathname === child.href || pathname.startsWith(`${child.href}/`)
+        ) ||
+        pathname === href ||
+        pathname.startsWith(`${href}/`)
+      );
     }
     return pathname === href;
   };
 
-  const isChildActive = (href: string) => pathname === href;
+  const isChildActive = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <nav className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">

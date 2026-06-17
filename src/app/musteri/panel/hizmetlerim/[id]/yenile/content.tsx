@@ -15,10 +15,12 @@ import {
   Gift,
   Shield,
   Percent,
-  Package,
+  Building2,
 } from "lucide-react";
+import type { CustomerPaymentMethod } from "@/lib/payments/methods";
 import { cn } from "@/lib/utils";
 import { renewService } from "@/lib/actions/customer/services";
+import { handleCreditCardCheckoutRedirect } from "@/lib/payments/checkout-redirect";
 import { toast } from "@/lib/toast";
 
 interface ServiceData {
@@ -41,7 +43,7 @@ interface ServiceData {
 
 interface ServiceRenewalContentProps {
   service: ServiceData;
-  userBalance: number;
+
 }
 
 const billingPeriodLabels: Record<string, string> = {
@@ -67,7 +69,7 @@ const renewalOptions = [
   { period: "3 Yıl", months: 36, discount: 25, popular: false },
 ];
 
-export function ServiceRenewalContent({ service, userBalance }: ServiceRenewalContentProps) {
+export function ServiceRenewalContent({ service }: ServiceRenewalContentProps) {
   const router = useRouter();
   const [selectedPeriod, setSelectedPeriod] = useState(12);
   const [selectedPayment, setSelectedPayment] = useState("credit-card");
@@ -93,22 +95,19 @@ export function ServiceRenewalContent({ service, userBalance }: ServiceRenewalCo
 
   const paymentMethods = [
     { id: "credit-card", name: "Kredi Kartı", icon: CreditCard },
-    { id: "balance", name: `Bakiye (${currencyFormatter.format(userBalance)})`, icon: Package },
+    { id: "bank-transfer", name: "Banka Havalesi", icon: Building2 },
   ];
 
   const handleRenewal = async () => {
     setIsProcessing(true);
 
-    if (selectedPayment === "balance" && userBalance < finalPrice) {
-      toast.error("Yetersiz bakiye. Lütfen kredi yükleyin.");
-      setIsProcessing(false);
-      return;
-    }
+    const paymentMethod: CustomerPaymentMethod =
+      selectedPayment === "bank-transfer" ? "BANK_TRANSFER" : "CREDIT_CARD";
 
     const result = await renewService({
       serviceId: service.id,
       months: selectedPeriod as 1 | 3 | 6 | 12 | 24 | 36,
-      paymentMethod: selectedPayment === "balance" ? "BALANCE" : "CREDIT_CARD",
+      paymentMethod,
     });
 
     if (!result.success) {
@@ -117,7 +116,21 @@ export function ServiceRenewalContent({ service, userBalance }: ServiceRenewalCo
       return;
     }
 
-    toast.success(result.message ?? "Hizmet başarıyla yenilendi");
+    if (
+      result.data &&
+      handleCreditCardCheckoutRedirect(
+        {
+          checkoutUrl: result.data.checkoutUrl,
+          checkoutHtml: result.data.checkoutHtml,
+          paytrToken: result.data.paytrToken,
+        },
+        router
+      )
+    ) {
+      return;
+    }
+
+    toast.success(result.message ?? "Yenileme talebiniz alındı");
     router.push(`/musteri/panel/hizmetlerim/${service.id}`);
     router.refresh();
   };

@@ -1,10 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { requestPayout } from "@/lib/actions/customer/affiliate";
+import { MIN_PAYOUT_AMOUNT } from "@/lib/affiliate/constants";
+import { toast } from "@/lib/toast";
 import {
   Users,
   Link2,
@@ -142,6 +155,7 @@ interface AffiliateStats {
   totalEarnings: number;
   pendingPayments: number;
   paidPayments: number;
+  availableBalance: number;
 }
 
 interface SatisOrtakligiContentProps {
@@ -159,8 +173,12 @@ export function SatisOrtakligiContent({
   payments,
   stats,
 }: SatisOrtakligiContentProps) {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<"referrals" | "payments">("referrals");
+  const [payoutDialogOpen, setPayoutDialogOpen] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState("");
+  const [isSubmittingPayout, setIsSubmittingPayout] = useState(false);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -171,7 +189,31 @@ export function SatisOrtakligiContent({
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(amount);
 
-  const availableBalance = stats.totalEarnings - stats.paidPayments - stats.pendingPayments;
+  const handleRequestPayout = async () => {
+    const amount = Number(payoutAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Geçerli bir tutar girin");
+      return;
+    }
+
+    setIsSubmittingPayout(true);
+    const result = await requestPayout(amount);
+    setIsSubmittingPayout(false);
+
+    if (!result.success) {
+      toast.error(result.error || "Ödeme talebi oluşturulamadı");
+      return;
+    }
+
+    toast.success("Ödeme talebiniz alındı");
+    setPayoutDialogOpen(false);
+    setPayoutAmount("");
+    setActiveTab("payments");
+    router.refresh();
+  };
+
+  const availableBalance = stats.availableBalance;
+  const canRequestPayout = availableBalance >= MIN_PAYOUT_AMOUNT;
   const conversionRate = stats.totalReferrals > 0
     ? Math.round((referrals.filter((r) => r.commission > 0).length / stats.totalReferrals) * 100)
     : 0;
@@ -187,7 +229,13 @@ export function SatisOrtakligiContent({
               Referans linkinizi paylaşarak komisyon kazanın.
             </p>
           </div>
-          <Button>
+          <Button
+            onClick={() => {
+              setPayoutAmount(canRequestPayout ? String(availableBalance) : "");
+              setPayoutDialogOpen(true);
+            }}
+            disabled={!canRequestPayout}
+          >
             <Wallet className="mr-2 h-4 w-4" />
             Ödeme Talep Et
           </Button>
@@ -196,7 +244,7 @@ export function SatisOrtakligiContent({
 
       {/* Stats */}
       <BlurFade delay={0.15} inView>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -213,11 +261,24 @@ export function SatisOrtakligiContent({
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-emerald-500/10">
+                  <Wallet className="h-5 w-5 text-emerald-500" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Kullanılabilir Bakiye</p>
+                  <p className="text-2xl font-bold">{formatCurrency(availableBalance)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-orange-500/10">
                   <Clock className="h-5 w-5 text-orange-500" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Bekleyen Kazanç</p>
+                  <p className="text-sm text-muted-foreground">Bekleyen Ödemeler</p>
                   <p className="text-2xl font-bold">{formatCurrency(stats.pendingPayments)}</p>
                 </div>
               </div>
@@ -494,6 +555,39 @@ export function SatisOrtakligiContent({
           </CardContent>
         </Card>
       </BlurFade>
+
+      <Dialog open={payoutDialogOpen} onOpenChange={setPayoutDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ödeme Talep Et</DialogTitle>
+            <DialogDescription>
+              Kullanılabilir bakiyeniz: {formatCurrency(availableBalance)}. Minimum talep tutarı{" "}
+              {formatCurrency(MIN_PAYOUT_AMOUNT)}&apos;dir.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="payout-amount">Talep Tutarı (TL)</Label>
+            <Input
+              id="payout-amount"
+              type="number"
+              min={MIN_PAYOUT_AMOUNT}
+              max={availableBalance}
+              step="0.01"
+              value={payoutAmount}
+              onChange={(event) => setPayoutAmount(event.target.value)}
+              placeholder={String(MIN_PAYOUT_AMOUNT)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayoutDialogOpen(false)}>
+              İptal
+            </Button>
+            <Button onClick={handleRequestPayout} disabled={isSubmittingPayout}>
+              {isSubmittingPayout ? "Gönderiliyor..." : "Talep Oluştur"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Info Note */}
       <BlurFade delay={0.4} inView>

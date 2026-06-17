@@ -4,6 +4,7 @@ import { Footer } from "@/components/layout/footer";
 import { PanelProfileHeader } from "@/components/panel/panel-profile-header";
 import { PanelTabs } from "@/components/panel/panel-tabs";
 import { auth } from "@/lib/auth";
+import { isResellerUser } from "@/lib/reseller";
 
 export default async function PanelLayout({
   children,
@@ -12,6 +13,7 @@ export default async function PanelLayout({
 }) {
   const session = await auth();
   const user = session?.user;
+  const isReseller = user?.id ? await isResellerUser(user.id) : false;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -25,7 +27,7 @@ export default async function PanelLayout({
       />
 
       {/* Tab Navigation */}
-      <PanelTabs />
+      <PanelTabs isReseller={isReseller} />
 
       {/* Panel Content Area */}
       <div className="flex-1 bg-muted/30">

@@ -2,6 +2,8 @@ import { getInvoiceById } from "@/lib/dal/invoices";
 import { notFound } from "next/navigation";
 import { InvoiceDetailContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function InvoiceDetailPage({
   params,
 }: {

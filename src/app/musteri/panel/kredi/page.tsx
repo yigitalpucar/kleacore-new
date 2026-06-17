@@ -3,6 +3,8 @@ import { getTransactions } from "@/lib/dal/transactions";
 import { getCustomerDashboardStats } from "@/lib/dal/dashboard";
 import { KrediContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function KrediPage() {
   const session = await auth();
   const userId = session!.user.id;

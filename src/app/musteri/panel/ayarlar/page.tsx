@@ -2,6 +2,13 @@ import { auth } from "@/lib/auth";
 import { getUserProfile, getApiKeysByUser } from "@/lib/dal/settings";
 import { AyarlarContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
+function maskApiKey(key: string): string {
+  if (key.length <= 8) return "****";
+  return key.substring(0, 7) + "****" + key.substring(key.length - 4);
+}
+
 export default async function AyarlarPage() {
   const session = await auth();
   const userId = session!.user.id;
@@ -29,7 +36,7 @@ export default async function AyarlarPage() {
   const serializedApiKeys = apiKeys.map((k) => ({
     id: k.id,
     name: k.name,
-    key: k.key,
+    key: maskApiKey(k.keyPrefix),
     createdAt: k.createdAt.toISOString(),
     lastUsedAt: k.lastUsedAt ? k.lastUsedAt.toISOString() : null,
   }));

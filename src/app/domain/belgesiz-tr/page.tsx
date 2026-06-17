@@ -4,6 +4,8 @@ import { Footer } from "@/components/layout/footer";
 import { getDomainTldsByCategory } from "@/lib/dal/domain-tlds";
 import { BelgesizTRContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 const BELGELI_EXTENSIONS = new Set([".com.tr", ".net.tr", ".org.tr"]);
 
 const TLD_DESCRIPTIONS: Record<string, string> = {

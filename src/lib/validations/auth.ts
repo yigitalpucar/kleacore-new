@@ -1,8 +1,15 @@
 import { z } from "zod";
 
+export const passwordSchema = z
+  .string()
+  .min(8, "Şifre en az 8 karakter olmalı")
+  .regex(/[a-z]/, "Şifre en az bir küçük harf içermeli")
+  .regex(/[A-Z]/, "Şifre en az bir büyük harf içermeli")
+  .regex(/[0-9]/, "Şifre en az bir rakam içermeli");
+
 export const loginSchema = z.object({
   email: z.string().email("Geçerli bir e-posta adresi girin"),
-  password: z.string().min(6, "Şifre en az 6 karakter olmalı"),
+  password: z.string().min(1, "Şifre gerekli"),
 });
 
 export const registerSchema = z
@@ -11,7 +18,7 @@ export const registerSchema = z
     surname: z.string().min(2, "Soyad en az 2 karakter olmalı"),
     email: z.string().email("Geçerli bir e-posta adresi girin"),
     phone: z.string().optional(),
-    password: z.string().min(6, "Şifre en az 6 karakter olmalı"),
+    password: passwordSchema,
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -26,7 +33,7 @@ export const passwordResetRequestSchema = z.object({
 export const passwordResetSchema = z
   .object({
     token: z.string().min(1, "Geçersiz şifre sıfırlama bağlantısı"),
-    password: z.string().min(6, "Şifre en az 6 karakter olmalı"),
+    password: passwordSchema,
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {

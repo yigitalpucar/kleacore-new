@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { updateProfile, changePassword } from "@/lib/actions/customer/profile";
+import {
+  createApiKey,
+  revokeApiKey,
+  deleteApiKey,
+} from "@/lib/actions/customer/api-keys";
 
 interface ProfileData {
   name: string;
@@ -69,7 +75,15 @@ const notificationSettings = [
   { id: "sms_critical", label: "SMS bildirimleri", description: "Kritik uyarılar için SMS", enabled: true },
 ];
 
+interface NewlyCreatedApiKey {
+  id: string;
+  name: string;
+  key: string;
+  createdAt: string;
+}
+
 export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("profile");
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState(
@@ -90,6 +104,10 @@ export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [showCreateKeyForm, setShowCreateKeyForm] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [newlyCreatedKey, setNewlyCreatedKey] = useState<NewlyCreatedApiKey | null>(null);
+  const [apiKeyActionId, setApiKeyActionId] = useState<string | null>(null);
 
   const tabs = [
     { id: "profile", label: "Profil", icon: User },
@@ -156,6 +174,81 @@ export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
       month: "long",
       year: "numeric",
     });
+
+  const handleCreateApiKey = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+
+    const fd = new FormData();
+    fd.set("name", newKeyName.trim());
+
+    const result = await createApiKey(fd);
+    setSaving(false);
+
+    if (result.success && result.apiKey) {
+      setNewlyCreatedKey(result.apiKey);
+      setNewKeyName("");
+      setShowCreateKeyForm(false);
+      setMessage({
+        type: "success",
+        text: "API anahtarı oluşturuldu. Anahtarı yalnızca bir kez görebilirsiniz; güvenli bir yere kaydedin.",
+      });
+      router.refresh();
+    } else {
+      setMessage({ type: "error", text: result.error ?? "Bir hata oluştu." });
+    }
+  };
+
+  const handleRevokeApiKey = async (id: string) => {
+    if (!confirm("Bu API anahtarını iptal etmek istediğinize emin misiniz?")) {
+      return;
+    }
+
+    setApiKeyActionId(id);
+    setMessage(null);
+
+    const fd = new FormData();
+    fd.set("id", id);
+
+    const result = await revokeApiKey(fd);
+    setApiKeyActionId(null);
+
+    if (result.success) {
+      if (newlyCreatedKey?.id === id) {
+        setNewlyCreatedKey(null);
+      }
+      setMessage({ type: "success", text: "API anahtarı iptal edildi." });
+      router.refresh();
+    } else {
+      setMessage({ type: "error", text: result.error ?? "Bir hata oluştu." });
+    }
+  };
+
+  const handleDeleteApiKey = async (id: string) => {
+    if (!confirm("Bu API anahtarını kalıcı olarak silmek istediğinize emin misiniz?")) {
+      return;
+    }
+
+    setApiKeyActionId(id);
+    setMessage(null);
+
+    const fd = new FormData();
+    fd.set("id", id);
+
+    const result = await deleteApiKey(fd);
+    setApiKeyActionId(null);
+
+    if (result.success) {
+      if (newlyCreatedKey?.id === id) {
+        setNewlyCreatedKey(null);
+      }
+      setMessage({ type: "success", text: "API anahtarı silindi." });
+      router.refresh();
+    } else {
+      setMessage({ type: "error", text: result.error ?? "Bir hata oluştu." });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -614,12 +707,98 @@ export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
                     API entegrasyonlarınız için anahtarlarınızı yönetin
                   </CardDescription>
                 </div>
-                <Button>
+                <Button
+                  onClick={() => setShowCreateKeyForm((prev) => !prev)}
+                  disabled={saving}
+                >
                   <Key className="mr-2 h-4 w-4" />
                   Yeni Anahtar
                 </Button>
               </CardHeader>
               <CardContent>
+                {showCreateKeyForm && (
+                  <form
+                    onSubmit={handleCreateApiKey}
+                    className="mb-6 p-4 rounded-lg border space-y-4"
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="apiKeyName">Anahtar Adı</Label>
+                      <Input
+                        id="apiKeyName"
+                        value={newKeyName}
+                        onChange={(e) => setNewKeyName(e.target.value)}
+                        placeholder="Örn: Üretim Entegrasyonu"
+                        maxLength={100}
+                        required
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button type="submit" disabled={saving || !newKeyName.trim()}>
+                        {saving ? "Oluşturuluyor..." : "Oluştur"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setShowCreateKeyForm(false);
+                          setNewKeyName("");
+                        }}
+                        disabled={saving}
+                      >
+                        İptal
+                      </Button>
+                    </div>
+                  </form>
+                )}
+
+                {newlyCreatedKey && (
+                  <div className="mb-6 p-4 rounded-lg border border-amber-500/30 bg-amber-500/10 space-y-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Yeni API anahtarınız oluşturuldu</p>
+                        <p className="text-sm text-muted-foreground">
+                          Bu anahtarı yalnızca bir kez görebilirsiniz. Güvenli bir yere kaydedin.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">{newlyCreatedKey.name}</p>
+                      <p className="text-sm font-mono break-all bg-background/80 p-3 rounded-md border">
+                        {newlyCreatedKey.key}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          copyToClipboard(newlyCreatedKey.key, newlyCreatedKey.id)
+                        }
+                      >
+                        {copiedKey === newlyCreatedKey.id ? (
+                          <>
+                            <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
+                            Kopyalandı
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="mr-2 h-4 w-4" />
+                            Kopyala
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setNewlyCreatedKey(null)}
+                      >
+                        Anladım
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-4">
                   {apiKeys.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground">
@@ -641,9 +820,9 @@ export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
                             {apiKey.key}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Olusturuldu: {formatDate(apiKey.createdAt)}
+                            Oluşturuldu: {formatDate(apiKey.createdAt)}
                             {apiKey.lastUsedAt &&
-                              ` \u2022 Son kullanim: ${formatDate(apiKey.lastUsedAt)}`}
+                              ` \u2022 Son kullanım: ${formatDate(apiKey.lastUsedAt)}`}
                           </p>
                         </div>
                       </div>
@@ -651,25 +830,19 @@ export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => copyToClipboard(apiKey.key, apiKey.id)}
+                          onClick={() => handleRevokeApiKey(apiKey.id)}
+                          disabled={apiKeyActionId === apiKey.id}
                         >
-                          {copiedKey === apiKey.id ? (
-                            <>
-                              <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
-                              Kopyalandi
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="mr-2 h-4 w-4" />
-                              Kopyala
-                            </>
-                          )}
-                        </Button>
-                        <Button variant="outline" size="sm">
                           <RefreshCw className="mr-2 h-4 w-4" />
-                          Yenile
+                          {apiKeyActionId === apiKey.id ? "İptal ediliyor..." : "İptal Et"}
                         </Button>
-                        <Button variant="outline" size="sm" className="text-red-500 hover:text-red-500">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-500 hover:text-red-500"
+                          onClick={() => handleDeleteApiKey(apiKey.id)}
+                          disabled={apiKeyActionId === apiKey.id}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>

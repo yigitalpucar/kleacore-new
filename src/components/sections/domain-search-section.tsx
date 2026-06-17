@@ -1,29 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Search, Check, X, Loader2, ShoppingCart, Globe } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { searchDomainAvailability } from "@/lib/actions/public/domains";
-const HOME_DOMAIN_SEARCH_EXTENSIONS = [
-  ".com",
-  ".net",
-  ".org",
-  ".com.tr",
-  ".io",
-  ".co",
-] as const;
-
-const HOME_TLD_PRICES: Record<string, { price: number; renewPrice: number }> = {
-  ".com": { price: 149, renewPrice: 199 },
-  ".net": { price: 179, renewPrice: 229 },
-  ".org": { price: 189, renewPrice: 239 },
-  ".com.tr": { price: 99, renewPrice: 149 },
-  ".io": { price: 499, renewPrice: 599 },
-  ".co": { price: 299, renewPrice: 399 },
-};
 import { toast } from "@/lib/toast";
 import { useCartStore } from "@/store/cart-store";
 
@@ -34,16 +18,17 @@ interface DomainResult {
   renewPrice: number;
 }
 
-const tlds = HOME_DOMAIN_SEARCH_EXTENSIONS.map((ext) => {
-  const pricing = HOME_TLD_PRICES[ext];
-  return {
-    ext,
-    price: pricing?.price ?? 0,
-    renewPrice: pricing?.renewPrice ?? 0,
-  };
-});
+export interface DomainTldPrice {
+  ext: string;
+  price: number;
+  renewPrice: number;
+}
 
-export function DomainSearchSection() {
+interface DomainSearchSectionProps {
+  tlds: DomainTldPrice[];
+}
+
+export function DomainSearchSection({ tlds }: DomainSearchSectionProps) {
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<DomainResult[]>([]);
@@ -184,13 +169,13 @@ export function DomainSearchSection() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: idx * 0.05 }}
                 className={cn(
-                  "flex items-center justify-between p-4 rounded-xl border transition-all",
+                  "flex flex-col gap-4 p-4 rounded-xl border transition-all sm:flex-row sm:items-center sm:justify-between",
                   result.available
                     ? "border-green-500/50 bg-green-500/5 hover:bg-green-500/10"
                     : "border-border opacity-60"
                 )}
               >
-                <div className="flex items-center gap-4">
+                <div className="flex min-w-0 items-center gap-4">
                   <div
                     className={cn(
                       "flex h-10 w-10 items-center justify-center rounded-full",
@@ -205,14 +190,14 @@ export function DomainSearchSection() {
                       <X className="h-5 w-5" />
                     )}
                   </div>
-                  <div>
-                    <p className="font-semibold text-lg">{result.domain}</p>
+                  <div className="min-w-0">
+                    <p className="break-words text-lg font-semibold">{result.domain}</p>
                     <p className="text-sm text-muted-foreground">
                       {result.available ? "Bu domain müsait!" : "Bu domain alınmış"}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-end">
                   {result.available && (
                     <>
                       <div className="text-right hidden sm:block">
@@ -221,15 +206,19 @@ export function DomainSearchSection() {
                           Yenileme: ₺{result.renewPrice}/yıl
                         </p>
                       </div>
-                      <Button onClick={() => handleAddToCart(result)}>
+                      <Button className="shrink-0" onClick={() => handleAddToCart(result)}>
                         <ShoppingCart className="mr-2 h-4 w-4" />
                         Sepete Ekle
                       </Button>
                     </>
                   )}
                   {!result.available && (
-                    <Button variant="outline" size="sm">
-                      Whois
+                    <Button variant="outline" size="sm" asChild>
+                      <Link
+                        href={`/domain/whois?domain=${encodeURIComponent(result.domain)}`}
+                      >
+                        Whois Sorgula
+                      </Link>
                     </Button>
                   )}
                 </div>

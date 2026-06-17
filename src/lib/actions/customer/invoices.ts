@@ -3,18 +3,22 @@
 import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
-import type { PaymentMethod } from "@prisma/client";
+import {
+  CUSTOMER_PAYMENT_METHODS,
+  type CustomerPaymentMethod,
+} from "@/lib/payments/methods";
+import {
+  initiateCreditCardPayment,
+  isStripePaymentMethod,
+  roundMoney,
+} from "@/lib/payments/orchestrator";
 
 interface PayInvoiceInput {
   invoiceId: string;
-  paymentMethod: PaymentMethod;
+  paymentMethod: CustomerPaymentMethod;
 }
 
-const allowedPaymentMethods: PaymentMethod[] = [
-  "CREDIT_CARD",
-  "BALANCE",
-  "BANK_TRANSFER",
-];
+const allowedPaymentMethods: CustomerPaymentMethod[] = [...CUSTOMER_PAYMENT_METHODS];
 
 const currencyFormatter = new Intl.NumberFormat("tr-TR", {
   style: "currency",
@@ -63,8 +67,8 @@ export async function payInvoice(input: PayInvoiceInput) {
       return { success: false, error: "İptal edilmiş fatura ödenemez" };
     }
 
-    const remainingAmount = Number(
-      Math.max(0, Number(invoice.totalAmount) - Number(invoice.paidAmount)).toFixed(2)
+    const remainingAmount = roundMoney(
+      Math.max(0, Number(invoice.totalAmount) - Number(invoice.paidAmount))
     );
 
     if (remainingAmount <= 0) {
@@ -72,79 +76,86 @@ export async function payInvoice(input: PayInvoiceInput) {
     }
 
     const now = new Date();
+    const isBankTransfer = input.paymentMethod === "BANK_TRANSFER";
 
-    await db.$transaction(async (tx) => {
-      if (input.paymentMethod === "BALANCE") {
-        const customer = await tx.user.findUnique({
-          where: { id: session.user.id },
-          select: { balance: true, name: true, surname: true },
-        });
+    if (isStripePaymentMethod(input.paymentMethod)) {
+      const existingPendingPayment = await db.payment.findFirst({
+        where: {
+          invoiceId: invoice.id,
+          customerId: session.user.id,
+          method: "CREDIT_CARD",
+          status: "PENDING",
+        },
+        orderBy: { createdAt: "desc" },
+      });
 
-        if (!customer) {
-          throw new Error("CUSTOMER_NOT_FOUND");
-        }
-
-        if (customer.balance < remainingAmount) {
-          throw new Error("INSUFFICIENT_BALANCE");
-        }
-
-        const balanceBefore = Number(customer.balance);
-        const balanceAfter = Number((balanceBefore - remainingAmount).toFixed(2));
-
-        await tx.user.update({
-          where: { id: session.user.id },
-          data: { balance: balanceAfter },
-        });
-
-        await tx.transaction.create({
+      if (!existingPendingPayment) {
+        await db.payment.create({
           data: {
+            invoiceId: invoice.id,
             customerId: session.user.id,
-            type: "PAYMENT",
             amount: remainingAmount,
-            balanceBefore,
-            balanceAfter,
-            description: `Fatura odemesi (${invoice.invoiceNumber})`,
-            referenceId: invoice.id,
+            method: "CREDIT_CARD",
+            status: "PENDING",
+            notes: `Müşteri paneli kredi kartı ödemesi (${invoice.invoiceNumber})`,
+          },
+        });
+      } else if (Number(existingPendingPayment.amount) !== remainingAmount) {
+        await db.payment.update({
+          where: { id: existingPendingPayment.id },
+          data: {
+            amount: remainingAmount,
+            notes: `Müşteri paneli kredi kartı ödemesi (${invoice.invoiceNumber})`,
           },
         });
       }
 
+      const checkout = await initiateCreditCardPayment({
+        customerId: session.user.id,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        amount: remainingAmount,
+        context: "panel_invoice",
+      });
+
+      return {
+        success: true,
+        message: "Ödeme sayfasına yönlendiriliyorsunuz",
+        data: {
+          checkoutUrl: checkout.checkoutUrl,
+          checkoutHtml: checkout.checkoutHtml,
+          paytrToken: checkout.paytrToken,
+          stripeSessionId: checkout.stripeSessionId,
+          gatewayProvider: checkout.provider,
+        },
+      };
+    }
+
+    await db.$transaction(async (tx) => {
       await tx.payment.create({
         data: {
           invoiceId: invoice.id,
           customerId: session.user.id,
           amount: remainingAmount,
           method: input.paymentMethod,
-          status: "COMPLETED",
-          transactionId:
-            input.paymentMethod === "CREDIT_CARD" ? `CC-${Date.now()}` : undefined,
-          notes: `Musteri paneli odemesi (${invoice.invoiceNumber})`,
-          paidAt: now,
-        },
-      });
-
-      await tx.invoice.update({
-        where: { id: invoice.id },
-        data: {
-          status: "PAID",
-          paidAt: now,
-          paidAmount: Number((Number(invoice.paidAmount) + remainingAmount).toFixed(2)),
+          status: "PENDING",
+          notes: `Banka havalesi bekleniyor (${invoice.invoiceNumber})`,
         },
       });
 
       await tx.emailMessage.create({
         data: {
           customerId: session.user.id,
-          subject: `Fatura Odemesi Tamamlandi: ${invoice.invoiceNumber}`,
-          preview: `${invoice.invoiceNumber} numarali faturanizin odemesi alindi.`,
+          subject: `Banka Havalesi Bildirimi: ${invoice.invoiceNumber}`,
+          preview: `${invoice.invoiceNumber} numaralı faturanız için havale bildiriminiz alındı.`,
           content: [
             "Merhaba,",
             "",
-            `${invoice.invoiceNumber} numarali faturanizin odemesi basariyla alindi.`,
-            `Odenen tutar: ${currencyFormatter.format(remainingAmount)}`,
-            `Odeme tarihi: ${new Intl.DateTimeFormat("tr-TR").format(now)}`,
+            `${invoice.invoiceNumber} numaralı faturanız için banka havalesi bildiriminiz alındı.`,
+            `Beklenen tutar: ${currencyFormatter.format(remainingAmount)}`,
+            `Bildirim tarihi: ${new Intl.DateTimeFormat("tr-TR").format(now)}`,
             "",
-            "Tesekkur ederiz.",
+            "Ödeme onayı sonrası faturanız kapanacaktır.",
           ].join("\n"),
           category: "BILLING",
         },
@@ -154,25 +165,28 @@ export async function payInvoice(input: PayInvoiceInput) {
     revalidatePath("/musteri/panel/faturalar");
     revalidatePath(`/musteri/panel/faturalar/${invoice.id}`);
     revalidatePath("/musteri/panel/e-posta");
-    revalidatePath("/musteri/panel/kredi");
     revalidatePath("/yonetim/faturalar");
-    revalidatePath("/yonetim/faturalar/odendi");
     revalidatePath("/yonetim/faturalar/bekleyen");
-    revalidatePath("/yonetim/faturalar/gecikmis");
     revalidatePath(`/yonetim/faturalar/${invoice.id}`);
 
-    return { success: true, message: "Fatura odemesi tamamlandi" };
+    return {
+      success: true,
+      message:
+        "Banka havalesi bildiriminiz alındı. Ödeme onayı sonrası fatura kapanacaktır.",
+    };
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "CUSTOMER_NOT_FOUND") {
-        return { success: false, error: "Kullanici bulunamadi" };
-      }
-      if (error.message === "INSUFFICIENT_BALANCE") {
-        return { success: false, error: "Yetersiz bakiye. Lutfen bakiye yukleyin." };
-      }
+    if (
+      error instanceof Error &&
+      (error.message === "STRIPE_SECRET_KEY is not configured" ||
+        error.message === "PAYMENT_GATEWAY_NOT_CONFIGURED")
+    ) {
+      return {
+        success: false,
+        error: "Kredi kartı ödemesi şu anda kullanılamıyor. Lütfen banka havalesi seçin.",
+      };
     }
 
-    return { success: false, error: "Odeme sirasinda bir hata olustu" };
+    return { success: false, error: "Ödeme sırasında bir hata oluştu" };
   }
 }
 

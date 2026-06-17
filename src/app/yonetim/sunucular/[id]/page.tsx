@@ -2,6 +2,8 @@ import { getServerById } from "@/lib/dal/servers";
 import { notFound } from "next/navigation";
 import { ServerDetailContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function ServerDetailPage({
   params,
 }: {

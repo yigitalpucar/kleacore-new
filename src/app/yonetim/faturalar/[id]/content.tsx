@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import {
   markPaid,
+  approveBankTransfer,
   cancelInvoice,
   sendInvoiceReminder,
   sendInvoiceReceipt,
@@ -95,11 +96,29 @@ const formatPrice = (price: number) => {
   }).format(price);
 };
 
+const paymentMethodLabels: Record<string, string> = {
+  CREDIT_CARD: "Kredi Kartı",
+  BANK_TRANSFER: "Banka Havalesi",
+  BALANCE: "Bakiye",
+};
+
 export function InvoiceDetailContent({ invoice }: InvoiceDetailContentProps) {
   const config = statusConfig[invoice.status] || statusConfig.DRAFT;
   const StatusIcon = config.icon;
   const fullName = `${invoice.customer.name} ${invoice.customer.surname}`;
   const initials = `${invoice.customer.name[0] || ""}${invoice.customer.surname[0] || ""}`;
+  const hasPendingBankTransfer = invoice.payments.some(
+    (payment) => payment.method === "BANK_TRANSFER" && payment.status === "PENDING"
+  );
+
+  const handleApproveBankTransfer = async () => {
+    const result = await approveBankTransfer(invoice.id);
+    if (!result.success) {
+      toast.error(result.error ?? "Banka transferi onaylanamadı");
+      return;
+    }
+    toast.success("Banka transferi onaylandı ve sipariş işleme alındı");
+  };
 
   const handleMarkPaid = async () => {
     const result = await markPaid(invoice.id);
@@ -187,13 +206,23 @@ export function InvoiceDetailContent({ invoice }: InvoiceDetailContentProps) {
             </Button>
             {(invoice.status === "PENDING" || invoice.status === "OVERDUE") && (
               <>
-                <Button
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                  onClick={handleMarkPaid}
-                >
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Ödendi İşaretle
-                </Button>
+                {hasPendingBankTransfer ? (
+                  <Button
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    onClick={handleApproveBankTransfer}
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Ödemeyi Onayla
+                  </Button>
+                ) : (
+                  <Button
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    onClick={handleMarkPaid}
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Ödendi İşaretle
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-500 dark:hover:bg-red-950"
@@ -402,7 +431,9 @@ export function InvoiceDetailContent({ invoice }: InvoiceDetailContentProps) {
                               {payment.status === "COMPLETED" ? "Başarılı" : "Bekliyor"}
                             </span>
                           </div>
-                          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">{payment.method}</p>
+                          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                            {paymentMethodLabels[payment.method] ?? payment.method}
+                          </p>
                           <p className="text-xs text-zinc-500">
                             {new Date(payment.createdAt).toLocaleDateString("tr-TR")}
                           </p>

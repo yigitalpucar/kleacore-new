@@ -13,6 +13,8 @@ import {
 import { Check, Shield, Clock, Headphones, Globe, Zap, Lock, HeartHandshake } from "lucide-react";
 import { getDomainTlds } from "@/lib/dal/domain-tlds";
 
+export const dynamic = "force-dynamic";
+
 const features = [
   {
     icon: Shield,
@@ -56,7 +58,13 @@ export default async function DomainKayitPage() {
 
             <BlurFade delay={0.2} inView>
               <div className="max-w-4xl mx-auto">
-                <DomainSearch />
+                <DomainSearch
+                  tlds={tlds.slice(0, 12).map((tld) => ({
+                    ext: tld.ext,
+                    price: tld.registerPrice,
+                    renewPrice: tld.renewPrice,
+                  }))}
+                />
               </div>
             </BlurFade>
 

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,12 +7,9 @@ import {
   HardDrive,
   Cpu,
   Wifi,
-  ArrowUpRight,
   Activity,
   Database,
-  Zap,
   RefreshCw,
-  Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,8 +37,6 @@ interface IstatistiklerContentProps {
   serviceCount: number;
 }
 
-type Period = "week" | "month" | "year";
-
 function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
   const percentage = max > 0 ? Math.min((value / max) * 100, 100) : 0;
   return (
@@ -55,56 +49,11 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
   );
 }
 
-function createBandwidthSeries(totalBandwidth: number, period: Period) {
-  const labelsByPeriod: Record<Period, string[]> = {
-    week: ["Pzt", "Sal", "Car", "Per", "Cum", "Cmt", "Paz"],
-    month: ["1.H", "2.H", "3.H", "4.H", "5.H", "6.H", "7.H", "8.H", "9.H", "10.H"],
-    year: ["Oca", "Sub", "Mar", "Nis", "May", "Haz", "Tem", "Agu", "Eyl", "Eki", "Kas", "Ara"],
-  };
-
-  const labels = labelsByPeriod[period];
-  const denominator = labels.length;
-  const base = totalBandwidth > 0 ? totalBandwidth / denominator : 1;
-
-  return labels.map((day, index) => {
-    const wave = 0.82 + Math.sin((index + 1) * 1.4) * 0.18;
-    const incoming = Math.max(1, Math.round(base * 0.56 * wave));
-    const outgoing = Math.max(1, Math.round(base * 0.44 * (1.08 - wave * 0.35)));
-    return { day, incoming, outgoing };
-  });
-}
-
-function createResponseTimeSeries(avgCpu: number, period: Period) {
-  const labelsByPeriod: Record<Period, string[]> = {
-    week: ["00", "04", "08", "12", "16", "20", "24"],
-    month: ["1", "4", "7", "10", "13", "16", "19", "22", "25", "28"],
-    year: ["Oca", "Sub", "Mar", "Nis", "May", "Haz", "Tem", "Agu", "Eyl", "Eki", "Kas", "Ara"],
-  };
-
-  const labels = labelsByPeriod[period];
-  const base = Math.max(90, 360 - avgCpu * 2);
-
-  return labels.map((hour, index) => {
-    const variance = Math.cos((index + 1) * 1.25) * 42 + (index % 3) * 8;
-    const time = Math.round(Math.max(70, base + variance));
-    return { hour, time };
-  });
-}
-
 export function IstatistiklerContent({
   overviewStats,
   serviceUsage,
   serviceCount,
 }: IstatistiklerContentProps) {
-  const [period, setPeriod] = useState<Period>("week");
-  const bandwidthData = createBandwidthSeries(overviewStats.totalBandwidth, period);
-  const responseTimeData = createResponseTimeSeries(overviewStats.avgCpu, period);
-  const maxBandwidthPoint = Math.max(
-    1,
-    ...bandwidthData.map((item) => item.incoming + item.outgoing)
-  );
-  const maxResponseTime = Math.max(1, ...responseTimeData.map((item) => item.time));
-
   const statCards = [
     {
       title: "Toplam Bandwidth",
@@ -144,36 +93,11 @@ export function IstatistiklerContent({
     <div className="space-y-6">
       {/* Header */}
       <BlurFade delay={0.1} inView>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">İstatistikler</h1>
-            <p className="text-muted-foreground">
-              Hizmetlerinizin kullanım istatistiklerini görüntüleyin.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant={period === "week" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPeriod("week")}
-            >
-              Haftalik
-            </Button>
-            <Button
-              variant={period === "month" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPeriod("month")}
-            >
-              Aylik
-            </Button>
-            <Button
-              variant={period === "year" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPeriod("year")}
-            >
-            Yillik
-            </Button>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">İstatistikler</h1>
+          <p className="text-muted-foreground">
+            Hizmetlerinizin anlık kaynak kullanımını görüntüleyin.
+          </p>
         </div>
       </BlurFade>
 
@@ -203,102 +127,7 @@ export function IstatistiklerContent({
         </div>
       </BlurFade>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Bandwidth Chart Placeholder */}
-        <BlurFade delay={0.25} inView>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Wifi className="h-5 w-5 text-blue-500" />
-                Bandwidth Kullanimi
-              </CardTitle>
-              <CardDescription>
-                Secili periyoda gore gelen/giden trafik dagilimi
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-end gap-2 h-48">
-                  {bandwidthData.map((dataPoint) => {
-                    const total = dataPoint.incoming + dataPoint.outgoing;
-                    const incomingHeight = (dataPoint.incoming / maxBandwidthPoint) * 100;
-                    const outgoingHeight = (dataPoint.outgoing / maxBandwidthPoint) * 100;
-
-                    return (
-                      <div key={dataPoint.day} className="flex-1 flex flex-col items-center gap-2">
-                        <div className="w-full h-36 flex items-end justify-center gap-1">
-                          <div
-                            className="w-2 rounded-t bg-blue-500/80"
-                            style={{ height: `${incomingHeight}%` }}
-                            title={`Gelen: ${dataPoint.incoming} GB`}
-                          />
-                          <div
-                            className="w-2 rounded-t bg-cyan-400/80"
-                            style={{ height: `${outgoingHeight}%` }}
-                            title={`Giden: ${dataPoint.outgoing} GB`}
-                          />
-                        </div>
-                        <div className="text-center">
-                          <p className="text-[11px] text-muted-foreground">{dataPoint.day}</p>
-                          <p className="text-[10px] text-muted-foreground">{total} GB</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-blue-500" />
-                    Gelen
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-cyan-400" />
-                    Giden
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </BlurFade>
-
-        {/* Response Time Placeholder */}
-        <BlurFade delay={0.3} inView>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Timer className="h-5 w-5 text-purple-500" />
-                Yanıt Süresi
-              </CardTitle>
-              <CardDescription>
-                Ortalama yanıt suresi dagilimi (ms)
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-end gap-2 h-48">
-                  {responseTimeData.map((dataPoint) => (
-                    <div key={dataPoint.hour} className="flex-1 flex flex-col items-center gap-2">
-                      <div className="w-full h-36 flex items-end justify-center">
-                        <div
-                          className="w-3 rounded-t bg-purple-500/80"
-                          style={{ height: `${(dataPoint.time / maxResponseTime) * 100}%` }}
-                          title={`${dataPoint.time} ms`}
-                        />
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[11px] text-muted-foreground">{dataPoint.hour}</p>
-                        <p className="text-[10px] text-muted-foreground">{dataPoint.time} ms</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </BlurFade>
-      </div>
-
-      {/* Service Usage - real data from DB */}
+      {/* Service usage from database */}
       <BlurFade delay={0.5} inView>
         <Card>
           <CardHeader>

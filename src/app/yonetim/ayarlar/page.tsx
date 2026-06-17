@@ -8,7 +8,9 @@ import {
   CreditCard,
   Save,
   Upload,
+  ArrowUpRight,
 } from "lucide-react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,9 +22,12 @@ import { Badge } from "@/components/ui/badge";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { getSettings, getAdminUsers, getApiKeys } from "@/lib/dal/settings";
 import { updateSettings } from "@/lib/actions/admin/settings";
+import { revokeApiKeyByAdmin } from "@/lib/actions/admin/api-keys";
 import { NotificationSwitches, SecuritySwitch } from "./settings-switches";
 import { redirect } from "next/navigation";
 import { SettingsFeedbackToast } from "./settings-feedback-toast";
+
+export const dynamic = "force-dynamic";
 
 const allowedTabs = [
   "general",
@@ -79,11 +84,19 @@ async function saveGeneralSettings(formData: FormData) {
 async function saveEmailSettings(formData: FormData) {
   "use server";
 
+  const settings = await getSettings();
+  const currentSmtpPassword = getSettingValue(settings, "smtp_password", "");
+  const smtpPassword = getFormValue(formData, "smtp_password");
+  const resolvedSmtpPassword =
+    !smtpPassword || smtpPassword === "********"
+      ? currentSmtpPassword
+      : smtpPassword;
+
   const result = await updateSettings([
     { key: "smtp_server", value: getFormValue(formData, "smtp_server") },
     { key: "smtp_port", value: getFormValue(formData, "smtp_port") },
     { key: "smtp_username", value: getFormValue(formData, "smtp_username") },
-    { key: "smtp_password", value: getFormValue(formData, "smtp_password") },
+    { key: "smtp_password", value: resolvedSmtpPassword },
   ]);
 
   const params = new URLSearchParams({
@@ -141,23 +154,17 @@ async function saveSecuritySettings(formData: FormData) {
   redirect(`/yonetim/ayarlar?${params.toString()}`);
 }
 
-async function saveWebhookSettings(formData: FormData) {
+async function revokeAdminApiKey(formData: FormData) {
   "use server";
 
-  const result = await updateSettings([
-    { key: "webhook_orders", value: getFormValue(formData, "webhook_orders") },
-    {
-      key: "webhook_payments",
-      value: getFormValue(formData, "webhook_payments"),
-    },
-  ]);
+  const result = await revokeApiKeyByAdmin(formData);
 
   const params = new URLSearchParams({
     tab: "api",
     status: result.success ? "success" : "error",
     message: result.success
-      ? "Webhook ayarlari kaydedildi."
-      : result.error ?? "Webhook ayarlari kaydedilemedi.",
+      ? "API anahtarı iptal edildi."
+      : result.error ?? "API anahtarı iptal edilemedi.",
   });
   redirect(`/yonetim/ayarlar?${params.toString()}`);
 }
@@ -181,6 +188,11 @@ interface SettingsPageProps {
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const sp = await searchParams;
   const activeTab = readSearchParam(sp, "tab");
+
+  if (activeTab === "integrations") {
+    redirect("/yonetim/entegrasyonlar");
+  }
+
   const toastStatus = readSearchParam(sp, "status");
   const toastMessage = readSearchParam(sp, "message");
   const defaultTab: SettingsTab = isSettingsTab(activeTab) ? activeTab : "general";
@@ -200,12 +212,13 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const smtpServer = getSettingValue(settings, "smtp_server", "");
   const smtpPort = getSettingValue(settings, "smtp_port", "587");
   const smtpUsername = getSettingValue(settings, "smtp_username", "");
-  const smtpPassword = getSettingValue(settings, "smtp_password", "");
+  const smtpPassword = getSettingValue(settings, "smtp_password", "")
+    ? "********"
+    : "";
   const emailNotifications = getSettingValue(settings, "email_notifications", "true") === "true";
   const smsNotifications = getSettingValue(settings, "sms_notifications", "false") === "true";
   const autoInvoice = getSettingValue(settings, "auto_invoice", "true") === "true";
   const twoFactor = getSettingValue(settings, "two_factor", "true") === "true";
-
   return (
     <div className="space-y-6">
       <SettingsFeedbackToast
@@ -475,9 +488,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             </CardHeader>
             <CardContent className="space-y-4">
               {[
-                { name: "Kredi Kartı", provider: "Stripe", status: "active" },
-                { name: "Banka Havale/EFT", provider: "Manuel", status: "active" },
-                { name: "PayPal", provider: "PayPal", status: "inactive" },
+                { name: "Kredi Kartı", provider: "Stripe", status: "active" as const },
+                { name: "Banka Havalesi", provider: "Manuel Onay", status: "active" as const },
               ].map((method) => (
                 <div
                   key={method.name}
@@ -494,8 +506,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                     <Badge variant={method.status === "active" ? "default" : "secondary"}>
                       {method.status === "active" ? "Aktif" : "Pasif"}
                     </Badge>
-                    <Button variant="ghost" size="sm" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-                      Yapılandır
+                    <Button variant="ghost" size="sm" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white" asChild>
+                      <Link href="/yonetim/entegrasyonlar?tab=payment">
+                        Yapılandır
+                      </Link>
                     </Button>
                   </div>
                 </div>
@@ -622,7 +636,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                   >
                     <div>
                       <p className="text-sm font-medium text-zinc-900 dark:text-white">{apiKey.name}</p>
-                      <p className="text-xs font-mono text-zinc-500">{maskApiKey(apiKey.key)}</p>
+                      <p className="text-xs font-mono text-zinc-500">{maskApiKey(apiKey.keyPrefix)}</p>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right text-xs text-zinc-500">
@@ -631,9 +645,12 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                           <p>Son kullanım: {new Date(apiKey.lastUsedAt).toLocaleDateString("tr-TR")}</p>
                         )}
                       </div>
-                      <Button variant="destructive" size="sm">
-                        İptal Et
-                      </Button>
+                      <form action={revokeAdminApiKey}>
+                        <input type="hidden" name="id" value={apiKey.id} />
+                        <Button type="submit" variant="destructive" size="sm">
+                          İptal Et
+                        </Button>
+                      </form>
                     </div>
                   </div>
                 ))}
@@ -643,36 +660,18 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
           <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
             <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">Webhook URL&apos;leri</CardTitle>
+              <CardTitle className="text-zinc-900 dark:text-white">Entegrasyonlar</CardTitle>
               <CardDescription className="text-zinc-500">
-                Olayları harici sistemlere bildirin
+                Registrar, ödeme, webhook ve diğer modüller Entegrasyonlar sayfasına taşındı
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form action={saveWebhookSettings} className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">Sipariş Webhook</Label>
-                  <Input
-                    name="webhook_orders"
-                    defaultValue={getSettingValue(settings, "webhook_orders", "")}
-                    placeholder="https://example.com/webhook/orders"
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-600"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">Ödeme Webhook</Label>
-                  <Input
-                    name="webhook_payments"
-                    defaultValue={getSettingValue(settings, "webhook_payments", "")}
-                    placeholder="https://example.com/webhook/payments"
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-600"
-                  />
-                </div>
-                <Button type="submit" className="bg-primary hover:bg-primary/90">
-                  <Save className="mr-2 h-4 w-4" />
-                  Kaydet
-                </Button>
-              </form>
+              <Button asChild variant="outline">
+                <Link href="/yonetim/entegrasyonlar">
+                  Entegrasyonları Yönet
+                  <ArrowUpRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

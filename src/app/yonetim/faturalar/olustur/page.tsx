@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { CreateInvoiceContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function CreateInvoicePage() {
   await requireAdmin();
 

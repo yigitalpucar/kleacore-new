@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { getInvoicesByCustomer } from "@/lib/dal/invoices";
 import { FaturalarContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function FaturalarPage() {
   const session = await auth();
   const userId = session!.user.id;

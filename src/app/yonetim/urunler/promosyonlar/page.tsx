@@ -1,6 +1,8 @@
 import { getPromotions } from "@/lib/dal/promotions";
 import { PromotionsContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function PromotionsPage() {
   const promotions = await getPromotions();
 

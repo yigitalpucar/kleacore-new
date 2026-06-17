@@ -1,16 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Search,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
   Building2,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { approvePendingPlanChangeDowngrade } from "@/lib/actions/admin/plan-changes";
+import { toast } from "@/lib/toast";
 
 interface OperationItem {
   id: string;
@@ -24,6 +31,8 @@ interface OperationItem {
   priceDiff: number;
   status: string;
   date: string;
+  planChangeId?: string | null;
+  canApprove?: boolean;
 }
 
 interface YukseltmeDusurmeContentProps {
@@ -38,6 +47,7 @@ const typeConfig: Record<string, { label: string; color: string; icon: typeof Ar
 const statusConfig: Record<string, { label: string; color: string }> = {
   completed: { label: "Tamamlandı", color: "bg-green-500/10 text-green-500" },
   pending: { label: "Beklemede", color: "bg-yellow-500/10 text-yellow-500" },
+  cancelled: { label: "İptal", color: "bg-red-500/10 text-red-500" },
 };
 
 const formatPriceDiff = (price: number) => {
@@ -51,6 +61,26 @@ const formatPriceDiff = (price: number) => {
 };
 
 export function YukseltmeDusurmeContent({ operations }: YukseltmeDusurmeContentProps) {
+  const router = useRouter();
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
+  const handleApprove = async (planChangeId: string) => {
+    if (approvingId) return;
+
+    setApprovingId(planChangeId);
+    const result = await approvePendingPlanChangeDowngrade(planChangeId);
+
+    if (!result.success) {
+      toast.error(result.error ?? "Düşürme talebi onaylanamadı");
+      setApprovingId(null);
+      return;
+    }
+
+    toast.success("Düşürme talebi onaylandı ve paket güncellendi");
+    router.refresh();
+    setApprovingId(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -82,7 +112,7 @@ export function YukseltmeDusurmeContent({ operations }: YukseltmeDusurmeContentP
                     <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Fark</th>
                     <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Durum</th>
                     <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tarih</th>
-                    <th className="text-right p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">İncele</th>
+                    <th className="text-right p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">İşlem</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -146,12 +176,33 @@ export function YukseltmeDusurmeContent({ operations }: YukseltmeDusurmeContentP
                           </span>
                         </td>
                         <td className="p-4 text-right">
-                          <Link
-                            href={`/yonetim/siparisler/${op.orderId}`}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                          >
-                            <Search className="h-4 w-4" />
-                          </Link>
+                          <div className="inline-flex items-center gap-2">
+                            {op.canApprove && op.planChangeId && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleApprove(op.planChangeId!)}
+                                disabled={approvingId === op.planChangeId}
+                              >
+                                {approvingId === op.planChangeId ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                                    Onayla
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                            {op.orderId !== op.id && (
+                              <Link
+                                href={`/yonetim/siparisler/${op.orderId}`}
+                                className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                              >
+                                <Search className="h-4 w-4" />
+                              </Link>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

@@ -4,22 +4,27 @@ import {
   DollarSign,
   Users,
   Package,
-  Headphones,
   BarChart3,
-  PieChart,
   FileText,
-  ArrowUpRight,
-  ArrowDownRight,
-  Calendar,
+  Calculator,
+  Receipt,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { BlurFade } from "@/components/magicui/blur-fade";
-import { getRevenueReport, getCustomerReport, getServiceReport } from "@/lib/dal/reports";
+import {
+  getRevenueReport,
+  getCustomerReport,
+  getServiceReport,
+  getAccountingReport,
+} from "@/lib/dal/reports";
+import type { PaymentMethod } from "@prisma/client";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { PeriodFilter } from "./period-filter";
 import { ReportExportButton } from "./report-export-button";
+
+export const dynamic = "force-dynamic";
 
 const formatPrice = (price: number) => {
   return new Intl.NumberFormat("tr-TR", {
@@ -173,6 +178,12 @@ function periodLabel(period: ReportPeriod) {
   return "Son 6 Ay";
 }
 
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  CREDIT_CARD: "Kredi Kartı",
+  BANK_TRANSFER: "Banka Havalesi",
+  BALANCE: "Bakiye",
+};
+
 export default async function ReportsPage({
   searchParams,
 }: {
@@ -185,10 +196,11 @@ export default async function ReportsPage({
   const now = new Date();
   const dateRange = getRangeByPeriod(period, now);
 
-  const [revenueData, customerData, serviceData] = await Promise.all([
+  const [revenueData, customerData, serviceData, accountingData] = await Promise.all([
     getRevenueReport(dateRange),
     getCustomerReport(dateRange),
     getServiceReport(dateRange),
+    getAccountingReport(dateRange),
   ]);
 
   const chart = buildRevenueChartData(revenueData.paidInvoices, period, now);
@@ -208,6 +220,15 @@ export default async function ReportsPage({
 
   // Inactive musteri orani
   const inactiveCustomers = customerData.totalCustomers - customerData.activeCustomers;
+
+  const accountingSummary = accountingData.summary;
+  const paymentMethodRows = (
+    Object.entries(accountingSummary.collectedByMethod) as Array<[PaymentMethod, number]>
+  ).map(([method, amount]) => ({
+    method,
+    label: paymentMethodLabels[method],
+    amount,
+  }));
 
   return (
     <div className="space-y-6">
@@ -252,6 +273,13 @@ export default async function ReportsPage({
           >
             <Package className="mr-2 h-4 w-4" />
             Hizmetler
+          </TabsTrigger>
+          <TabsTrigger
+            value="accounting"
+            className="data-[state=active]:bg-white data-[state=active]:dark:bg-zinc-800 data-[state=active]:shadow-sm"
+          >
+            <Calculator className="mr-2 h-4 w-4" />
+            Muhasebe
           </TabsTrigger>
         </TabsList>
 
@@ -495,6 +523,208 @@ export default async function ReportsPage({
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Accounting Tab */}
+        <TabsContent value="accounting" className="mt-6 space-y-6">
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="p-3 rounded-lg bg-green-500/10">
+                    <DollarSign className="h-6 w-6 text-green-500" />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Brüt Gelir</p>
+                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
+                    {formatPrice(accountingSummary.grossRevenue)}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="p-3 rounded-lg bg-orange-500/10">
+                    <Receipt className="h-6 w-6 text-orange-500" />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">KDV Toplamı</p>
+                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
+                    {formatPrice(accountingSummary.totalTax)}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="p-3 rounded-lg bg-blue-500/10">
+                    <BarChart3 className="h-6 w-6 text-blue-500" />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Net Gelir</p>
+                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
+                    {formatPrice(accountingSummary.netRevenue)}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="p-3 rounded-lg bg-red-500/10">
+                    <FileText className="h-6 w-6 text-red-500" />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Tahsil Edilecek</p>
+                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
+                    {formatPrice(accountingSummary.outstanding)}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    {accountingSummary.pendingCount} bekleyen, {accountingSummary.overdueCount} gecikmiş
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardHeader>
+                <CardTitle className="text-zinc-900 dark:text-white">Ödeme Yöntemi Dağılımı</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                        <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Yöntem</th>
+                        <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">Tutar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paymentMethodRows.map((row) => (
+                        <tr key={row.method} className="border-b border-zinc-100 dark:border-zinc-800/50">
+                          <td className="py-3 text-zinc-700 dark:text-zinc-300">{row.label}</td>
+                          <td className="py-3 text-right font-medium text-zinc-900 dark:text-white">
+                            {formatPrice(row.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              <CardHeader>
+                <CardTitle className="text-zinc-900 dark:text-white">Aylık KDV Dağılımı</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                        <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Ay</th>
+                        <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">Net</th>
+                        <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">KDV</th>
+                        <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">Toplam</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {accountingData.taxBreakdown.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="py-4 text-center text-zinc-500">
+                            Seçilen dönemde kayıt bulunamadı
+                          </td>
+                        </tr>
+                      ) : (
+                        accountingData.taxBreakdown.map((row) => (
+                          <tr key={row.month} className="border-b border-zinc-100 dark:border-zinc-800/50">
+                            <td className="py-3 text-zinc-700 dark:text-zinc-300">{row.label}</td>
+                            <td className="py-3 text-right text-zinc-700 dark:text-zinc-300">
+                              {formatPrice(row.subtotal)}
+                            </td>
+                            <td className="py-3 text-right text-zinc-700 dark:text-zinc-300">
+                              {formatPrice(row.tax)}
+                            </td>
+                            <td className="py-3 text-right font-medium text-zinc-900 dark:text-white">
+                              {formatPrice(row.total)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+            <CardHeader>
+              <CardTitle className="text-zinc-900 dark:text-white">Son Defter Kayıtları</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                      <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Tarih</th>
+                      <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Fatura No</th>
+                      <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Müşteri</th>
+                      <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">Net</th>
+                      <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">KDV</th>
+                      <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">Toplam</th>
+                      <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Ödeme</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accountingData.ledgerPreview.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-4 text-center text-zinc-500">
+                          Seçilen dönemde kayıt bulunamadı
+                        </td>
+                      </tr>
+                    ) : (
+                      accountingData.ledgerPreview.map((entry) => (
+                        <tr
+                          key={`${entry.invoiceNumber}-${entry.date.toISOString()}`}
+                          className="border-b border-zinc-100 dark:border-zinc-800/50"
+                        >
+                          <td className="py-3 text-zinc-700 dark:text-zinc-300">
+                            {entry.date.toLocaleDateString("tr-TR")}
+                          </td>
+                          <td className="py-3 text-zinc-700 dark:text-zinc-300">{entry.invoiceNumber}</td>
+                          <td className="py-3 text-zinc-700 dark:text-zinc-300">{entry.customerName}</td>
+                          <td className="py-3 text-right text-zinc-700 dark:text-zinc-300">
+                            {formatPrice(entry.subtotal)}
+                          </td>
+                          <td className="py-3 text-right text-zinc-700 dark:text-zinc-300">
+                            {formatPrice(entry.taxAmount)}
+                          </td>
+                          <td className="py-3 text-right font-medium text-zinc-900 dark:text-white">
+                            {formatPrice(entry.totalAmount)}
+                          </td>
+                          <td className="py-3 text-zinc-700 dark:text-zinc-300">
+                            {entry.paymentMethod
+                              ? paymentMethodLabels[entry.paymentMethod]
+                              : "-"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
       </BlurFade>

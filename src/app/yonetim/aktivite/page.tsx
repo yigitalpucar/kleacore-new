@@ -1,0 +1,62 @@
+import {
+  getActivityLogFilterOptions,
+  getActivityLogs,
+  getActivityLogStats,
+  getActivityLogUsers,
+} from "@/lib/dal/activity-logs";
+import { parsePagination } from "@/lib/utils/pagination";
+import { AktiviteContent } from "./content";
+
+export const dynamic = "force-dynamic";
+
+function readSearchParam(
+  searchParams: Record<string, string | string[] | undefined>,
+  key: string
+) {
+  const value = searchParams[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+export default async function AktivitePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const pagination = parsePagination(sp);
+
+  const [result, stats, filterOptions, activityUsers] = await Promise.all([
+    getActivityLogs({
+      ...pagination,
+      userId: readSearchParam(sp, "userId"),
+      entity: readSearchParam(sp, "entity"),
+      action: readSearchParam(sp, "action"),
+      dateFrom: readSearchParam(sp, "dateFrom"),
+      dateTo: readSearchParam(sp, "dateTo"),
+    }),
+    getActivityLogStats(),
+    getActivityLogFilterOptions(),
+    getActivityLogUsers(),
+  ]);
+
+  return (
+    <AktiviteContent
+      data={result.data}
+      total={result.total}
+      page={result.page}
+      perPage={result.perPage}
+      totalPages={result.totalPages}
+      stats={stats}
+      filterOptions={filterOptions}
+      activityUsers={activityUsers}
+      filters={{
+        userId: readSearchParam(sp, "userId") ?? "",
+        entity: readSearchParam(sp, "entity") ?? "",
+        action: readSearchParam(sp, "action") ?? "",
+        dateFrom: readSearchParam(sp, "dateFrom") ?? "",
+        dateTo: readSearchParam(sp, "dateTo") ?? "",
+        search: readSearchParam(sp, "search") ?? "",
+      }}
+    />
+  );
+}

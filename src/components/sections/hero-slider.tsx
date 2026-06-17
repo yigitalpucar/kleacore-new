@@ -19,7 +19,7 @@ const slides = [
     cta: { text: "Detayları Gör", href: "/hosting/linux" },
     image: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2034&auto=format&fit=crop",
     color: "from-zinc-400 to-zinc-200",
-    accentColor: "bg-primary",
+    accentColor: "bg-zinc-200",
     features: [
       { icon: Zap, title: "Yüksek Performans", desc: "LiteSpeed ile 10x hızlı" },
       { icon: HardDrive, title: "NVMe SSD", desc: "Ultra hızlı disk performansı" },
@@ -33,7 +33,7 @@ const slides = [
     cta: { text: "Detayları Gör", href: "/sunucu/vps" },
     image: "https://images.unsplash.com/photo-1639322537228-f710d846310a?q=80&w=2832&auto=format&fit=crop",
     color: "from-zinc-400 to-zinc-200",
-    accentColor: "bg-primary",
+    accentColor: "bg-zinc-200",
     features: [
       { icon: Server, title: "Root Erişimi", desc: "Tam sunucu kontrolü" },
       { icon: Cloud, title: "Anlık Ölçeklendirme", desc: "İhtiyaca göre kaynak artırma" },
@@ -47,7 +47,7 @@ const slides = [
     cta: { text: "Detayları Gör", href: "/ssl/standart" },
     image: "https://images.unsplash.com/photo-1563013544-824ae1b704d3?q=80&w=2070&auto=format&fit=crop",
     color: "from-zinc-400 to-zinc-200",
-    accentColor: "bg-primary",
+    accentColor: "bg-zinc-200",
     features: [
       { icon: Shield, title: "256-bit Şifreleme", desc: "Bankacılık seviyesi güvenlik" },
       { icon: Globe, title: "Tüm Tarayıcılar", desc: "Evrensel uyumluluk" },
@@ -61,7 +61,7 @@ const slides = [
     cta: { text: "Detayları Gör", href: "/sunucu/fiziksel" },
     image: "https://images.unsplash.com/photo-1597852074816-d933c7d2b988?q=80&w=2070&auto=format&fit=crop",
     color: "from-zinc-400 to-zinc-200",
-    accentColor: "bg-primary",
+    accentColor: "bg-zinc-200",
     features: [
       { icon: Server, title: "Yüksek Performans", desc: "Yeni nesil işlemciler" },
       { icon: HardDrive, title: "Güçlü Altyapı", desc: "Yedekli veri merkezi" },
@@ -180,7 +180,7 @@ export function HeroSlider() {
                           {slide.features.map((feature) => (
                             <div key={feature.title} className="flex items-center gap-3">
                               <div className={cn("p-2.5 rounded-xl", slide.accentColor)}>
-                                <feature.icon className="h-5 w-5 text-primary-foreground" />
+                                <feature.icon className="h-5 w-5 text-zinc-900" />
                               </div>
                               <div className="text-left">
                                 <p className="font-semibold text-white">{feature.title}</p>
@@ -197,7 +197,7 @@ export function HeroSlider() {
                           transition={{ duration: 0.5, delay: 0.5 }}
                           className="flex flex-wrap justify-center gap-4 pt-4"
                         >
-                          <Button size="lg" className={cn("h-12 px-8 text-base gap-2 group", slide.accentColor, "hover:opacity-90")} asChild>
+                          <Button size="lg" className={cn("h-12 px-8 text-base gap-2 group text-zinc-900", slide.accentColor, "hover:bg-zinc-300")} asChild>
                             <Link href={slide.cta.href}>
                               {slide.cta.text}
                               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -235,7 +235,7 @@ export function HeroSlider() {
       <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 z-20">
         <motion.div
           key={selectedIndex}
-          className={cn("h-full", slides[selectedIndex]?.accentColor || "bg-primary")}
+          className={cn("h-full", slides[selectedIndex]?.accentColor || "bg-zinc-200")}
           initial={{ width: "0%" }}
           animate={{ width: "100%" }}
           transition={{ duration: 6, ease: "linear" }}

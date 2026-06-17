@@ -14,7 +14,7 @@ const currencyFormatter = new Intl.NumberFormat("tr-TR", {
 
 const paymentMethodLabel: Record<string, string> = {
   CREDIT_CARD: "Kredi Karti",
-  BANK_TRANSFER: "Havale/EFT",
+  BANK_TRANSFER: "Banka Havalesi",
   BALANCE: "Bakiye",
 };
 

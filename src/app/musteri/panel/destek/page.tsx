@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { getTicketsByCustomer } from "@/lib/dal/tickets";
 import { DestekListContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function DestekPage() {
   const session = await auth();
   const tickets = await getTicketsByCustomer(session!.user.id);

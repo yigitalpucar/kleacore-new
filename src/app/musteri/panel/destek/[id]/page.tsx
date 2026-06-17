@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { getTicketWithMessages } from "@/lib/dal/tickets";
 import { DestekDetayContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 interface DestekDetayPageProps {
   params: Promise<{ id: string }>;
 }

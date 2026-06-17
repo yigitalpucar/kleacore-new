@@ -37,7 +37,9 @@ import {
 } from "@/lib/products/constants";
 import type { ProductFormData, ProductCategorySlug, BillingPeriod } from "@/types/products";
 import { updateProduct } from "@/lib/actions/admin/products";
+import { ProductConfigOptionsSection } from "@/components/admin/product-config-options-section";
 import { toast } from "@/lib/toast";
+import type { ProductConfigOption } from "@prisma/client";
 
 const categoryOptions = Object.entries(categoryConfig).map(([slug, config]) => ({
   value: slug,
@@ -104,9 +106,10 @@ interface ProductWithRelations {
 
 interface EditPackageContentProps {
   product: ProductWithRelations;
+  configOptions: ProductConfigOption[];
 }
 
-export const EditPackageContent = ({ product }: EditPackageContentProps) => {
+export const EditPackageContent = ({ product, configOptions }: EditPackageContentProps) => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("basic");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -350,7 +353,7 @@ export const EditPackageContent = ({ product }: EditPackageContentProps) => {
       {/* Form Tabs */}
       <BlurFade delay={0.1}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 grid grid-cols-5 w-full max-w-2xl">
+          <TabsList className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 grid grid-cols-3 md:grid-cols-6 w-full max-w-4xl">
             <TabsTrigger value="basic" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-800">
               Temel Bilgiler
             </TabsTrigger>
@@ -362,6 +365,9 @@ export const EditPackageContent = ({ product }: EditPackageContentProps) => {
             </TabsTrigger>
             <TabsTrigger value="limits" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-800">
               Limitler
+            </TabsTrigger>
+            <TabsTrigger value="configuration" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-800">
+              Yapılandırma
             </TabsTrigger>
             <TabsTrigger value="settings" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-800">
               Ayarlar
@@ -658,6 +664,14 @@ export const EditPackageContent = ({ product }: EditPackageContentProps) => {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Configuration Tab */}
+          <TabsContent value="configuration" className="space-y-6">
+            <ProductConfigOptionsSection
+              productId={product.id}
+              initialOptions={configOptions}
+            />
           </TabsContent>
 
           {/* Settings Tab */}

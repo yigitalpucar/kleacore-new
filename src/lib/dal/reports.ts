@@ -1,9 +1,20 @@
 import { db } from "@/lib/db";
+import {
+  getAccountingLedger,
+  getAccountingSummary,
+  getMonthlyTaxBreakdown,
+} from "@/lib/reports/accounting";
 
 export interface DateRange {
   from: Date;
   to: Date;
 }
+
+export {
+  getAccountingSummary,
+  getAccountingLedger,
+  getMonthlyTaxBreakdown,
+} from "@/lib/reports/accounting";
 
 export async function getRevenueReport(dateRange: DateRange) {
   const { from, to } = dateRange;
@@ -172,5 +183,19 @@ export async function getServiceReport(dateRange?: DateRange) {
     servicesByCategory,
     expiringServices,
     monthlyRecurring: monthlyRecurring._sum.amount ?? 0,
+  };
+}
+
+export async function getAccountingReport(dateRange: DateRange) {
+  const [summary, ledgerPreview, taxBreakdown] = await Promise.all([
+    getAccountingSummary(dateRange),
+    getAccountingLedger(dateRange, 20, "desc"),
+    getMonthlyTaxBreakdown(dateRange),
+  ]);
+
+  return {
+    summary,
+    ledgerPreview,
+    taxBreakdown,
   };
 }

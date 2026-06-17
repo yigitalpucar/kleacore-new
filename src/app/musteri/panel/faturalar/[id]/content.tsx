@@ -25,11 +25,16 @@ import {
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { handleCreditCardCheckoutRedirect } from "@/lib/payments/checkout-redirect";
 import {
   payInvoice,
   sendInvoiceCopy,
 } from "@/lib/actions/customer/invoices";
 import { toast } from "@/lib/toast";
+import {
+  CUSTOMER_PAYMENT_METHOD_OPTIONS,
+  type CustomerPaymentMethod,
+} from "@/lib/payments/methods";
 
 const statusConfig = {
   PAID: {
@@ -127,7 +132,7 @@ interface FaturaDetayContentProps {
 
 const paymentMethodLabels: Record<string, string> = {
   CREDIT_CARD: "Kredi Kartı",
-  BANK_TRANSFER: "Havale/EFT",
+  BANK_TRANSFER: "Banka Havalesi",
   BALANCE: "Bakiye",
 };
 
@@ -141,6 +146,8 @@ export function FaturaDetayContent({ invoice }: FaturaDetayContentProps) {
   const invoicePdfUrl = `/api/faturalar/${invoice.id}/pdf`;
   const [isPaying, setIsPaying] = useState(false);
   const [isSendingCopy, setIsSendingCopy] = useState(false);
+  const [paymentMethod, setPaymentMethod] =
+    useState<CustomerPaymentMethod>("CREDIT_CARD");
 
   const handlePayInvoice = async () => {
     if (isPaying) return;
@@ -148,12 +155,26 @@ export function FaturaDetayContent({ invoice }: FaturaDetayContentProps) {
 
     const result = await payInvoice({
       invoiceId: invoice.id,
-      paymentMethod: "CREDIT_CARD",
+      paymentMethod,
     });
 
     if (!result.success) {
       toast.error(result.error ?? "Ödeme tamamlanamadı");
       setIsPaying(false);
+      return;
+    }
+
+    if (
+      result.data &&
+      handleCreditCardCheckoutRedirect(
+        {
+          checkoutUrl: result.data.checkoutUrl,
+          checkoutHtml: result.data.checkoutHtml,
+          paytrToken: result.data.paytrToken,
+        },
+        router
+      )
+    ) {
       return;
     }
 
@@ -238,7 +259,11 @@ export function FaturaDetayContent({ invoice }: FaturaDetayContentProps) {
               {canPay && (
                 <Button onClick={handlePayInvoice} disabled={isPaying}>
                   <CreditCard className="mr-2 h-4 w-4" />
-                  {isPaying ? "Ödeniyor..." : "Şimdi Öde"}
+                  {isPaying
+                    ? "İşleniyor..."
+                    : paymentMethod === "BANK_TRANSFER"
+                      ? "Havale Bildir"
+                      : "Şimdi Öde"}
                 </Button>
               )}
             </div>
@@ -452,10 +477,35 @@ export function FaturaDetayContent({ invoice }: FaturaDetayContentProps) {
                 </div>
 
                 {canPay && (
-                  <Button className="w-full" size="lg" onClick={handlePayInvoice} disabled={isPaying}>
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    {isPaying ? "Ödeniyor..." : "Ödeme Yap"}
-                  </Button>
+                  <div className="space-y-3 pt-2">
+                    <p className="text-sm font-medium">Ödeme Yöntemi</p>
+                    <div className="grid gap-2">
+                      {CUSTOMER_PAYMENT_METHOD_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setPaymentMethod(option.value)}
+                          className={cn(
+                            "rounded-lg border p-3 text-left transition-colors",
+                            paymentMethod === option.value
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40"
+                          )}
+                        >
+                          <p className="text-sm font-medium">{option.label}</p>
+                          <p className="text-xs text-muted-foreground">{option.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                    <Button className="w-full" size="lg" onClick={handlePayInvoice} disabled={isPaying}>
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      {isPaying
+                        ? "İşleniyor..."
+                        : paymentMethod === "BANK_TRANSFER"
+                          ? "Havale Bildir"
+                          : "Ödeme Yap"}
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>

@@ -2,6 +2,8 @@ import { getPublishedPosts, getBlogCategories } from "@/lib/dal/blog";
 import { parsePagination } from "@/lib/utils/pagination";
 import { BlogContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function BlogPage({
   searchParams,
 }: {

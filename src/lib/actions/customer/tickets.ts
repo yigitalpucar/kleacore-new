@@ -1,6 +1,11 @@
 "use server";
 
 import { db } from "@/lib/db";
+import {
+  dispatchNotification,
+  loadSupportNotificationEmail,
+  sendTicketReplyEmail,
+} from "@/lib/notifications/email";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
 import { generateTicketNumber } from "@/lib/utils/number-generators";
 import { ticketCreateSchema } from "@/lib/validations/ticket";
@@ -133,6 +138,8 @@ export async function replyToTicket(ticketId: string, message: string) {
       ? `${user.name} ${user.surname}`.trim()
       : "Müşteri";
 
+    const trimmedMessage = message.trim();
+
     await db.$transaction([
       db.ticketMessage.create({
         data: {
@@ -140,7 +147,7 @@ export async function replyToTicket(ticketId: string, message: string) {
           senderId: session.user.id,
           senderName,
           senderRole: "CUSTOMER",
-          message: message.trim(),
+          message: trimmedMessage,
         },
       }),
       db.supportTicket.update({
@@ -148,6 +155,24 @@ export async function replyToTicket(ticketId: string, message: string) {
         data: { status: "CUSTOMER_REPLY" },
       }),
     ]);
+
+    dispatchNotification(async () => {
+      const supportEmail = await loadSupportNotificationEmail();
+      if (!supportEmail) {
+        console.info("[Notifications] Destek bildirim e-postası yapılandırılmamış");
+        return;
+      }
+
+      await sendTicketReplyEmail({
+        recipientEmail: supportEmail,
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        ticketSubject: ticket.subject,
+        senderName,
+        messagePreview: trimmedMessage,
+        recipientRole: "ADMIN",
+      });
+    });
 
     revalidatePath(`/musteri/panel/destek/${ticketId}`);
     revalidatePath("/musteri/panel/destek");

@@ -1,13 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Globe,
   ArrowLeft,
@@ -33,9 +49,15 @@ import {
   User,
   Phone,
   Info,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { updateDnsRecords } from "@/lib/actions/customer/domains";
+import {
+  addDnsRecord,
+  deleteDnsRecord,
+  updateDnsRecord,
+  updateNameservers,
+} from "@/lib/actions/customer/domains";
 import { toast } from "@/lib/toast";
 import type { DnsRecordType } from "@prisma/client";
 
@@ -125,11 +147,29 @@ interface DomainDetayContentProps {
   domain: DomainDetail;
 }
 
+const emptyDnsForm = {
+  type: "A" as DnsRecordType,
+  name: "@",
+  value: "",
+  ttl: "3600",
+  priority: "10",
+};
+
 export function DomainDetayContent({ domain }: DomainDetayContentProps) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [dnsRecords, setDnsRecords] = useState<DnsRecord[]>(domain.dnsRecords);
-  const [isSavingDns, setIsSavingDns] = useState(false);
+  const [nameservers, setNameservers] = useState<string[]>(domain.nameservers);
+
+  const [isDnsDialogOpen, setIsDnsDialogOpen] = useState(false);
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [dnsForm, setDnsForm] = useState(emptyDnsForm);
+  const [isDnsSubmitting, setIsDnsSubmitting] = useState(false);
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
+
+  const [isNsDialogOpen, setIsNsDialogOpen] = useState(false);
+  const [nsForm, setNsForm] = useState<string[]>(["", ""]);
+  const [isNsSubmitting, setIsNsSubmitting] = useState(false);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -137,155 +177,117 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleAddDnsRecord = () => {
-    const typeInput = prompt(
-      "Kayıt tipi (A, AAAA, CNAME, MX, TXT, NS, SRV):",
-      "A"
-    );
-    if (!typeInput) return;
+  const openAddDnsDialog = () => {
+    setEditingRecordId(null);
+    setDnsForm(emptyDnsForm);
+    setIsDnsDialogOpen(true);
+  };
 
-    const typeValue = typeInput.trim().toUpperCase();
-    if (!isDnsRecordType(typeValue)) {
+  const openEditDnsDialog = (record: DnsRecord) => {
+    setEditingRecordId(record.id);
+    setDnsForm({
+      type: record.type as DnsRecordType,
+      name: record.name,
+      value: record.value,
+      ttl: String(record.ttl),
+      priority: record.priority != null ? String(record.priority) : "10",
+    });
+    setIsDnsDialogOpen(true);
+  };
+
+  const handleDnsSubmit = async () => {
+    if (isDnsSubmitting) return;
+
+    if (!isDnsRecordType(dnsForm.type)) {
       toast.error("Geçersiz DNS kayıt tipi");
       return;
     }
 
-    const name = prompt("Kayıt adı (örn: @, www, mail):", "@")?.trim();
-    if (!name) {
-      toast.error("Kayıt adı zorunludur");
-      return;
-    }
-
-    const value = prompt("Kayıt değeri:", "")?.trim();
-    if (!value) {
-      toast.error("Kayıt değeri zorunludur");
-      return;
-    }
-
-    const ttlInput = prompt("TTL (saniye):", "3600")?.trim() ?? "3600";
-    const parsedTtl = Number.parseInt(ttlInput, 10);
-    const ttl = Number.isFinite(parsedTtl) && parsedTtl > 0 ? parsedTtl : 3600;
-
-    const priorityInput =
-      typeValue === "MX" || typeValue === "SRV"
-        ? prompt("Öncelik (opsiyonel):", "10")?.trim() ?? ""
-        : "";
-    const parsedPriority = Number.parseInt(priorityInput, 10);
+    const ttl = Number.parseInt(dnsForm.ttl, 10);
     const priority =
-      priorityInput && Number.isFinite(parsedPriority) ? parsedPriority : null;
+      dnsForm.type === "MX" || dnsForm.type === "SRV"
+        ? Number.parseInt(dnsForm.priority, 10)
+        : undefined;
 
-    setDnsRecords((prev) => [
-      ...prev,
-      {
-        id: `temp-${Date.now()}`,
-        type: typeValue,
-        name,
-        value,
-        ttl,
-        priority,
-      },
-    ]);
-    toast.success("DNS kaydı eklendi. Kaydetmeyi unutmayın.");
+    const payload = {
+      type: dnsForm.type,
+      name: dnsForm.name.trim(),
+      value: dnsForm.value.trim(),
+      ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : 3600,
+      priority: Number.isFinite(priority) ? priority : undefined,
+    };
+
+    setIsDnsSubmitting(true);
+
+    const result = editingRecordId
+      ? await updateDnsRecord(domain.id, editingRecordId, payload)
+      : await addDnsRecord(domain.id, payload);
+
+    if (!result.success) {
+      toast.error(result.error ?? "DNS kaydı kaydedilemedi");
+      setIsDnsSubmitting(false);
+      return;
+    }
+
+    toast.success(editingRecordId ? "DNS kaydı güncellendi" : "DNS kaydı eklendi");
+    setIsDnsDialogOpen(false);
+    setEditingRecordId(null);
+    setDnsForm(emptyDnsForm);
+    router.refresh();
+    setIsDnsSubmitting(false);
   };
 
-  const handleEditDnsRecord = (recordId: string) => {
-    const current = dnsRecords.find((item) => item.id === recordId);
-    if (!current) return;
-
-    const typeInput = prompt(
-      "Kayıt tipi (A, AAAA, CNAME, MX, TXT, NS, SRV):",
-      current.type
-    );
-    if (!typeInput) return;
-
-    const typeValue = typeInput.trim().toUpperCase();
-    if (!isDnsRecordType(typeValue)) {
-      toast.error("Geçersiz DNS kayıt tipi");
-      return;
-    }
-
-    const name = prompt("Kayıt adı:", current.name)?.trim();
-    if (!name) {
-      toast.error("Kayıt adı zorunludur");
-      return;
-    }
-
-    const value = prompt("Kayıt değeri:", current.value)?.trim();
-    if (!value) {
-      toast.error("Kayıt değeri zorunludur");
-      return;
-    }
-
-    const ttlInput = prompt("TTL (saniye):", String(current.ttl))?.trim();
-    const parsedTtl = Number.parseInt(ttlInput ?? "", 10);
-    const ttl = Number.isFinite(parsedTtl) && parsedTtl > 0 ? parsedTtl : 3600;
-
-    const priorityInput =
-      typeValue === "MX" || typeValue === "SRV"
-        ? prompt(
-            "Öncelik (opsiyonel):",
-            current.priority === null ? "" : String(current.priority)
-          )?.trim() ?? ""
-        : "";
-    const parsedPriority = Number.parseInt(priorityInput, 10);
-    const priority =
-      priorityInput && Number.isFinite(parsedPriority) ? parsedPriority : null;
-
-    setDnsRecords((prev) =>
-      prev.map((record) =>
-        record.id === recordId
-          ? { ...record, type: typeValue, name, value, ttl, priority }
-          : record
-      )
-    );
-    toast.success("DNS kaydı güncellendi. Kaydetmeyi unutmayın.");
-  };
-
-  const handleDeleteDnsRecord = (recordId: string) => {
+  const handleDeleteDnsRecord = async (recordId: string) => {
     const confirmed = window.confirm("Bu DNS kaydını silmek istediğinize emin misiniz?");
     if (!confirmed) return;
 
-    setDnsRecords((prev) => prev.filter((record) => record.id !== recordId));
-    toast.info("DNS kaydı kaldırıldı. Değişiklikleri kaydetmeyi unutmayın.");
-  };
+    setDeletingRecordId(recordId);
+    const result = await deleteDnsRecord(domain.id, recordId);
 
-  const handleSaveDnsRecords = async () => {
-    if (isSavingDns) return;
-
-    const hasInvalid = dnsRecords.some(
-      (record) =>
-        !isDnsRecordType(record.type.toUpperCase()) ||
-        !record.name.trim() ||
-        !record.value.trim()
-    );
-    if (hasInvalid) {
-      toast.error("Geçersiz DNS kayıtları var. Lütfen kontrol edin.");
-      return;
-    }
-
-    setIsSavingDns(true);
-    const payload = dnsRecords.map((record) => ({
-      type: record.type.toUpperCase() as DnsRecordType,
-      name: record.name.trim(),
-      value: record.value.trim(),
-      ttl: Number.isFinite(record.ttl) && record.ttl > 0 ? record.ttl : 3600,
-      priority:
-        record.priority !== null && Number.isFinite(record.priority)
-          ? record.priority
-          : undefined,
-    }));
-
-    const result = await updateDnsRecords(domain.id, payload);
     if (!result.success) {
-      toast.error(result.error ?? "DNS kayıtları kaydedilemedi");
-      setIsSavingDns(false);
+      toast.error(result.error ?? "DNS kaydı silinemedi");
+      setDeletingRecordId(null);
       return;
     }
 
-    toast.success("DNS kayıtları kaydedildi");
+    setDnsRecords((prev) => prev.filter((record) => record.id !== recordId));
+    toast.success("DNS kaydı silindi");
     router.refresh();
-    setIsSavingDns(false);
+    setDeletingRecordId(null);
   };
+
+  const openNsDialog = () => {
+    const current = nameservers.length >= 2 ? nameservers : ["", ""];
+    setNsForm([...current, "", ""].slice(0, 4));
+    setIsNsDialogOpen(true);
+  };
+
+  const handleNsSubmit = async () => {
+    if (isNsSubmitting) return;
+
+    setIsNsSubmitting(true);
+    const result = await updateNameservers(domain.id, nsForm);
+
+    if (!result.success) {
+      toast.error(result.error ?? "Nameserver kayıtları güncellenemedi");
+      setIsNsSubmitting(false);
+      return;
+    }
+
+    const normalized = nsForm.map((ns) => ns.trim().toLowerCase()).filter(Boolean);
+    setNameservers(normalized);
+    toast.success("Nameserver kayıtları güncellendi");
+    setIsNsDialogOpen(false);
+    router.refresh();
+    setIsNsSubmitting(false);
+  };
+
+  const showPriorityField = dnsForm.type === "MX" || dnsForm.type === "SRV";
+
+  useEffect(() => {
+    setDnsRecords(domain.dnsRecords);
+    setNameservers(domain.nameservers);
+  }, [domain.dnsRecords, domain.nameservers]);
 
   const status = statusConfig[domain.status] || statusConfig.ACTIVE;
   const StatusIcon = status.icon;
@@ -416,22 +418,10 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
                       Domain için tanımlı DNS kayıtları
                     </CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        void handleSaveDnsRecords();
-                      }}
-                      disabled={isSavingDns}
-                    >
-                      {isSavingDns ? "Kaydediliyor..." : "DNS Kaydet"}
-                    </Button>
-                    <Button size="sm" onClick={handleAddDnsRecord}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Kayıt Ekle
-                    </Button>
-                  </div>
+                  <Button size="sm" onClick={openAddDnsDialog}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Kayıt Ekle
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -466,7 +456,7 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={() => handleEditDnsRecord(record.id)}
+                          onClick={() => openEditDnsDialog(record)}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -474,9 +464,14 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-red-500 hover:text-red-600"
-                          onClick={() => handleDeleteDnsRecord(record.id)}
+                          onClick={() => void handleDeleteDnsRecord(record.id)}
+                          disabled={deletingRecordId === record.id}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {deletingRecordId === record.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -506,7 +501,7 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
                       Domain için tanımlı isim sunucuları
                     </CardDescription>
                   </div>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={openNsDialog}>
                     <Edit className="mr-2 h-4 w-4" />
                     Değiştir
                   </Button>
@@ -514,7 +509,7 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {domain.nameservers.map((ns, index) => (
+                  {nameservers.map((ns, index) => (
                     <div
                       key={index}
                       className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
@@ -536,7 +531,7 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
                     </div>
                   ))}
 
-                  {domain.nameservers.length === 0 && (
+                  {nameservers.length === 0 && (
                     <div className="text-center py-4 text-muted-foreground">
                       Nameserver tanımlı değil.
                     </div>
@@ -716,6 +711,174 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
           </BlurFade>
         </div>
       </div>
+
+      <Dialog open={isDnsDialogOpen} onOpenChange={setIsDnsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingRecordId ? "DNS Kaydını Düzenle" : "DNS Kaydı Ekle"}
+            </DialogTitle>
+            <DialogDescription>
+              DNS kayıt tipini DnsRecordType enum değerlerine göre seçin.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Kayıt Tipi</Label>
+              <Select
+                value={dnsForm.type}
+                onValueChange={(value) =>
+                  setDnsForm((prev) => ({
+                    ...prev,
+                    type: value as DnsRecordType,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {allowedDnsTypes.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dns-name">Kayıt Adı</Label>
+              <Input
+                id="dns-name"
+                placeholder="@, www, mail"
+                value={dnsForm.name}
+                onChange={(e) =>
+                  setDnsForm((prev) => ({ ...prev, name: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dns-value">Kayıt Değeri</Label>
+              <Input
+                id="dns-value"
+                placeholder="192.0.2.1 veya hedef adres"
+                value={dnsForm.value}
+                onChange={(e) =>
+                  setDnsForm((prev) => ({ ...prev, value: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="dns-ttl">TTL (saniye)</Label>
+                <Input
+                  id="dns-ttl"
+                  type="number"
+                  min={60}
+                  value={dnsForm.ttl}
+                  onChange={(e) =>
+                    setDnsForm((prev) => ({ ...prev, ttl: e.target.value }))
+                  }
+                />
+              </div>
+              {showPriorityField && (
+                <div className="space-y-2">
+                  <Label htmlFor="dns-priority">Öncelik</Label>
+                  <Input
+                    id="dns-priority"
+                    type="number"
+                    min={0}
+                    value={dnsForm.priority}
+                    onChange={(e) =>
+                      setDnsForm((prev) => ({
+                        ...prev,
+                        priority: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDnsDialogOpen(false)}
+              disabled={isDnsSubmitting}
+            >
+              İptal
+            </Button>
+            <Button
+              onClick={() => void handleDnsSubmit()}
+              disabled={
+                isDnsSubmitting ||
+                !dnsForm.name.trim() ||
+                !dnsForm.value.trim()
+              }
+            >
+              {isDnsSubmitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {isDnsSubmitting
+                ? "Kaydediliyor..."
+                : editingRecordId
+                ? "Güncelle"
+                : "Ekle"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isNsDialogOpen} onOpenChange={setIsNsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nameserver Değiştir</DialogTitle>
+            <DialogDescription>
+              En az iki nameserver girilmelidir. Değişiklikler registrar&apos;a senkronize edilir.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {nsForm.map((ns, index) => (
+              <div key={index} className="space-y-2">
+                <Label htmlFor={`ns-${index}`}>NS{index + 1}</Label>
+                <Input
+                  id={`ns-${index}`}
+                  placeholder={`ns${index + 1}.ornek.com`}
+                  value={ns}
+                  onChange={(e) =>
+                    setNsForm((prev) => {
+                      const next = [...prev];
+                      next[index] = e.target.value;
+                      return next;
+                    })
+                  }
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsNsDialogOpen(false)}
+              disabled={isNsSubmitting}
+            >
+              İptal
+            </Button>
+            <Button
+              onClick={() => void handleNsSubmit()}
+              disabled={
+                isNsSubmitting ||
+                nsForm.filter((ns) => ns.trim()).length < 2
+              }
+            >
+              {isNsSubmitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {isNsSubmitting ? "Kaydediliyor..." : "Kaydet"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -50,6 +50,15 @@ export async function getPostBySlug(slug: string) {
   });
 }
 
+export async function getPostById(id: string) {
+  return db.blogPost.findUnique({
+    where: { id },
+    include: {
+      category: true,
+    },
+  });
+}
+
 export async function getBlogCategories() {
   return db.blogCategory.findMany({
     include: {

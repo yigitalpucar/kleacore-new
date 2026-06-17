@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { auth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { AdminFooter } from "@/components/admin/admin-footer";
@@ -10,8 +10,8 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
-  const user = session?.user;
+  const session = await requireAdmin();
+  const user = session.user;
 
   return (
     <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950 flex flex-col">

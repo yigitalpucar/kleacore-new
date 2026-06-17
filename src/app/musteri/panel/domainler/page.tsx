@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { getDomainsByCustomer } from "@/lib/dal/domains";
 import { DomainlerContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function DomainlerPage() {
   const session = await auth();
   const domains = await getDomainsByCustomer(session!.user.id);

@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { getCertificatesByCustomer } from "@/lib/dal/ssl";
 import { SSLContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function SSLPage() {
   const session = await auth();
   const certificates = await getCertificatesByCustomer(session!.user.id);

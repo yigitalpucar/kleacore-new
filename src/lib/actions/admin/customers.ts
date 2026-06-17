@@ -1,12 +1,14 @@
 "use server";
 
+import { generateUniqueAffiliateCode } from "@/lib/affiliate";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { logActivity } from "@/lib/activity-log";
 import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 
 export async function createCustomer(formData: FormData) {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   try {
     const email = formData.get("email") as string;
@@ -32,25 +34,44 @@ export async function createCustomer(formData: FormData) {
 
     const hashedPassword = await hash(password, 12);
 
-    const user = await db.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-        surname: surname || "",
-        phone,
-        customerType,
-        companyName,
-        taxNumber,
-        taxOffice,
-        address,
-        city,
-        role: "CUSTOMER",
-        status: "ACTIVE",
+    const user = await db.$transaction(async (tx) => {
+      const affiliateCode = await generateUniqueAffiliateCode(tx, name);
+
+      return tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name,
+          surname: surname || "",
+          phone,
+          customerType,
+          companyName,
+          taxNumber,
+          taxOffice,
+          address,
+          city,
+          role: "CUSTOMER",
+          status: "ACTIVE",
+          affiliateCode,
+        },
+      });
+    });
+
+    await logActivity({
+      userId: session.user.id,
+      action: "CREATE_CUSTOMER",
+      entity: "User",
+      entityId: user.id,
+      details: {
+        email: user.email,
+        name: user.name,
+        surname: user.surname,
+        customerType: user.customerType,
       },
     });
 
     revalidatePath("/yonetim/musteriler");
+    revalidatePath("/yonetim/aktivite");
     return { success: true, data: { id: user.id } };
   } catch {
     return { success: false, error: "Müşteri oluşturulurken bir hata oluştu" };

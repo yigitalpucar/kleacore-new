@@ -61,8 +61,13 @@ function isDowngradeKeyword(text: string) {
 }
 
 function mapOperationStatus(status: string) {
-  if (status === "PENDING") return "pending";
+  if (status === "PENDING" || status === "PAYMENT_PENDING") return "pending";
+  if (status === "CANCELLED") return "cancelled";
   return "completed";
+}
+
+function mapPlanChangeStatus(status: string) {
+  return mapOperationStatus(status);
 }
 
 interface GetSuspendedOrdersParams extends PaginationParams {}
@@ -211,6 +216,48 @@ export async function getOrderAddons() {
 }
 
 export async function getUpgradeDowngradeOperations() {
+  const planChanges = await db.servicePlanChange.findMany({
+    include: {
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          surname: true,
+          companyName: true,
+        },
+      },
+      fromProduct: {
+        select: { name: true },
+      },
+      toProduct: {
+        select: { name: true },
+      },
+      order: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
+    },
+    orderBy: { requestedAt: "desc" },
+  });
+
+  const fromPlanChanges = planChanges.map((change) => ({
+    id: change.id,
+    customer: `${change.customer.name} ${change.customer.surname}`.trim(),
+    customerId: change.customer.id,
+    companyName: change.customer.companyName,
+    orderId: change.orderId ?? change.id,
+    type: change.type === "DOWNGRADE" ? ("downgrade" as const) : ("upgrade" as const),
+    fromProduct: change.fromProduct.name,
+    toProduct: change.toProduct.name,
+    priceDiff: Number(change.proratedAmount),
+    status: mapPlanChangeStatus(change.status),
+    date: change.requestedAt.toISOString(),
+    planChangeId: change.id,
+    canApprove: change.type === "DOWNGRADE" && change.status === "PENDING",
+  }));
+
   const activities = await db.orderActivity.findMany({
     where: {
       OR: [
@@ -278,11 +325,17 @@ export async function getUpgradeDowngradeOperations() {
       priceDiff,
       status: mapOperationStatus(activity.order.status),
       date: activity.createdAt.toISOString(),
+      planChangeId: null,
+      canApprove: false,
     };
   });
 
-  if (mapped.length > 0) {
-    return mapped;
+  const merged = [...fromPlanChanges, ...mapped].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+
+  if (merged.length > 0) {
+    return merged;
   }
 
   const noteBasedOrders = await db.order.findMany({
@@ -336,24 +389,14 @@ export async function getUpgradeDowngradeOperations() {
       priceDiff: 0,
       status: mapOperationStatus(order.status),
       date: order.updatedAt.toISOString(),
+      planChangeId: null,
+      canApprove: false,
     };
   });
 }
 
 export async function getCancellationRequests() {
-  const orders = await db.order.findMany({
-    where: {
-      OR: [
-        { cancellationReason: { not: null } },
-        {
-          activities: {
-            some: {
-              action: { startsWith: "CANCELLATION_REQUEST" },
-            },
-          },
-        },
-      ],
-    },
+  const requests = await db.cancellationRequest.findMany({
     include: {
       customer: {
         select: {
@@ -363,64 +406,49 @@ export async function getCancellationRequests() {
           companyName: true,
         },
       },
-      product: {
+      service: {
         select: {
-          name: true,
+          id: true,
+          product: { select: { name: true } },
         },
       },
-      activities: {
-        orderBy: { createdAt: "asc" },
+      order: {
+        select: {
+          id: true,
+          refundAmount: true,
+          product: { select: { name: true } },
+        },
       },
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: { createdAt: "desc" },
   });
 
-  return orders
-    .map((order) => {
-      const requestActivity = order.activities.find(
-        (activity) => activity.action === "CANCELLATION_REQUESTED"
-      );
-      const rejected = order.activities.some(
-        (activity) =>
-          activity.action === "CANCELLATION_REQUEST_REJECTED" || activity.action === "REJECTED"
-      );
-      const approved = order.activities.some(
-        (activity) => activity.action === "CANCELLATION_REQUEST_APPROVED"
-      );
+  return requests.map((request) => {
+    const statusMap: Record<string, string> = {
+      PENDING: "pending",
+      APPROVED: "approved",
+      REJECTED: "rejected",
+    };
 
-      let status = "pending";
-      if (rejected) {
-        status = "rejected";
-      } else if (approved || order.status === "CANCELLED" || order.status === "REFUNDED") {
-        status = "approved";
-      }
+    const productName =
+      request.service?.product.name ??
+      request.order?.product.name ??
+      "Bilinmeyen ürün";
 
-      const reason =
-        order.cancellationReason ??
-        requestActivity?.description ??
-        "Müşteri iptal talebi";
-
-      const requestedAt =
-        requestActivity?.createdAt ??
-        order.cancelledAt ??
-        order.updatedAt ??
-        order.createdAt;
-
-      return {
-        id: order.id,
-        customer: `${order.customer.name} ${order.customer.surname}`.trim(),
-        customerId: order.customer.id,
-        companyName: order.customer.companyName,
-        orderId: order.id,
-        product: order.product.name,
-        reason,
-        requestedAt: requestedAt.toISOString(),
-        status,
-        refundAmount: order.refundAmount ?? 0,
-      };
-    })
-    .sort(
-      (a, b) =>
-        new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()
-    );
+    return {
+      id: request.id,
+      customer: `${request.customer.name} ${request.customer.surname}`.trim(),
+      customerId: request.customer.id,
+      companyName: request.customer.companyName,
+      orderId: request.orderId ?? request.order?.id ?? "",
+      serviceId: request.serviceId,
+      product: productName,
+      reason: request.reason,
+      requestedAt: request.createdAt.toISOString(),
+      resolvedAt: request.resolvedAt?.toISOString() ?? null,
+      status: statusMap[request.status] ?? request.status.toLowerCase(),
+      adminNotes: request.adminNotes,
+      refundAmount: request.order?.refundAmount ?? 0,
+    };
+  });
 }

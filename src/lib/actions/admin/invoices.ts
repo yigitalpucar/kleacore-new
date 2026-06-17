@@ -3,6 +3,16 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { generateInvoiceNumber } from "@/lib/utils/number-generators";
+import { plainTextToHtml, sendTransactionalEmail } from "@/lib/mail";
+import {
+  dispatchNotification,
+  loadCustomerRecipient,
+  sendInvoiceCreatedEmail,
+  sendInvoiceOverdueEmail,
+  sendInvoicePaymentReminderEmail,
+} from "@/lib/notifications/email";
+import { fulfillInvoicePayment, notifyInvoicePaymentReceived } from "@/lib/payments/fulfillment";
+import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 
 interface InvoiceItemInput {
@@ -66,44 +76,135 @@ export async function createInvoice(data: InvoiceInput) {
       },
     });
 
+    dispatchNotification(async () => {
+      const recipient = await loadCustomerRecipient(data.customerId);
+      if (!recipient) {
+        return;
+      }
+
+      await sendInvoiceCreatedEmail({
+        customer: recipient,
+        invoiceId: invoice.id,
+        invoiceNumber,
+        totalAmount: data.totalAmount,
+        dueDate: new Date(data.dueDate),
+      });
+    });
+
     revalidatePath("/yonetim/faturalar");
+    revalidatePath("/musteri/panel/faturalar");
+    revalidatePath("/musteri/panel/e-posta");
     return { success: true, data: { id: invoice.id, invoiceNumber } };
   } catch {
     return { success: false, error: "Fatura oluşturulurken bir hata oluştu" };
   }
 }
 
+async function fulfillInvoiceAsAdmin(
+  id: string,
+  performedBy: string,
+  notes: string
+) {
+  const invoice = await db.invoice.findUnique({
+    where: { id },
+  });
+
+  if (!invoice) {
+    return { success: false as const, error: "Fatura bulunamadı" };
+  }
+
+  if (invoice.status === "PAID") {
+    return { success: false as const, error: "Bu fatura zaten ödenmiş" };
+  }
+
+  if (invoice.status === "CANCELLED") {
+    return { success: false as const, error: "İptal edilmiş fatura ödenemez" };
+  }
+
+  await db.$transaction(async (tx) => {
+    await fulfillInvoicePayment(tx, {
+      invoiceId: id,
+      performedBy,
+      notes,
+    });
+  });
+
+  await logActivity({
+    userId: performedBy,
+    action: "INVOICE_PAID",
+    entity: "Invoice",
+    entityId: id,
+    details: {
+      invoiceNumber: invoice.invoiceNumber,
+      totalAmount: Number(invoice.totalAmount),
+      notes,
+    },
+  });
+
+  dispatchNotification(() => notifyInvoicePaymentReceived(id));
+
+  revalidatePath("/yonetim/faturalar");
+  revalidatePath(`/yonetim/faturalar/${id}`);
+  revalidatePath("/yonetim/siparisler");
+  revalidatePath("/yonetim/hizmetler");
+  revalidatePath("/musteri/panel/faturalar");
+  revalidatePath(`/musteri/panel/faturalar/${id}`);
+  revalidatePath("/musteri/panel/hizmetlerim");
+  revalidatePath("/musteri/panel/domainler");
+  revalidatePath("/yonetim/aktivite");
+
+  return { success: true as const };
+}
+
 export async function markPaid(id: string) {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   try {
-    const invoice = await db.invoice.findUnique({ where: { id } });
+    return await fulfillInvoiceAsAdmin(id, session.user.id, "Admin ödeme onayı");
+  } catch {
+    return { success: false, error: "Fatura ödenirken bir hata oluştu" };
+  }
+}
+
+export async function approveBankTransfer(id: string) {
+  const session = await requireAdmin();
+
+  try {
+    const invoice = await db.invoice.findUnique({
+      where: { id },
+      include: {
+        payments: {
+          where: {
+            method: "BANK_TRANSFER",
+            status: "PENDING",
+          },
+        },
+      },
+    });
+
     if (!invoice) {
       return { success: false, error: "Fatura bulunamadı" };
     }
 
-    if (invoice.status === "PAID") {
-      return { success: false, error: "Bu fatura zaten ödenmiş" };
+    if (invoice.payments.length === 0) {
+      return {
+        success: false,
+        error: "Bu fatura için onay bekleyen banka transferi ödemesi bulunamadı",
+      };
     }
 
-    if (invoice.status === "CANCELLED") {
-      return { success: false, error: "İptal edilmiş fatura ödenemez" };
-    }
-
-    await db.invoice.update({
-      where: { id },
-      data: {
-        status: "PAID",
-        paidAt: new Date(),
-        paidAmount: invoice.totalAmount,
-      },
-    });
-
-    revalidatePath("/yonetim/faturalar");
-    return { success: true };
+    return await fulfillInvoiceAsAdmin(
+      id,
+      session.user.id,
+      "Banka transferi admin onayı"
+    );
   } catch {
-    return { success: false, error: "Fatura ödenirken bir hata oluştu" };
+    return { success: false, error: "Banka transferi onaylanırken bir hata oluştu" };
   }
+}
+
+export async function markInvoicePaid(id: string) {
+  return approveBankTransfer(id);
 }
 
 export async function cancelInvoice(id: string) {
@@ -161,27 +262,32 @@ export async function sendInvoiceReminder(id: string) {
       return { success: false, error: "İptal edilmiş fatura için hatırlatma gönderilemez" };
     }
 
-    const fullName = `${invoice.customer.name} ${invoice.customer.surname}`.trim();
-    const dueDateLabel = new Intl.DateTimeFormat("tr-TR").format(invoice.dueDate);
-    const amountLabel = invoiceCurrencyFormatter.format(invoice.totalAmount);
+    const isOverdue =
+      invoice.status === "OVERDUE" || invoice.dueDate.getTime() < Date.now();
 
-    await db.emailMessage.create({
-      data: {
-        customerId: invoice.customer.id,
-        subject: `Fatura Hatırlatması: ${invoice.invoiceNumber}`,
-        preview: `${invoice.invoiceNumber} numaralı faturanız için ödeme hatırlatması`,
-        content: [
-          fullName ? `Merhaba ${fullName},` : "Merhaba,",
-          "",
-          `${invoice.invoiceNumber} numaralı faturanız için ödeme hatırlatmasıdır.`,
-          `Son ödeme tarihi: ${dueDateLabel}`,
-          `Toplam tutar: ${amountLabel}`,
-          "",
-          "Ödemenizi müşteri panelinizdeki fatura detayından tamamlayabilirsiniz.",
-        ].join("\n"),
-        category: "BILLING",
-      },
-    });
+    await (isOverdue
+      ? sendInvoiceOverdueEmail({
+          customer: {
+            customerId: invoice.customer.id,
+            email: invoice.customer.email,
+            fullName: `${invoice.customer.name} ${invoice.customer.surname}`.trim(),
+          },
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          totalAmount: Number(invoice.totalAmount),
+          dueDate: invoice.dueDate,
+        })
+      : sendInvoicePaymentReminderEmail({
+          customer: {
+            customerId: invoice.customer.id,
+            email: invoice.customer.email,
+            fullName: `${invoice.customer.name} ${invoice.customer.surname}`.trim(),
+          },
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          totalAmount: Number(invoice.totalAmount),
+          dueDate: invoice.dueDate,
+        }));
 
     revalidatePath("/yonetim/faturalar");
     revalidatePath("/yonetim/faturalar/bekleyen");
@@ -210,6 +316,7 @@ export async function sendInvoiceReceipt(id: string) {
             id: true,
             name: true,
             surname: true,
+            email: true,
           },
         },
       },
@@ -230,22 +337,31 @@ export async function sendInvoiceReceipt(id: string) {
     const paidAmount = Math.max(Number(invoice.paidAmount), Number(invoice.totalAmount));
     const amountLabel = invoiceCurrencyFormatter.format(paidAmount);
 
+    const content = [
+      fullName ? `Merhaba ${fullName},` : "Merhaba,",
+      "",
+      `${invoice.invoiceNumber} numaralı faturanızın ödemesi başarıyla alınmıştır.`,
+      `Ödeme tarihi: ${paidAtLabel}`,
+      `Ödenen tutar: ${amountLabel}`,
+      "",
+      "Bu mesaj ödeme makbuzu niteliğindedir.",
+    ].join("\n");
+
     await db.emailMessage.create({
       data: {
         customerId: invoice.customer.id,
         subject: `Ödeme Makbuzu: ${invoice.invoiceNumber}`,
         preview: `${invoice.invoiceNumber} numaralı faturanıza ait ödeme makbuzu`,
-        content: [
-          fullName ? `Merhaba ${fullName},` : "Merhaba,",
-          "",
-          `${invoice.invoiceNumber} numaralı faturanızın ödemesi başarıyla alınmıştır.`,
-          `Ödeme tarihi: ${paidAtLabel}`,
-          `Ödenen tutar: ${amountLabel}`,
-          "",
-          "Bu mesaj ödeme makbuzu niteliğindedir.",
-        ].join("\n"),
+        content,
         category: "BILLING",
       },
+    });
+
+    await sendTransactionalEmail({
+      to: invoice.customer.email,
+      subject: `Ödeme Makbuzu: ${invoice.invoiceNumber}`,
+      text: content,
+      html: plainTextToHtml(content),
     });
 
     revalidatePath("/yonetim/faturalar");

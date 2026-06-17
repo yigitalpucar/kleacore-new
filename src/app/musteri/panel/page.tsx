@@ -3,6 +3,8 @@ import { getCustomerDashboardStats } from "@/lib/dal/dashboard";
 import { getServicesByCustomer } from "@/lib/dal/services";
 import { DashboardContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;

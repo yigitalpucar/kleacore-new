@@ -1,6 +1,8 @@
 import { getCategories, getPopularArticles, getRecentArticles } from "@/lib/dal/knowledge-base";
 import { BilgiBankasiContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Bilgi Bankası",
   description: "Hosting, domain, SSL ve daha fazlası hakkında detaylı rehberler ve çözümler.",

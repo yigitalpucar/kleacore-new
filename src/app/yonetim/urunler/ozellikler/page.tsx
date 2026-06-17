@@ -3,6 +3,8 @@ import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { FeaturesContent } from "./content";
 import type { ProductCategorySlug } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 interface ProductFeatureData {
   id: string;
   categoryId: ProductCategorySlug;

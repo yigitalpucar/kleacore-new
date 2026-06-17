@@ -2,6 +2,8 @@ import { getCustomers } from "@/lib/dal/customers";
 import { parsePagination } from "@/lib/utils/pagination";
 import { CorporateCustomersContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function CorporateCustomersPage({
   searchParams,
 }: {

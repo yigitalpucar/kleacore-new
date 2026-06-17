@@ -1,16 +1,21 @@
 import { auth } from "@/lib/auth";
+import { getAffiliateBalance } from "@/lib/affiliate/payouts";
 import { getReferrals, getPayments, getAffiliateStats } from "@/lib/dal/affiliate";
 import { db } from "@/lib/db";
+import { getAppBaseUrl } from "@/lib/stripe";
 import { SatisOrtakligiContent } from "./content";
+
+export const dynamic = "force-dynamic";
 
 export default async function SatisOrtakligiPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [referralsData, paymentsData, stats, user] = await Promise.all([
+  const [referralsData, paymentsData, stats, availableBalance, user] = await Promise.all([
     getReferrals(userId),
     getPayments(userId),
     getAffiliateStats(userId),
+    getAffiliateBalance(userId),
     db.user.findUnique({
       where: { id: userId },
       select: { affiliateCode: true },
@@ -18,8 +23,9 @@ export default async function SatisOrtakligiPage() {
   ]);
 
   const affiliateCode = user?.affiliateCode || "";
+  const appBaseUrl = getAppBaseUrl();
   const referralLink = affiliateCode
-    ? `https://kleacore.com/ref/${affiliateCode}`
+    ? `${appBaseUrl}/ref/${affiliateCode}`
     : "";
 
   // Serialize referrals — mask emails for privacy
@@ -57,6 +63,7 @@ export default async function SatisOrtakligiPage() {
         totalEarnings: Number(stats.totalEarnings),
         pendingPayments: Number(stats.pendingPayments),
         paidPayments: Number(stats.paidPayments),
+        availableBalance: Number(availableBalance),
       }}
     />
   );

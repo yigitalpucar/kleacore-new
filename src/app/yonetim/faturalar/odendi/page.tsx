@@ -2,6 +2,8 @@ import { getInvoices } from "@/lib/dal/invoices";
 import { parsePagination } from "@/lib/utils/pagination";
 import { PaidInvoicesContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function PaidInvoicesPage({
   searchParams,
 }: {

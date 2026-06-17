@@ -1,15 +1,9 @@
-"use client";
-
-import { useState } from "react";
 import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BlurFade } from "@/components/magicui/blur-fade";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { requestDomainTransfer } from "@/lib/actions/public/domains";
-import { toast } from "@/lib/toast";
+import { DomainTransferForm } from "@/components/domain/domain-transfer-form";
+import { isAutomatedDomainTransferAvailable } from "@/lib/actions/customer/domain-transfer";
 import {
   Accordion,
   AccordionContent,
@@ -17,9 +11,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  ArrowRight,
   Check,
-  Loader2,
   RefreshCw,
   Shield,
   Clock,
@@ -28,6 +20,8 @@ import {
   HeartHandshake,
   Lock,
 } from "lucide-react";
+
+export const dynamic = "force-dynamic";
 
 const transferSteps = [
   {
@@ -71,42 +65,8 @@ const benefits = [
   },
 ];
 
-export default function DomainTransferPage() {
-  const [domain, setDomain] = useState("");
-  const [eppCode, setEppCode] = useState("");
-  const [email, setEmail] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<null | { success: boolean; message: string }>(null);
-
-  const handleTransfer = async () => {
-    if (!domain.trim() || !eppCode.trim() || !email.trim()) return;
-
-    setIsLoading(true);
-    setResult(null);
-
-    try {
-      const formData = new FormData();
-      formData.set("domain", domain);
-      formData.set("eppCode", eppCode);
-      formData.set("email", email);
-
-      const response = await requestDomainTransfer(formData);
-      setResult({
-        success: response.success,
-        message: response.success
-          ? response.message ?? "Transfer talebiniz alındı."
-          : response.error ?? "Transfer talebi oluşturulamadı.",
-      });
-
-      if (response.success) {
-        toast.success(response.message ?? "Transfer talebiniz alındı.");
-      } else {
-        toast.error(response.error ?? "Transfer talebi oluşturulamadı.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
+export default async function DomainTransferPage() {
+  const transferStatus = await isAutomatedDomainTransferAvailable();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -128,83 +88,11 @@ export default function DomainTransferPage() {
               </div>
             </BlurFade>
 
-            {/* Transfer Form */}
             <BlurFade delay={0.2} inView>
-              <Card className="max-w-2xl mx-auto">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <RefreshCw className="h-5 w-5 text-primary" />
-                    Transfer Başlat
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">
-                      Domain Adı
-                    </label>
-                    <Input
-                      placeholder="ornek.com"
-                      value={domain}
-                      onChange={(e) => setDomain(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">
-                      EPP / Auth Kodu
-                    </label>
-                    <Input
-                      placeholder="EPP kodunuzu girin"
-                      value={eppCode}
-                      onChange={(e) => setEppCode(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      EPP kodunu mevcut sağlayıcınızdan alabilirsiniz.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">
-                      İletişim E-postası
-                    </label>
-                    <Input
-                      type="email"
-                      placeholder="ornek@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-
-                  {result && (
-                    <div
-                      className={`p-4 rounded-lg ${
-                        result.success
-                          ? "bg-green-500/10 text-green-600"
-                          : "bg-red-500/10 text-red-600"
-                      }`}
-                    >
-                      {result.message}
-                    </div>
-                  )}
-
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    onClick={handleTransfer}
-                    disabled={isLoading || !domain.trim() || !eppCode.trim() || !email.trim()}
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Kontrol Ediliyor...
-                      </>
-                    ) : (
-                      <>
-                        Transfer Başlat
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
+              <DomainTransferForm
+                isLoggedIn={transferStatus.isLoggedIn}
+                isAutomatedTransferAvailable={transferStatus.isAutomatedTransferAvailable}
+              />
             </BlurFade>
 
             {/* Benefits */}

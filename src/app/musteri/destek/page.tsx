@@ -4,6 +4,8 @@ import { Footer } from "@/components/layout/footer";
 import { getCategories, getPopularArticles } from "@/lib/dal/knowledge-base";
 import { DestekContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function DestekPage() {
   const [categories, popularArticles] = await Promise.all([
     getCategories(),

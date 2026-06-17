@@ -3,6 +3,8 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { generateInvoiceNumber } from "@/lib/utils/number-generators";
+import { provisionCompletedOrder } from "@/lib/provisioning/internal";
+import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 
 export async function approveOrder(id: string) {
@@ -68,8 +70,23 @@ export async function approveOrder(id: string) {
       }),
     ]);
 
+    await logActivity({
+      userId: session.user.id,
+      action: "ORDER_STATUS_CHANGE",
+      entity: "Order",
+      entityId: id,
+      details: {
+        orderNumber: order.orderNumber,
+        previousStatus: "PENDING",
+        newStatus: "APPROVED",
+        invoiceId: invoice.id,
+        invoiceNumber,
+      },
+    });
+
     revalidatePath("/yonetim/siparisler");
     revalidatePath("/yonetim/faturalar");
+    revalidatePath("/yonetim/aktivite");
     return {
       success: true,
       data: { orderId: updatedOrder.id, invoiceId: invoice.id },
@@ -170,25 +187,36 @@ export async function completeOrder(id: string) {
       return { success: false, error: "Sadece onaylanmış veya işlenen siparişler tamamlanabilir" };
     }
 
-    await db.$transaction([
-      db.order.update({
+    await db.$transaction(async (tx) => {
+      await tx.order.update({
         where: { id },
         data: {
           status: "COMPLETED",
           completedAt: new Date(),
         },
-      }),
-      db.orderActivity.create({
+      });
+
+      const provisioned = await provisionCompletedOrder(tx, id);
+
+      await tx.orderActivity.create({
         data: {
           orderId: id,
           action: "COMPLETED",
-          description: "Sipariş tamamlandı",
+          description:
+            provisioned.type === "domain"
+              ? "Sipariş tamamlandı ve domain kaydı aktifleştirildi"
+              : "Sipariş tamamlandı ve hizmet aktifleştirildi",
           performedBy: session.user.id,
+          metadata: provisioned,
         },
-      }),
-    ]);
+      });
+    });
 
     revalidatePath("/yonetim/siparisler");
+    revalidatePath("/yonetim/hizmetler");
+    revalidatePath("/yonetim/musteriler");
+    revalidatePath("/musteri/panel/hizmetlerim");
+    revalidatePath("/musteri/panel/domainler");
     return { success: true };
   } catch {
     return { success: false, error: "Sipariş tamamlanırken bir hata oluştu" };

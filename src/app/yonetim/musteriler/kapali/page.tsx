@@ -2,6 +2,8 @@ import { getCustomers } from "@/lib/dal/customers";
 import { parsePagination } from "@/lib/utils/pagination";
 import { ClosedCustomersContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function ClosedCustomersPage({
   searchParams,
 }: {

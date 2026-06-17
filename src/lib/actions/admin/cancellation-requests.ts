@@ -4,101 +4,148 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 
-function revalidateCancellationPaths(orderId: string) {
+function revalidateCancellationPaths(request: {
+  id: string;
+  orderId?: string | null;
+  serviceId?: string | null;
+}) {
   revalidatePath("/yonetim/siparisler");
   revalidatePath("/yonetim/siparisler/iptal");
   revalidatePath("/yonetim/siparisler/iptal-talepleri");
-  revalidatePath(`/yonetim/siparisler/${orderId}`);
+  if (request.orderId) {
+    revalidatePath(`/yonetim/siparisler/${request.orderId}`);
+  }
+  if (request.serviceId) {
+    revalidatePath(`/musteri/panel/hizmetlerim/${request.serviceId}`);
+    revalidatePath("/musteri/panel/hizmetlerim");
+  }
 }
 
-export async function approveCancellationRequest(orderId: string) {
+export async function approveCancellationRequest(requestId: string) {
   const session = await requireAdmin();
 
   try {
-    const order = await db.order.findUnique({
-      where: { id: orderId },
+    const request = await db.cancellationRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        order: true,
+        service: true,
+      },
     });
-    if (!order) {
-      return { success: false, error: "Sipariş bulunamadı" };
+
+    if (!request) {
+      return { success: false, error: "İptal talebi bulunamadı" };
     }
 
-    if (!order.cancellationReason) {
-      return { success: false, error: "Bu sipariş için aktif bir iptal talebi yok" };
+    if (request.status !== "PENDING") {
+      return { success: false, error: "Bu talep zaten işlenmiş" };
     }
 
-    if (order.status === "CANCELLED" || order.status === "REFUNDED") {
-      return { success: true };
-    }
+    const now = new Date();
 
-    await db.$transaction([
-      db.order.update({
-        where: { id: orderId },
+    await db.$transaction(async (tx) => {
+      await tx.cancellationRequest.update({
+        where: { id: requestId },
         data: {
-          status: "CANCELLED",
-          cancelledAt: new Date(),
-          cancellationReason: order.cancellationReason,
+          status: "APPROVED",
+          resolvedAt: now,
         },
-      }),
-      db.orderActivity.create({
-        data: {
-          orderId,
-          action: "CANCELLATION_REQUEST_APPROVED",
-          description: `İptal talebi onaylandı: ${order.cancellationReason}`,
-          performedBy: session.user.id,
-        },
-      }),
-    ]);
+      });
 
-    revalidateCancellationPaths(orderId);
+      if (request.serviceId) {
+        await tx.service.update({
+          where: { id: request.serviceId },
+          data: {
+            status: "CANCELLED",
+            cancelledAt: now,
+          },
+        });
+      }
+
+      if (request.order) {
+        if (request.order.status !== "CANCELLED" && request.order.status !== "REFUNDED") {
+          await tx.order.update({
+            where: { id: request.order.id },
+            data: {
+              status: "CANCELLED",
+              cancelledAt: now,
+              cancellationReason: request.reason,
+            },
+          });
+        }
+
+        await tx.orderActivity.create({
+          data: {
+            orderId: request.order.id,
+            action: "CANCELLATION_REQUEST_APPROVED",
+            description: `İptal talebi onaylandı: ${request.reason}`,
+            performedBy: session.user.id,
+          },
+        });
+      }
+    });
+
+    revalidateCancellationPaths(request);
     return { success: true };
   } catch {
     return { success: false, error: "İptal talebi onaylanırken bir hata oluştu" };
   }
 }
 
-export async function rejectCancellationRequest(orderId: string, reason?: string) {
+export async function rejectCancellationRequest(requestId: string, reason?: string) {
   const session = await requireAdmin();
 
   try {
-    const order = await db.order.findUnique({
-      where: { id: orderId },
+    const request = await db.cancellationRequest.findUnique({
+      where: { id: requestId },
+      include: { order: true },
     });
-    if (!order) {
-      return { success: false, error: "Sipariş bulunamadı" };
+
+    if (!request) {
+      return { success: false, error: "İptal talebi bulunamadı" };
     }
 
-    if (!order.cancellationReason) {
-      return { success: false, error: "Bu sipariş için aktif bir iptal talebi yok" };
-    }
-
-    if (order.status === "CANCELLED" || order.status === "REFUNDED") {
-      return { success: false, error: "İptal edilen siparişin talebi reddedilemez" };
+    if (request.status !== "PENDING") {
+      return { success: false, error: "Bu talep zaten işlenmiş" };
     }
 
     const note = reason?.trim() || "Sebep belirtilmedi";
     const adminNote = `İptal talebi reddedildi: ${note}`;
+    const now = new Date();
 
-    await db.$transaction([
-      db.order.update({
-        where: { id: orderId },
+    await db.$transaction(async (tx) => {
+      await tx.cancellationRequest.update({
+        where: { id: requestId },
         data: {
-          cancellationReason: null,
-          adminNotes: order.adminNotes
-            ? `${order.adminNotes}\n${adminNote}`
-            : adminNote,
+          status: "REJECTED",
+          resolvedAt: now,
+          adminNotes: note,
         },
-      }),
-      db.orderActivity.create({
-        data: {
-          orderId,
-          action: "CANCELLATION_REQUEST_REJECTED",
-          description: adminNote,
-          performedBy: session.user.id,
-        },
-      }),
-    ]);
+      });
 
-    revalidateCancellationPaths(orderId);
+      if (request.order) {
+        await tx.order.update({
+          where: { id: request.order.id },
+          data: {
+            cancellationReason: null,
+            adminNotes: request.order.adminNotes
+              ? `${request.order.adminNotes}\n${adminNote}`
+              : adminNote,
+          },
+        });
+
+        await tx.orderActivity.create({
+          data: {
+            orderId: request.order.id,
+            action: "CANCELLATION_REQUEST_REJECTED",
+            description: adminNote,
+            performedBy: session.user.id,
+          },
+        });
+      }
+    });
+
+    revalidateCancellationPaths(request);
     return { success: true };
   } catch {
     return { success: false, error: "İptal talebi reddedilirken bir hata oluştu" };

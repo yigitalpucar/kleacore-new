@@ -1,0 +1,1 @@
+export type PaymentContext = "cart" | "panel_invoice" | "panel_renewal";

@@ -1,14 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 import { StepDomain } from "@/components/hosting/onboarding/step-domain";
+import { StepConfiguration } from "@/components/hosting/onboarding/step-configuration";
 import { StepAddons } from "@/components/hosting/onboarding/step-addons";
 import { StepSummary } from "@/components/hosting/onboarding/step-summary";
+import type {
+  ConfigurationSelections,
+  ProductConfigOptionView,
+} from "@/lib/products/configurator-types";
 import type { Product, PricingTier, ProductCategory, ProductAddon } from "@prisma/client";
 
 type ProductWithPricing = Product & {
@@ -33,17 +38,23 @@ export interface SelectedAddon {
 interface ContentProps {
   product: ProductWithPricing;
   addons: ProductAddon[];
+  configOptions: ProductConfigOptionView[];
 }
 
-const STEPS = [
-  { label: "Domain", number: 1 },
-  { label: "Ek Hizmetler", number: 2 },
-  { label: "Sipariş Özeti", number: 3 },
-];
+export const Content = ({ product, addons, configOptions }: ContentProps) => {
+  const steps = useMemo(() => {
+    const base = [{ key: "domain", label: "Domain" }];
+    if (configOptions.length > 0) {
+      base.push({ key: "configuration", label: "Yapılandırma" });
+    }
+    base.push({ key: "addons", label: "Ek Hizmetler" });
+    base.push({ key: "summary", label: "Sipariş Özeti" });
+    return base.map((step, index) => ({ ...step, number: index + 1 }));
+  }, [configOptions.length]);
 
-export const Content = ({ product, addons }: ContentProps) => {
   const [step, setStep] = useState(1);
   const [domainChoice, setDomainChoice] = useState<DomainChoice>({ type: "later" });
+  const [configSelections, setConfigSelections] = useState<ConfigurationSelections>({});
   const [selectedAddons, setSelectedAddons] = useState<SelectedAddon[]>(() =>
     addons
       .filter((a) => a.isRequired)
@@ -55,22 +66,56 @@ export const Content = ({ product, addons }: ContentProps) => {
       }))
   );
 
+  const currentStep = steps[step - 1];
+  const configurationStep = steps.find((item) => item.key === "configuration")?.number;
+  const addonsStep = steps.find((item) => item.key === "addons")?.number;
+  const summaryStep = steps.find((item) => item.key === "summary")?.number;
+
+  const goToDomainNext = () => {
+    if (configurationStep) {
+      setStep(configurationStep);
+      return;
+    }
+    if (addonsStep) {
+      setStep(addonsStep);
+    }
+  };
+
+  const goToConfigurationBack = () => setStep(1);
+  const goToConfigurationNext = () => {
+    if (addonsStep) {
+      setStep(addonsStep);
+    }
+  };
+
+  const goToAddonsBack = () => {
+    if (configurationStep) {
+      setStep(configurationStep);
+      return;
+    }
+    setStep(1);
+  };
+
+  const goToSummaryBack = () => {
+    if (addonsStep) {
+      setStep(addonsStep);
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col">
       <Topbar />
       <Header />
       <main className="flex-1 py-12 md:py-16">
         <div className="container max-w-3xl">
-          {/* Product Title */}
           <h1 className="text-2xl font-bold text-center mb-2">{product.name}</h1>
           <p className="text-sm text-muted-foreground text-center mb-8">
             {product.shortDescription}
           </p>
 
-          {/* Step Indicator */}
           <div className="flex items-center justify-center gap-0 mb-10">
-            {STEPS.map((s, i) => (
-              <div key={s.number} className="flex items-center">
+            {steps.map((s, i) => (
+              <div key={s.key} className="flex items-center">
                 <button
                   onClick={() => s.number < step && setStep(s.number)}
                   disabled={s.number > step}
@@ -90,7 +135,7 @@ export const Content = ({ product, addons }: ContentProps) => {
                   )}
                   <span className="hidden sm:inline">{s.label}</span>
                 </button>
-                {i < STEPS.length - 1 && (
+                {i < steps.length - 1 && (
                   <div
                     className={cn(
                       "w-8 md:w-12 h-0.5 mx-1",
@@ -102,29 +147,39 @@ export const Content = ({ product, addons }: ContentProps) => {
             ))}
           </div>
 
-          {/* Active Step */}
-          {step === 1 && (
+          {currentStep?.key === "domain" && (
             <StepDomain
               domainChoice={domainChoice}
               onDomainChoice={setDomainChoice}
-              onNext={() => setStep(2)}
+              onNext={goToDomainNext}
             />
           )}
-          {step === 2 && (
+          {currentStep?.key === "configuration" && (
+            <StepConfiguration
+              configOptions={configOptions}
+              selections={configSelections}
+              onSelectionsChange={setConfigSelections}
+              onNext={goToConfigurationNext}
+              onBack={goToConfigurationBack}
+            />
+          )}
+          {currentStep?.key === "addons" && (
             <StepAddons
               addons={addons}
               selectedAddons={selectedAddons}
               onSelectedAddons={setSelectedAddons}
-              onNext={() => setStep(3)}
-              onBack={() => setStep(1)}
+              onNext={() => summaryStep && setStep(summaryStep)}
+              onBack={goToAddonsBack}
             />
           )}
-          {step === 3 && (
+          {currentStep?.key === "summary" && (
             <StepSummary
               product={product}
               domainChoice={domainChoice}
               selectedAddons={selectedAddons}
-              onBack={() => setStep(2)}
+              configOptions={configOptions}
+              configSelections={configSelections}
+              onBack={goToSummaryBack}
             />
           )}
         </div>

@@ -78,6 +78,36 @@ export async function getDomainById(id: string) {
   });
 }
 
+export async function getDomainByIdOrName(identifier: string) {
+  const byId = await getDomainById(identifier);
+  if (byId) {
+    return byId;
+  }
+
+  const normalizedName = identifier.trim().toLowerCase();
+  if (!normalizedName.includes(".")) {
+    return null;
+  }
+
+  return db.domain.findUnique({
+    where: { name: normalizedName },
+    include: {
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          surname: true,
+          email: true,
+          phone: true,
+        },
+      },
+      _count: {
+        select: { dnsRecords: true },
+      },
+    },
+  });
+}
+
 export async function getDomainWithDns(id: string) {
   return db.domain.findUnique({
     where: { id },

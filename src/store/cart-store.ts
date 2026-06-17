@@ -34,6 +34,7 @@ export interface CartItem {
       renewPrice?: number;
     };
     addons?: CartAddon[];
+    configuration?: Record<string, string | number>;
   };
 }
 
@@ -71,6 +72,8 @@ interface AddHostingBundlePayload {
     renewPrice?: number;
   };
   addons: CartAddon[];
+  configuration?: Record<string, string | number>;
+  configOptionTotal?: number;
 }
 
 interface AddProductPayload {
@@ -167,7 +170,16 @@ export const useCartStore = create<CartState>()(
         return wasAdded;
       },
 
-      addHostingBundle: ({ sku, title, price, billingPeriod, domainChoice, addons }) => {
+      addHostingBundle: ({
+        sku,
+        title,
+        price,
+        billingPeriod,
+        domainChoice,
+        addons,
+        configuration,
+        configOptionTotal = 0,
+      }) => {
         const normalizedSku = sku.trim().toUpperCase();
         if (!normalizedSku) return false;
 
@@ -191,7 +203,7 @@ export const useCartStore = create<CartState>()(
               id,
               type: "hosting",
               title,
-              unitPrice: price + addonTotal,
+              unitPrice: price + addonTotal + configOptionTotal,
               quantity: 1,
               createdAt: new Date().toISOString(),
               metadata: {
@@ -199,6 +211,7 @@ export const useCartStore = create<CartState>()(
                 billingPeriod,
                 domainChoice,
                 addons,
+                configuration,
               },
             },
           ];

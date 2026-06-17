@@ -70,12 +70,46 @@ enum ServiceStatus {
   EXPIRED
 }
 
+enum CancellationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ProvisioningJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PlanChangeType {
+  UPGRADE
+  DOWNGRADE
+}
+
+enum PlanChangeStatus {
+  PENDING
+  PAYMENT_PENDING
+  COMPLETED
+  CANCELLED
+}
+
 enum InvoiceStatus {
   DRAFT
   PENDING
   PAID
   OVERDUE
   CANCELLED
+}
+
+enum EInvoiceStatus {
+  DRAFT
+  QUEUED
+  SENT
+  ACCEPTED
+  REJECTED
+  FAILED
 }
 
 enum PaymentMethod {
@@ -271,6 +305,13 @@ model User {
   referredBy    User?    @relation("Referrals", fields: [referredById], references: [id])
   referrals     User[]   @relation("Referrals")
 
+  // Reseller
+  isReseller              Boolean @default(false)
+  resellerDiscountPercent Float   @default(0)
+  parentResellerId        String?
+  parentReseller          User?   @relation("ResellerCustomers", fields: [parentResellerId], references: [id])
+  resellerCustomers       User[]  @relation("ResellerCustomers")
+
   // Relations
   orders        Order[]
   services      Service[]
@@ -288,10 +329,13 @@ model User {
   backups       Backup[]
   emailMessages EmailMessage[]
   emailAccounts EmailAccount[]
+  cancellationRequests CancellationRequest[]
+  planChanges   ServicePlanChange[]
 
   // Affiliate relations
   affiliateReferrals  AffiliateReferral[] @relation("AffiliateReferrals")
   referredReferrals   AffiliateReferral[] @relation("ReferredReferrals")
+  affiliatePayments   AffiliatePayment[]
 
   // Timestamps
   emailVerifiedAt DateTime?
@@ -412,11 +456,36 @@ model Product {
   // Relations
   orders           Order[]
   services         Service[]
+  planChangesFrom  ServicePlanChange[] @relation("PlanChangeFrom")
+  planChangesTo    ServicePlanChange[] @relation("PlanChangeTo")
+  configOptions    ProductConfigOption[]
 
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
   @@map("products")
+}
+
+model ProductConfigOption {
+  id              String   @id @default(cuid())
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name            String
+  slug            String
+  optionType      String   @default("select") // select | quantity
+  choices         Json     @default("[]")     // [{value, label, priceMonthly, priceYearly}]
+  minValue        Int?
+  maxValue        Int?
+  unitPrice       Float    @default(0)        // for quantity type (monthly)
+  unitPriceYearly Float    @default(0)
+  isRequired      Boolean  @default(false)
+  displayOrder    Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([productId, slug])
+  @@map("product_config_options")
 }
 
 model PricingTier {
@@ -485,6 +554,9 @@ model Order {
   items            OrderItem[]
   activities       OrderActivity[]
   invoice          Invoice?
+  cancellationRequests CancellationRequest[]
+  provisioningJob  ProvisioningJob?
+  planChanges      ServicePlanChange[]
 
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
@@ -560,11 +632,76 @@ model Service {
 
   // Relations
   backups       Backup[]
+  cancellationRequests CancellationRequest[]
+  provisioningJobs ProvisioningJob[]
+  planChanges      ServicePlanChange[]
+  emailAccounts    EmailAccount[]
 
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   @@map("services")
+}
+
+model ServicePlanChange {
+  id             String           @id @default(cuid())
+  serviceId      String
+  service        Service          @relation(fields: [serviceId], references: [id])
+  customerId     String
+  customer       User             @relation(fields: [customerId], references: [id])
+  fromProductId  String
+  fromProduct    Product          @relation("PlanChangeFrom", fields: [fromProductId], references: [id])
+  toProductId    String
+  toProduct      Product          @relation("PlanChangeTo", fields: [toProductId], references: [id])
+  type           PlanChangeType
+  status         PlanChangeStatus @default(PENDING)
+  proratedAmount Float            @default(0)
+  orderId        String?
+  order          Order?           @relation(fields: [orderId], references: [id])
+  invoiceId      String?
+  notes          String?
+  requestedAt    DateTime         @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@map("service_plan_changes")
+}
+
+model CancellationRequest {
+  id         String                    @id @default(cuid())
+  customerId String
+  customer   User                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId  String?
+  service    Service?                  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  orderId    String?
+  order      Order?                    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  reason     String
+  status     CancellationRequestStatus @default(PENDING)
+  createdAt  DateTime                  @default(now())
+  resolvedAt DateTime?
+  adminNotes String?
+
+  @@map("cancellation_requests")
+}
+
+model ProvisioningJob {
+  id          String                @id @default(cuid())
+  orderId     String                @unique
+  order       Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  serviceId   String?
+  service     Service?              @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  status      ProvisioningJobStatus @default(PENDING)
+  attempts    Int                   @default(0)
+  maxAttempts Int                   @default(5)
+  lastError   String?
+  nextRetryAt DateTime
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  completedAt DateTime?
+
+  @@index([status, nextRetryAt])
+  @@map("provisioning_jobs")
 }
 
 // =====================
@@ -624,6 +761,8 @@ model EmailAccount {
   id            String           @id @default(cuid())
   customerId    String
   customer      User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId     String?
+  service       Service?         @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   domainId      String?
   domain        Domain?          @relation(fields: [domainId], references: [id], onDelete: SetNull)
   localPart     String
@@ -639,6 +778,7 @@ model EmailAccount {
   updatedAt     DateTime         @updatedAt
 
   @@index([customerId, status])
+  @@index([serviceId])
   @@map("email_accounts")
 }
 
@@ -691,11 +831,31 @@ model Invoice {
   // Relations
   items         InvoiceItem[]
   payments      Payment[]
+  eInvoiceRecord EInvoiceRecord?
 
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   @@map("invoices")
+}
+
+model EInvoiceRecord {
+  id               String         @id @default(cuid())
+  invoiceId        String         @unique
+  invoice          Invoice        @relation(fields: [invoiceId], references: [id])
+  customerId       String
+  type             String         // "e-fatura" | "e-arsiv"
+  status           EInvoiceStatus @default(DRAFT)
+  documentUuid     String?
+  documentNumber   String?
+  ublPayload       Json?
+  providerResponse Json?
+  errorMessage     String?
+  sentAt           DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@map("e_invoice_records")
 }
 
 model InvoiceItem {
@@ -725,6 +885,14 @@ model Payment {
   createdAt     DateTime      @default(now())
 
   @@map("payments")
+}
+
+model StripeWebhookEvent {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  processedAt DateTime @default(now())
+
+  @@map("stripe_webhook_events")
 }
 
 // =====================
@@ -1032,13 +1200,24 @@ model ApiKey {
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
-  key         String    @unique
+  keyPrefix   String
+  keyHash     String
   lastUsedAt  DateTime?
   expiresAt   DateTime?
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
 
+  @@index([keyPrefix])
   @@map("api_keys")
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int      @default(0)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@map("rate_limit_buckets")
 }
 
 // =====================
@@ -1061,8 +1240,12 @@ model AffiliateReferral {
 model AffiliatePayment {
   id          String                 @id @default(cuid())
   affiliateId String
+  affiliate   User                   @relation(fields: [affiliateId], references: [id])
   amount      Float
   status      AffiliatePaymentStatus @default(PENDING)
+  notes       String?
+  processedBy String?
+  referralIds Json?
   paidAt      DateTime?
   createdAt   DateTime               @default(now())
 

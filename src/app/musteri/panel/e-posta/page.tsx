@@ -3,6 +3,8 @@ import { getCustomerEmails, getCustomerEmailStats } from "@/lib/dal/emails";
 import { getNotifications } from "@/lib/dal/notifications";
 import { EPostaContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 function formatRelativeTime(date: Date) {
   const diffMs = Date.now() - date.getTime();
   const minutes = Math.floor(diffMs / (1000 * 60));

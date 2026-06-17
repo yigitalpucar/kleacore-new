@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { getServiceById } from "@/lib/dal/services";
 import { HizmetDetayContent } from "./content";
+
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -16,6 +19,19 @@ export default async function HizmetDetayPage(props: Props) {
   if (!service || service.customerId !== session!.user.id) {
     notFound();
   }
+
+  const pendingCancellation = await db.cancellationRequest.findFirst({
+    where: {
+      serviceId: params.id,
+      customerId: session!.user.id,
+      status: "PENDING",
+    },
+    select: {
+      id: true,
+      reason: true,
+      createdAt: true,
+    },
+  });
 
   // Serialize for client component
   const serialized = {
@@ -56,6 +72,13 @@ export default async function HizmetDetayPage(props: Props) {
       completedAt: b.completedAt ? b.completedAt.toISOString() : null,
       createdAt: b.createdAt.toISOString(),
     })),
+    pendingCancellation: pendingCancellation
+      ? {
+          id: pendingCancellation.id,
+          reason: pendingCancellation.reason,
+          createdAt: pendingCancellation.createdAt.toISOString(),
+        }
+      : null,
   };
 
   return <HizmetDetayContent service={serialized} />;

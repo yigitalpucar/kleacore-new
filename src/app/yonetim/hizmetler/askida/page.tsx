@@ -2,6 +2,8 @@ import { getServices, getServiceStats } from "@/lib/dal/services";
 import { parsePagination } from "@/lib/utils/pagination";
 import { ServicesContent } from "../content";
 
+export const dynamic = "force-dynamic";
+
 export default async function SuspendedServicesPage({
   searchParams,
 }: {

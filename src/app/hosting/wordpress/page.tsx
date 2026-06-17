@@ -1,6 +1,8 @@
 import { getProductsBySubType } from "@/lib/dal/products";
 import { Content } from "./content";
 
+export const dynamic = "force-dynamic";
+
 const Page = async () => {
   const products = await getProductsBySubType("hosting", "wordpress");
   return <Content products={products} />;

@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { getServerServicesByCustomer } from "@/lib/dal/servers";
 import { SunucularContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function SunucularPage() {
   const session = await auth();
   const services = await getServerServicesByCustomer(session!.user.id);

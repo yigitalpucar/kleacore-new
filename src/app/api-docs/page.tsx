@@ -4,33 +4,67 @@ import { Footer } from "@/components/layout/footer";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { KeyRound, Globe, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { KeyRound, Globe, ShieldCheck, Download, Code2 } from "lucide-react";
 
 const endpointGroups = [
   {
-    title: "Kimlik Dogrulama",
+    title: "Faturalar",
     endpoints: [
-      { method: "POST", path: "/auth/token", description: "API token olusturur." },
-      { method: "POST", path: "/auth/refresh", description: "Token yeniler." },
+      { method: "GET", path: "/api/v1/invoices", description: "Fatura listesini getirir." },
+      { method: "GET", path: "/api/v1/invoices/{id}", description: "Fatura detayini getirir." },
     ],
   },
   {
-    title: "Faturalar",
+    title: "Hizmetler",
     endpoints: [
-      { method: "GET", path: "/invoices", description: "Fatura listesini getirir." },
-      { method: "GET", path: "/invoices/{id}", description: "Fatura detayini getirir." },
-      { method: "POST", path: "/invoices/{id}/pay", description: "Fatura odeme islemini baslatir." },
+      { method: "GET", path: "/api/v1/services", description: "Musteri hizmetlerini listeler." },
+      { method: "GET", path: "/api/v1/services/{id}", description: "Hizmet detayini getirir." },
+    ],
+  },
+  {
+    title: "Siparisler",
+    endpoints: [
+      { method: "GET", path: "/api/v1/orders", description: "Musteri siparislerini listeler." },
+      { method: "GET", path: "/api/v1/orders/{id}", description: "Siparis detayini getirir." },
+    ],
+  },
+  {
+    title: "Domainler",
+    endpoints: [
+      { method: "GET", path: "/api/v1/domains", description: "Musteri domainlerini listeler." },
+      {
+        method: "GET",
+        path: "/api/v1/domains/{id}",
+        description: "Domain detayini getirir (ID veya domain adi).",
+      },
     ],
   },
   {
     title: "Destek Talepleri",
     endpoints: [
-      { method: "GET", path: "/tickets", description: "Destek taleplerini listeler." },
-      { method: "POST", path: "/tickets", description: "Yeni destek talebi olusturur." },
-      { method: "POST", path: "/tickets/{id}/reply", description: "Destek talebine yanit ekler." },
+      { method: "GET", path: "/api/v1/tickets", description: "Destek taleplerini listeler." },
+      { method: "POST", path: "/api/v1/tickets", description: "Yeni destek talebi olusturur." },
     ],
   },
 ];
+
+const sdkExample = `import { KleacoreClient } from "@/lib/sdk/kleacore-client";
+
+const client = new KleacoreClient(
+  process.env.KLEACORE_API_KEY!,
+  "https://kleacore.com/api/v1"
+);
+
+const { services } = await client.listServices({ status: "ACTIVE", page: 1 });
+const { orders } = await client.listOrders({ perPage: 20 });
+const { domains } = await client.listDomains();
+const invoice = await client.getInvoice("clx123...");
+const ticket = await client.createTicket({
+  subject: "Entegrasyon sorusu",
+  message: "API limitleri hakkinda bilgi alabilir miyim?",
+  department: "TECHNICAL",
+});`;
 
 function methodBadgeClass(method: string) {
   switch (method) {
@@ -65,7 +99,7 @@ export default function ApiDocsPage() {
                   KLEACORE API v1
                 </h1>
                 <p className="mt-4 text-muted-foreground">
-                  API ana adresi: <span className="font-mono">https://api.kleacore.com/v1</span>
+                  API ana adresi: <span className="font-mono">https://kleacore.com/api/v1</span>
                 </p>
               </div>
             </BlurFade>
@@ -81,11 +115,49 @@ export default function ApiDocsPage() {
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm text-muted-foreground">
                     <p>
-                      Tum isteklerde <span className="font-mono">Authorization: Bearer {"{TOKEN}"}</span> basligi gonderilmelidir.
+                      Tum isteklerde API anahtari gonderilmelidir:{" "}
+                      <span className="font-mono">Authorization: Bearer kc_live_...</span> veya{" "}
+                      <span className="font-mono">x-api-key: kc_live_...</span>
                     </p>
                     <p>
-                      Rate limit: <span className="font-medium text-foreground">1000 istek/dakika</span>
+                      API anahtarlarini musteri panelinden olusturabilirsiniz:{" "}
+                      <span className="font-mono">/musteri/panel/ayarlar</span>
                     </p>
+                    <p>
+                      Rate limit (yeni endpointler):{" "}
+                      <span className="font-medium text-foreground">30 istek / 10 dakika</span>{" "}
+                      (API anahtari basina)
+                    </p>
+                    <p>
+                      OpenAPI spesifikasyonu:{" "}
+                      <Link
+                        href="/api/v1/openapi"
+                        className="font-mono text-primary hover:underline inline-flex items-center gap-1"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        /api/v1/openapi
+                      </Link>
+                    </p>
+                  </CardContent>
+                </Card>
+              </BlurFade>
+
+              <BlurFade delay={0.18} inView>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Code2 className="h-5 w-5 text-primary" />
+                      TypeScript SDK
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Projede hazir gelen istemci:{" "}
+                      <span className="font-mono">src/lib/sdk/kleacore-client.ts</span>
+                    </p>
+                    <pre className="overflow-x-auto rounded-lg border bg-muted/40 p-4 text-xs leading-relaxed">
+                      <code>{sdkExample}</code>
+                    </pre>
                   </CardContent>
                 </Card>
               </BlurFade>

@@ -8,9 +8,30 @@ import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://kleacore.com"
+  ),
   title: "KLEACORE - Domain, Hosting & Server Solutions",
   description:
     "Reliable hosting provider. Domain registration, web hosting, VDS and dedicated server services by KLEAWORK DIGITAL LLC.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "tr_TR",
+    siteName: "KLEACORE",
+    title: "KLEACORE - Domain, Hosting & Server Solutions",
+    description:
+      "Domain registration, web hosting, VDS and dedicated server services by KLEAWORK DIGITAL LLC.",
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "KLEACORE - Domain, Hosting & Server Solutions",
+    description:
+      "Domain registration, web hosting, VDS and dedicated server services by KLEAWORK DIGITAL LLC.",
+  },
   keywords: [
     "hosting",
     "domain",

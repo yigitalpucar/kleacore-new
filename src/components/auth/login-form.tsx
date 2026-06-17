@@ -15,10 +15,14 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { toast } from "@/lib/toast";
 import { loginAction } from "@/lib/actions/auth";
+import { getSafeRedirectPath } from "@/lib/utils/safe-redirect";
 
 export function LoginForm({ onSwitch }: { onSwitch: () => void }) {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/musteri/panel";
+  const callbackUrl = getSafeRedirectPath(
+    searchParams.get("callbackUrl"),
+    "/musteri/panel"
+  );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });

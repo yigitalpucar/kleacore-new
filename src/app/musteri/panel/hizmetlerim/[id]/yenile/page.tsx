@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getServiceById } from "@/lib/dal/services";
-import { db } from "@/lib/db";
 import { ServiceRenewalContent } from "./content";
+
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -13,13 +14,7 @@ export default async function ServiceRenewalPage(props: Props) {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [service, user] = await Promise.all([
-    getServiceById(params.id),
-    db.user.findUnique({
-      where: { id: userId },
-      select: { balance: true },
-    }),
-  ]);
+  const service = await getServiceById(params.id);
 
   if (!service || service.customerId !== userId) {
     notFound();
@@ -42,5 +37,5 @@ export default async function ServiceRenewalPage(props: Props) {
     },
   };
 
-  return <ServiceRenewalContent service={serialized} userBalance={Number(user?.balance ?? 0)} />;
+  return <ServiceRenewalContent service={serialized} />;
 }

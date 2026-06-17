@@ -3,6 +3,8 @@ import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { parsePagination } from "@/lib/utils/pagination";
 import { SuspendedOrdersContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function SuspendedOrdersPage({
   searchParams,
 }: {

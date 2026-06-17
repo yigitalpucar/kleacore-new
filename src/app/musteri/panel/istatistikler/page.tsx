@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { getServicesByCustomer } from "@/lib/dal/services";
 import { IstatistiklerContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function IstatistiklerPage() {
   const session = await auth();
   const services = await getServicesByCustomer(session!.user.id);

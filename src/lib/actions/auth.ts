@@ -1,6 +1,11 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { signIn, signOut } from "@/lib/auth";
+import {
+  AFFILIATE_REF_COOKIE,
+  createCustomerUser,
+} from "@/lib/affiliate";
 import { db } from "@/lib/db";
 import {
   loginSchema,
@@ -8,6 +13,8 @@ import {
   passwordResetSchema,
   registerSchema,
 } from "@/lib/validations/auth";
+import { sendTransactionalEmail } from "@/lib/mail";
+import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
 import { hash } from "bcryptjs";
 import { AuthError } from "next-auth";
 import { createHash, randomBytes } from "node:crypto";
@@ -29,27 +36,16 @@ function buildPasswordResetUrl(token: string) {
 }
 
 async function sendPasswordResetEmail(email: string, resetUrl: string) {
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const emailFrom = process.env.EMAIL_FROM || "noreply@kleacore.com";
-
-  if (!resendApiKey) {
-    console.info(
-      `[PasswordReset][DEV_FALLBACK] ${email} icin sifre sifirlama linki: ${resetUrl}`
-    );
-    return;
-  }
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: emailFrom,
-      to: [email],
-      subject: "KLEACORE - Şifre Sıfırlama Talebi",
-      html: `
+  await sendTransactionalEmail({
+    to: email,
+    subject: "KLEACORE - Şifre Sıfırlama Talebi",
+    text: [
+      "Şifre sıfırlama talebi aldık.",
+      `Bağlantı: ${resetUrl}`,
+      `Bu bağlantı ${PASSWORD_RESET_TTL_MINUTES} dakika boyunca geçerlidir.`,
+      "Eğer bu işlemi siz başlatmadıysanız bu e-postayı yok sayabilirsiniz.",
+    ].join("\n"),
+    html: `
         <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
           <h2>Şifre Sıfırlama Talebi</h2>
           <p>Hesabınız için şifre sıfırlama isteği aldık.</p>
@@ -62,13 +58,7 @@ async function sendPasswordResetEmail(email: string, resetUrl: string) {
           <p>Eğer bu işlemi siz başlatmadıysanız bu e-postayı yok sayabilirsiniz.</p>
         </div>
       `,
-    }),
   });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Resend error: ${response.status} ${body}`);
-  }
 }
 
 export async function loginAction(formData: FormData) {
@@ -83,6 +73,15 @@ export async function loginAction(formData: FormData) {
       success: false,
       error: parsed.error.errors[0]?.message ?? "Geçersiz giriş bilgileri",
     };
+  }
+
+  const loginLimit = await checkRateLimit({
+    key: `login:${normalizeRateLimitKey(parsed.data.email)}`,
+    limit: 8,
+    windowMs: 15 * 60 * 1000,
+  });
+  if (!loginLimit.allowed) {
+    return { success: false, error: "Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin." };
   }
 
   try {
@@ -124,6 +123,15 @@ export async function registerAction(formData: FormData) {
     };
   }
 
+  const registerLimit = await checkRateLimit({
+    key: `register:${normalizeRateLimitKey(parsed.data.email)}`,
+    limit: 4,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!registerLimit.allowed) {
+    return { success: false, error: "Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar deneyin." };
+  }
+
   try {
     const existing = await db.user.findUnique({
       where: { email: parsed.data.email },
@@ -134,18 +142,24 @@ export async function registerAction(formData: FormData) {
     }
 
     const hashedPassword = await hash(parsed.data.password, 12);
+    const cookieStore = await cookies();
+    const refCode = cookieStore.get(AFFILIATE_REF_COOKIE)?.value;
 
-    await db.user.create({
-      data: {
-        name: parsed.data.name,
-        surname: parsed.data.surname,
-        email: parsed.data.email,
-        phone: parsed.data.phone ?? null,
-        password: hashedPassword,
-        role: "CUSTOMER",
-        status: "ACTIVE",
-      },
+    await db.$transaction(async (tx) => {
+      await createCustomerUser(
+        tx,
+        {
+          name: parsed.data.name,
+          surname: parsed.data.surname,
+          email: parsed.data.email,
+          phone: parsed.data.phone ?? null,
+          password: hashedPassword,
+        },
+        refCode
+      );
     });
+
+    cookieStore.delete(AFFILIATE_REF_COOKIE);
 
     return { success: true };
   } catch {
@@ -170,6 +184,15 @@ export async function requestPasswordReset(formData: FormData) {
   const parsed = passwordResetRequestSchema.safeParse(raw);
   if (!parsed.success) {
     return { success: false, error: "Gecerli bir e-posta adresi girin" };
+  }
+
+  const resetLimit = await checkRateLimit({
+    key: `password-reset:${normalizeRateLimitKey(parsed.data.email)}`,
+    limit: 3,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!resetLimit.allowed) {
+    return { success: true };
   }
 
   try {

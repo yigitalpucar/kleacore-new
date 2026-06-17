@@ -2,6 +2,18 @@
 
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
+import {
+  createRemoteService,
+  suspendRemoteService,
+  terminateRemoteService,
+  unsuspendRemoteService,
+} from "@/lib/integrations/provisioning-provider";
+import {
+  dispatchNotification,
+  loadCustomerRecipient,
+  sendServiceSuspendedEmail,
+} from "@/lib/notifications/email";
+import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod } from "@prisma/client";
 
@@ -34,6 +46,7 @@ export async function createService(data: ServiceInput) {
 
     const product = await db.product.findUnique({
       where: { id: data.productId },
+      include: { category: true },
     });
     if (!product) {
       return { success: false, error: "Ürün bulunamadı" };
@@ -58,18 +71,41 @@ export async function createService(data: ServiceInput) {
       },
     });
 
+    const integration = await createRemoteService({
+      ...service,
+      product,
+      customer,
+    });
+
+    if (integration.ok && integration.reference) {
+      await db.service.update({
+        where: { id: service.id },
+        data: { serverName: integration.reference },
+      });
+    }
+
     revalidatePath("/yonetim/hizmetler");
-    return { success: true, data: { id: service.id } };
+    return { success: true, data: { id: service.id, integration } };
   } catch {
     return { success: false, error: "Hizmet oluşturulurken bir hata oluştu" };
   }
 }
 
 export async function suspendService(id: string, reason: string) {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   try {
-    const service = await db.service.findUnique({ where: { id } });
+    const service = await db.service.findUnique({
+      where: { id },
+      include: {
+        product: {
+          include: { category: true },
+        },
+        customer: {
+          select: { id: true, name: true, surname: true, email: true },
+        },
+      },
+    });
     if (!service) {
       return { success: false, error: "Hizmet bulunamadı" };
     }
@@ -78,17 +114,53 @@ export async function suspendService(id: string, reason: string) {
       return { success: false, error: "Sadece aktif hizmetler askıya alınabilir" };
     }
 
-    await db.service.update({
+    const suspendedAt = new Date();
+    const updatedService = await db.service.update({
       where: { id },
       data: {
         status: "SUSPENDED",
-        suspendedAt: new Date(),
+        suspendedAt,
         suspendReason: reason,
+      },
+    });
+    const integration = await suspendRemoteService(
+      { ...updatedService, product: service.product, customer: service.customer },
+      reason
+    );
+
+    dispatchNotification(async () => {
+      const customer = await loadCustomerRecipient(service.customerId);
+      if (!customer) {
+        return;
+      }
+
+      await sendServiceSuspendedEmail({
+        customer,
+        serviceId: service.id,
+        serviceLabel: service.label || service.domain || service.product.name,
+        reason,
+        suspendedAt,
+      });
+    });
+
+    await logActivity({
+      userId: session.user.id,
+      action: "SUSPEND_SERVICE",
+      entity: "Service",
+      entityId: id,
+      details: {
+        serviceLabel: service.label || service.domain || service.product.name,
+        customerId: service.customerId,
+        reason,
+        suspendedAt: suspendedAt.toISOString(),
       },
     });
 
     revalidatePath("/yonetim/hizmetler");
-    return { success: true };
+    revalidatePath("/yonetim/aktivite");
+    revalidatePath("/musteri/panel/hizmetlerim");
+    revalidatePath("/musteri/panel/e-posta");
+    return { success: true, integration };
   } catch {
     return { success: false, error: "Hizmet askıya alınırken bir hata oluştu" };
   }
@@ -98,7 +170,15 @@ export async function activateService(id: string) {
   await requireAdmin();
 
   try {
-    const service = await db.service.findUnique({ where: { id } });
+    const service = await db.service.findUnique({
+      where: { id },
+      include: {
+        product: { include: { category: true } },
+        customer: {
+          select: { id: true, name: true, surname: true, email: true },
+        },
+      },
+    });
     if (!service) {
       return { success: false, error: "Hizmet bulunamadı" };
     }
@@ -107,7 +187,7 @@ export async function activateService(id: string) {
       return { success: false, error: "Sadece askıdaki hizmetler aktifleştirilebilir" };
     }
 
-    await db.service.update({
+    const updatedService = await db.service.update({
       where: { id },
       data: {
         status: "ACTIVE",
@@ -115,9 +195,14 @@ export async function activateService(id: string) {
         suspendReason: null,
       },
     });
+    const integration = await unsuspendRemoteService({
+      ...updatedService,
+      product: service.product,
+      customer: service.customer,
+    });
 
     revalidatePath("/yonetim/hizmetler");
-    return { success: true };
+    return { success: true, integration };
   } catch {
     return { success: false, error: "Hizmet aktifleştirilirken bir hata oluştu" };
   }
@@ -127,7 +212,15 @@ export async function cancelService(id: string) {
   await requireAdmin();
 
   try {
-    const service = await db.service.findUnique({ where: { id } });
+    const service = await db.service.findUnique({
+      where: { id },
+      include: {
+        product: { include: { category: true } },
+        customer: {
+          select: { id: true, name: true, surname: true, email: true },
+        },
+      },
+    });
     if (!service) {
       return { success: false, error: "Hizmet bulunamadı" };
     }
@@ -136,16 +229,21 @@ export async function cancelService(id: string) {
       return { success: false, error: "Bu hizmet zaten iptal edilmiş" };
     }
 
-    await db.service.update({
+    const updatedService = await db.service.update({
       where: { id },
       data: {
         status: "CANCELLED",
         cancelledAt: new Date(),
       },
     });
+    const integration = await terminateRemoteService({
+      ...updatedService,
+      product: service.product,
+      customer: service.customer,
+    });
 
     revalidatePath("/yonetim/hizmetler");
-    return { success: true };
+    return { success: true, integration };
   } catch {
     return { success: false, error: "Hizmet iptal edilirken bir hata oluştu" };
   }

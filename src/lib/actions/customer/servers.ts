@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
+import { runRemoteServerAction } from "@/lib/integrations/provisioning-provider";
 import { revalidatePath } from "next/cache";
 
 async function findOwnedService(serviceId: string, userId: string) {
@@ -9,7 +10,14 @@ async function findOwnedService(serviceId: string, userId: string) {
     where: {
       id: serviceId,
       customerId: userId,
-      product: { category: { slug: { in: ["vds", "vps", "server"] } } },
+      product: { category: { slug: { in: ["vds", "vps", "cloud", "server"] } } },
+    },
+    include: {
+      product: {
+        include: {
+          category: true,
+        },
+      },
     },
   });
 }
@@ -27,14 +35,15 @@ export async function restartServer(serviceId: string) {
     return { success: false, error: "Sadece aktif sunucular yeniden baslatilabilir" };
   }
 
-  // Gercek sunucu islemi yerine status guncelleme (simdilik)
+  const integration = await runRemoteServerAction(service, "restart");
+
   await db.service.update({
     where: { id: serviceId },
     data: { status: "ACTIVE" },
   });
 
   revalidatePath("/musteri/panel/sunucular");
-  return { success: true };
+  return { success: true, integration };
 }
 
 export async function stopServer(serviceId: string) {
@@ -50,13 +59,15 @@ export async function stopServer(serviceId: string) {
     return { success: false, error: "Sunucu zaten aktif degil" };
   }
 
+  const integration = await runRemoteServerAction(service, "stop");
+
   await db.service.update({
     where: { id: serviceId },
     data: { status: "SUSPENDED", suspendedAt: new Date() },
   });
 
   revalidatePath("/musteri/panel/sunucular");
-  return { success: true };
+  return { success: true, integration };
 }
 
 export async function startServer(serviceId: string) {
@@ -76,11 +87,13 @@ export async function startServer(serviceId: string) {
     return { success: false, error: "Iptal edilmis sunucu baslatilamaz" };
   }
 
+  const integration = await runRemoteServerAction(service, "start");
+
   await db.service.update({
     where: { id: serviceId },
     data: { status: "ACTIVE", suspendedAt: null },
   });
 
   revalidatePath("/musteri/panel/sunucular");
-  return { success: true };
+  return { success: true, integration };
 }

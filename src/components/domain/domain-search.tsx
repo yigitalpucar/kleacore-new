@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Search, Check, X, Loader2, ShoppingCart } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,18 +18,17 @@ interface DomainResult {
   renewPrice: number;
 }
 
-const tlds = [
-  { ext: ".com", price: 149, renewPrice: 199 },
-  { ext: ".net", price: 179, renewPrice: 229 },
-  { ext: ".org", price: 189, renewPrice: 239 },
-  { ext: ".com.tr", price: 99, renewPrice: 149 },
-  { ext: ".io", price: 499, renewPrice: 599 },
-  { ext: ".co", price: 299, renewPrice: 399 },
-  { ext: ".dev", price: 199, renewPrice: 249 },
-  { ext: ".app", price: 199, renewPrice: 249 },
-];
+export interface DomainTldPrice {
+  ext: string;
+  price: number;
+  renewPrice: number;
+}
 
-export function DomainSearch() {
+interface DomainSearchProps {
+  tlds: DomainTldPrice[];
+}
+
+export function DomainSearch({ tlds }: DomainSearchProps) {
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<DomainResult[]>([]);
@@ -138,8 +138,8 @@ export function DomainSearch() {
                   : "border-border opacity-60"
               )}
             >
-              <CardContent className="flex items-center justify-between p-4">
-                <div className="flex items-center gap-4">
+              <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-4">
                   <div
                     className={cn(
                       "flex h-10 w-10 items-center justify-center rounded-full",
@@ -154,8 +154,8 @@ export function DomainSearch() {
                       <X className="h-5 w-5" />
                     )}
                   </div>
-                  <div>
-                    <p className="font-semibold text-lg">{result.domain}</p>
+                  <div className="min-w-0">
+                    <p className="break-words text-lg font-semibold">{result.domain}</p>
                     <p className="text-sm text-muted-foreground">
                       {result.available
                         ? "Bu domain müsait!"
@@ -163,7 +163,7 @@ export function DomainSearch() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-end">
                   {result.available && (
                     <>
                       <div className="text-right">
@@ -172,15 +172,19 @@ export function DomainSearch() {
                           Yenileme: ₺{result.renewPrice}/yıl
                         </p>
                       </div>
-                      <Button onClick={() => handleAddToCart(result)}>
+                      <Button className="shrink-0" onClick={() => handleAddToCart(result)}>
                         <ShoppingCart className="mr-2 h-4 w-4" />
                         Sepete Ekle
                       </Button>
                     </>
                   )}
                   {!result.available && (
-                    <Button variant="outline" size="sm">
-                      Whois Sorgula
+                    <Button variant="outline" size="sm" asChild>
+                      <Link
+                        href={`/domain/whois?domain=${encodeURIComponent(result.domain)}`}
+                      >
+                        Whois Sorgula
+                      </Link>
                     </Button>
                   )}
                 </div>

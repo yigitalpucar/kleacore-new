@@ -3,6 +3,8 @@ import { parsePagination } from "@/lib/utils/pagination";
 import { DestekContent } from "./content";
 import type { TicketStatus, TicketPriority, TicketDepartment } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 const validStatuses: TicketStatus[] = ["OPEN", "CUSTOMER_REPLY", "ADMIN_REPLY", "WAITING", "CLOSED"];
 const validPriorities: TicketPriority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const validDepartments: TicketDepartment[] = ["GENERAL", "TECHNICAL", "BILLING", "SALES"];

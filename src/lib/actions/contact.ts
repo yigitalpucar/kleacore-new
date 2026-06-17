@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { contactSchema } from "@/lib/validations/contact";
+import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
 import { z } from "zod";
 
 export async function submitContactForm(formData: FormData) {
@@ -18,6 +19,18 @@ export async function submitContactForm(formData: FormData) {
     return {
       success: false,
       error: parsed.error.errors[0]?.message ?? "Gecersiz bilgiler",
+    };
+  }
+
+  const limit = await checkRateLimit({
+    key: `contact:${normalizeRateLimitKey(parsed.data.email)}`,
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    return {
+      success: false,
+      error: "Çok fazla mesaj gönderildi. Lütfen daha sonra tekrar deneyin.",
     };
   }
 
@@ -58,6 +71,17 @@ export async function subscribeNewsletter(email: string, source: "blog" | "syste
   }
 
   const normalizedEmail = parsed.data.email.trim().toLowerCase();
+  const limit = await checkRateLimit({
+    key: `newsletter:${normalizeRateLimitKey(normalizedEmail)}:${parsed.data.source}`,
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    return {
+      success: false,
+      error: "Çok fazla abonelik denemesi yapıldı. Lütfen daha sonra tekrar deneyin.",
+    };
+  }
   const sourceLabel = newsletterSourceLabels[parsed.data.source];
 
   try {

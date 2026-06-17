@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getCustomerReport, getRevenueReport, getServiceReport } from "@/lib/dal/reports";
+import {
+  getAccountingLedger,
+  getAccountingReport,
+  getCustomerReport,
+  getRevenueReport,
+  getServiceReport,
+} from "@/lib/dal/reports";
+import type { PaymentMethod } from "@prisma/client";
 import { forbidden, unauthorized } from "@/lib/utils/api-response";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +18,14 @@ const reportPeriods = ["7days", "30days", "3months", "6months", "1year"] as cons
 type ReportPeriod = (typeof reportPeriods)[number];
 const reportFormats = ["csv", "pdf"] as const;
 type ReportFormat = (typeof reportFormats)[number];
+const reportTypes = ["full", "accounting"] as const;
+type ReportType = (typeof reportTypes)[number];
+
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  CREDIT_CARD: "Kredi Karti",
+  BANK_TRANSFER: "Banka Havalesi",
+  BALANCE: "Bakiye",
+};
 
 const monthNames = ["Oca", "Sub", "Mar", "Nis", "May", "Haz", "Tem", "Agu", "Eyl", "Eki", "Kas", "Ara"];
 
@@ -34,6 +49,67 @@ function parseReportFormat(value: string | null): ReportFormat {
     return value as ReportFormat;
   }
   return "csv";
+}
+
+function parseReportType(value: string | null): ReportType {
+  if (value === "accounting") {
+    return "accounting";
+  }
+  return "full";
+}
+
+function buildAccountingRows(
+  accountingData: Awaited<ReturnType<typeof getAccountingReport>>,
+  ledger: Awaited<ReturnType<typeof getAccountingLedger>>
+) {
+  const { summary, taxBreakdown } = accountingData;
+
+  return [
+    ["Muhasebe Ozeti"],
+    ["Brut Gelir (TRY)", summary.grossRevenue.toFixed(2)],
+    ["KDV Toplami (TRY)", summary.totalTax.toFixed(2)],
+    ["Net Gelir (TRY)", summary.netRevenue.toFixed(2)],
+    ["Tahsil Edilecek (TRY)", summary.outstanding.toFixed(2)],
+    ["Bekleyen Fatura", summary.pendingCount],
+    ["Gecikmis Fatura", summary.overdueCount],
+    ["Iptal/Iade Adedi", summary.refunds.count],
+    ["Iptal/Iade Tutari (TRY)", summary.refunds.sum.toFixed(2)],
+    [],
+    ["Odeme Yontemi Dagilimi"],
+    ["Yontem", "Tutar (TRY)"],
+    ...(
+      Object.entries(summary.collectedByMethod) as Array<[PaymentMethod, number]>
+    ).map(([method, amount]) => [paymentMethodLabels[method], amount.toFixed(2)]),
+    [],
+    ["Aylik KDV Dagilimi"],
+    ["Ay", "Net (TRY)", "KDV (TRY)", "Toplam (TRY)"],
+    ...taxBreakdown.map((row) => [
+      row.label,
+      row.subtotal.toFixed(2),
+      row.tax.toFixed(2),
+      row.total.toFixed(2),
+    ]),
+    [],
+    ["Defter Kayitlari"],
+    [
+      "Tarih",
+      "Fatura No",
+      "Musteri",
+      "Net (TRY)",
+      "KDV (TRY)",
+      "Toplam (TRY)",
+      "Odeme Yontemi",
+    ],
+    ...ledger.map((entry) => [
+      entry.date.toISOString(),
+      entry.invoiceNumber,
+      entry.customerName,
+      entry.subtotal.toFixed(2),
+      entry.taxAmount.toFixed(2),
+      entry.totalAmount.toFixed(2),
+      entry.paymentMethod ? paymentMethodLabels[entry.paymentMethod] : "-",
+    ]),
+  ];
 }
 
 function getRangeByPeriod(period: ReportPeriod, now: Date) {
@@ -227,154 +303,198 @@ export async function GET(request: NextRequest) {
   try {
     const period = parseReportPeriod(request.nextUrl.searchParams.get("period"));
     const format = parseReportFormat(request.nextUrl.searchParams.get("format"));
+    const reportType = parseReportType(request.nextUrl.searchParams.get("type"));
     const now = new Date();
     const dateRange = getRangeByPeriod(period, now);
 
-    const [revenueData, customerData, serviceData] = await Promise.all([
-      getRevenueReport(dateRange),
-      getCustomerReport(dateRange),
-      getServiceReport(dateRange),
-    ]);
+    const [revenueData, customerData, serviceData, accountingData, accountingLedger] =
+      await Promise.all([
+        reportType === "accounting"
+          ? Promise.resolve(null)
+          : getRevenueReport(dateRange),
+        reportType === "accounting"
+          ? Promise.resolve(null)
+          : getCustomerReport(dateRange),
+        reportType === "accounting"
+          ? Promise.resolve(null)
+          : getServiceReport(dateRange),
+        getAccountingReport(dateRange),
+        getAccountingLedger(dateRange, 100, "asc"),
+      ]);
 
-    const topProductIds = revenueData.topProducts.map((item) => item.productId);
-    const topCustomerIds = customerData.topByRevenue.map((item) => item.customerId);
+    const accountingRows = buildAccountingRows(accountingData, accountingLedger);
 
-    const [products, customers] = await Promise.all([
-      topProductIds.length > 0
-        ? db.product.findMany({
-            where: { id: { in: topProductIds } },
-            select: { id: true, name: true },
-          })
-        : Promise.resolve([]),
-      topCustomerIds.length > 0
-        ? db.user.findMany({
-            where: { id: { in: topCustomerIds } },
-            select: { id: true, name: true, surname: true, email: true },
-          })
-        : Promise.resolve([]),
-    ]);
+    let rows: unknown[][];
 
-    const productNameById = new Map(products.map((product) => [product.id, product.name] as const));
-    const customerNameById = new Map(
-      customers.map((customer) => [
-        customer.id,
-        `${customer.name} ${customer.surname}`.trim() || customer.email,
-      ] as const)
-    );
+    if (reportType === "accounting") {
+      rows = [
+        ["Muhasebe Raporu"],
+        ["Donem", periodLabel(period)],
+        ["Baslangic", dateRange.from.toISOString()],
+        ["Bitis", dateRange.to.toISOString()],
+        ["Olusturma Zamani", now.toISOString()],
+        [],
+        ...accountingRows,
+      ];
+    } else {
+      const topProductIds = revenueData!.topProducts.map((item) => item.productId);
+      const topCustomerIds = customerData!.topByRevenue.map((item) => item.customerId);
 
-    const totalRevenue = Number(revenueData.totalRevenue);
-    const invoiceCount = Number(revenueData.invoiceCount);
-    const avgInvoiceAmount = Number(revenueData.avgInvoiceAmount);
-    const monthlyRecurring = Number(serviceData.monthlyRecurring);
-    const inactiveCustomers = customerData.totalCustomers - customerData.activeCustomers;
+      const [products, customers] = await Promise.all([
+        topProductIds.length > 0
+          ? db.product.findMany({
+              where: { id: { in: topProductIds } },
+              select: { id: true, name: true },
+            })
+          : Promise.resolve([]),
+        topCustomerIds.length > 0
+          ? db.user.findMany({
+              where: { id: { in: topCustomerIds } },
+              select: { id: true, name: true, surname: true, email: true },
+            })
+          : Promise.resolve([]),
+      ]);
 
-    const rows: unknown[][] = [
-      ["Yonetim Raporu"],
-      ["Donem", periodLabel(period)],
-      ["Baslangic", dateRange.from.toISOString()],
-      ["Bitis", dateRange.to.toISOString()],
-      ["Olusturma Zamani", now.toISOString()],
-      [],
-      ["Gelir Ozeti"],
-      ["Toplam Gelir (TRY)", totalRevenue.toFixed(2)],
-      ["Fatura Sayisi", invoiceCount],
-      ["Ortalama Fatura Tutari (TRY)", avgInvoiceAmount.toFixed(2)],
-      ["Aylik Tekrarlayan Gelir (TRY)", monthlyRecurring.toFixed(2)],
-      [],
-      ["Gelir Trendi"],
-      ["Periyot", "Gelir (TRY)"],
-      ...buildRevenueTrendRows(revenueData.paidInvoices, period, now).map(([label, value]) => [
-        label,
-        value.toFixed(2),
-      ]),
-      [],
-      ["Musteri Ozeti"],
-      ["Toplam Musteri", customerData.totalCustomers],
-      ["Aktif Musteri", customerData.activeCustomers],
-      ["Pasif Musteri", inactiveCustomers],
-      [`${periodLabel(period)} Yeni Kayit`, customerData.newInPeriod],
-      [],
-      ["Musteri Tur Dagilimi"],
-      ["Tur", "Adet"],
-      ...customerData.customersByType.map((item) => [
-        item.customerType === "INDIVIDUAL" ? "Bireysel" : "Kurumsal",
-        item._count.id,
-      ]),
-      [],
-      ["Hizmet Durumlari"],
-      ["Durum", "Adet"],
-      ...serviceData.servicesByStatus.map((item) => [item.status, item._count.id]),
-      [],
-      ["En Cok Gelir Getiren Musteriler"],
-      ["Musteri", "Gelir (TRY)", "Fatura Adedi"],
-      ...customerData.topByRevenue.map((item) => [
-        customerNameById.get(item.customerId) ?? item.customerId,
-        Number(item._sum.paidAmount ?? 0).toFixed(2),
-        item._count.id,
-      ]),
-      [],
-      ["En Cok Gelir Getiren Urunler"],
-      ["Urun", "Gelir (TRY)", "Siparis Adedi"],
-      ...revenueData.topProducts.map((item) => [
-        productNameById.get(item.productId) ?? item.productId,
-        Number(item._sum.totalAmount ?? 0).toFixed(2),
-        item._count.id,
-      ]),
-    ];
+      const productNameById = new Map(
+        products.map((product) => [product.id, product.name] as const)
+      );
+      const customerNameById = new Map(
+        customers.map((customer) => [
+          customer.id,
+          `${customer.name} ${customer.surname}`.trim() || customer.email,
+        ] as const)
+      );
+
+      const totalRevenue = Number(revenueData!.totalRevenue);
+      const invoiceCount = Number(revenueData!.invoiceCount);
+      const avgInvoiceAmount = Number(revenueData!.avgInvoiceAmount);
+      const monthlyRecurring = Number(serviceData!.monthlyRecurring);
+      const inactiveCustomers = customerData!.totalCustomers - customerData!.activeCustomers;
+
+      rows = [
+        ["Yonetim Raporu"],
+        ["Donem", periodLabel(period)],
+        ["Baslangic", dateRange.from.toISOString()],
+        ["Bitis", dateRange.to.toISOString()],
+        ["Olusturma Zamani", now.toISOString()],
+        [],
+        ["Gelir Ozeti"],
+        ["Toplam Gelir (TRY)", totalRevenue.toFixed(2)],
+        ["Fatura Sayisi", invoiceCount],
+        ["Ortalama Fatura Tutari (TRY)", avgInvoiceAmount.toFixed(2)],
+        ["Aylik Tekrarlayan Gelir (TRY)", monthlyRecurring.toFixed(2)],
+        [],
+        ["Gelir Trendi"],
+        ["Periyot", "Gelir (TRY)"],
+        ...buildRevenueTrendRows(revenueData!.paidInvoices, period, now).map(([label, value]) => [
+          label,
+          value.toFixed(2),
+        ]),
+        [],
+        ["Musteri Ozeti"],
+        ["Toplam Musteri", customerData!.totalCustomers],
+        ["Aktif Musteri", customerData!.activeCustomers],
+        ["Pasif Musteri", inactiveCustomers],
+        [`${periodLabel(period)} Yeni Kayit`, customerData!.newInPeriod],
+        [],
+        ["Musteri Tur Dagilimi"],
+        ["Tur", "Adet"],
+        ...customerData!.customersByType.map((item) => [
+          item.customerType === "INDIVIDUAL" ? "Bireysel" : "Kurumsal",
+          item._count.id,
+        ]),
+        [],
+        ["Hizmet Durumlari"],
+        ["Durum", "Adet"],
+        ...serviceData!.servicesByStatus.map((item) => [item.status, item._count.id]),
+        [],
+        ["En Cok Gelir Getiren Musteriler"],
+        ["Musteri", "Gelir (TRY)", "Fatura Adedi"],
+        ...customerData!.topByRevenue.map((item) => [
+          customerNameById.get(item.customerId) ?? item.customerId,
+          Number(item._sum.paidAmount ?? 0).toFixed(2),
+          item._count.id,
+        ]),
+        [],
+        ["En Cok Gelir Getiren Urunler"],
+        ["Urun", "Gelir (TRY)", "Siparis Adedi"],
+        ...revenueData!.topProducts.map((item) => [
+          productNameById.get(item.productId) ?? item.productId,
+          Number(item._sum.totalAmount ?? 0).toFixed(2),
+          item._count.id,
+        ]),
+        [],
+        ...accountingRows,
+      ];
+    }
     const fileDate = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(
       now.getDate()
     ).padStart(2, "0")}`;
 
     if (format === "pdf") {
-      const lines: string[] = [
-        "Yonetim Raporu",
-        `Donem: ${periodLabel(period)}`,
-        `Baslangic: ${dateRange.from.toISOString()}`,
-        `Bitis: ${dateRange.to.toISOString()}`,
-        `Olusturma Zamani: ${now.toISOString()}`,
-        "",
-        "Gelir Ozeti",
-        `Toplam Gelir (TRY): ${totalRevenue.toFixed(2)}`,
-        `Fatura Sayisi: ${invoiceCount}`,
-        `Ortalama Fatura Tutari (TRY): ${avgInvoiceAmount.toFixed(2)}`,
-        `Aylik Tekrarlayan Gelir (TRY): ${monthlyRecurring.toFixed(2)}`,
-        "",
-        "Gelir Trendi",
-        ...buildRevenueTrendRows(revenueData.paidInvoices, period, now).map(
-          ([label, value]) => `${label}: ${value.toFixed(2)} TRY`
-        ),
-        "",
-        "Musteri Ozeti",
-        `Toplam Musteri: ${customerData.totalCustomers}`,
-        `Aktif Musteri: ${customerData.activeCustomers}`,
-        `Pasif Musteri: ${inactiveCustomers}`,
-        `${periodLabel(period)} Yeni Kayit: ${customerData.newInPeriod}`,
-        "",
-        "Musteri Tur Dagilimi",
-        ...customerData.customersByType.map(
-          (item) =>
-            `${item.customerType === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"}: ${item._count.id}`
-        ),
-        "",
-        "Hizmet Durumlari",
-        ...serviceData.servicesByStatus.map((item) => `${item.status}: ${item._count.id}`),
-        "",
-        "En Cok Gelir Getiren Musteriler",
-        ...customerData.topByRevenue.map((item) => {
-          const customer = customerNameById.get(item.customerId) ?? item.customerId;
-          const amount = Number(item._sum.paidAmount ?? 0).toFixed(2);
-          return `${customer}: ${amount} TRY (${item._count.id} fatura)`;
-        }),
-        "",
-        "En Cok Gelir Getiren Urunler",
-        ...revenueData.topProducts.map((item) => {
-          const product = productNameById.get(item.productId) ?? item.productId;
-          const amount = Number(item._sum.totalAmount ?? 0).toFixed(2);
-          return `${product}: ${amount} TRY (${item._count.id} siparis)`;
-        }),
-      ];
+      const lines: string[] =
+        reportType === "accounting"
+          ? [
+              "Muhasebe Raporu",
+              `Donem: ${periodLabel(period)}`,
+              `Baslangic: ${dateRange.from.toISOString()}`,
+              `Bitis: ${dateRange.to.toISOString()}`,
+              `Olusturma Zamani: ${now.toISOString()}`,
+              "",
+              ...accountingRows.map((row) => row.map((cell) => String(cell ?? "")).join(" | ")),
+            ]
+          : [
+              "Yonetim Raporu",
+              `Donem: ${periodLabel(period)}`,
+              `Baslangic: ${dateRange.from.toISOString()}`,
+              `Bitis: ${dateRange.to.toISOString()}`,
+              `Olusturma Zamani: ${now.toISOString()}`,
+              "",
+              "Gelir Ozeti",
+              `Toplam Gelir (TRY): ${Number(revenueData!.totalRevenue).toFixed(2)}`,
+              `Fatura Sayisi: ${revenueData!.invoiceCount}`,
+              `Ortalama Fatura Tutari (TRY): ${Number(revenueData!.avgInvoiceAmount).toFixed(2)}`,
+              `Aylik Tekrarlayan Gelir (TRY): ${Number(serviceData!.monthlyRecurring).toFixed(2)}`,
+              "",
+              "Gelir Trendi",
+              ...buildRevenueTrendRows(revenueData!.paidInvoices, period, now).map(
+                ([label, value]) => `${label}: ${value.toFixed(2)} TRY`
+              ),
+              "",
+              "Musteri Ozeti",
+              `Toplam Musteri: ${customerData!.totalCustomers}`,
+              `Aktif Musteri: ${customerData!.activeCustomers}`,
+              `Pasif Musteri: ${customerData!.totalCustomers - customerData!.activeCustomers}`,
+              `${periodLabel(period)} Yeni Kayit: ${customerData!.newInPeriod}`,
+              "",
+              "Musteri Tur Dagilimi",
+              ...customerData!.customersByType.map(
+                (item) =>
+                  `${item.customerType === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"}: ${item._count.id}`
+              ),
+              "",
+              "Hizmet Durumlari",
+              ...serviceData!.servicesByStatus.map((item) => `${item.status}: ${item._count.id}`),
+              "",
+              "En Cok Gelir Getiren Musteriler",
+              ...customerData!.topByRevenue.map((item) => {
+                const amount = Number(item._sum.paidAmount ?? 0).toFixed(2);
+                return `${item.customerId}: ${amount} TRY (${item._count.id} fatura)`;
+              }),
+              "",
+              "En Cok Gelir Getiren Urunler",
+              ...revenueData!.topProducts.map((item) => {
+                const amount = Number(item._sum.totalAmount ?? 0).toFixed(2);
+                return `${item.productId}: ${amount} TRY (${item._count.id} siparis)`;
+              }),
+              "",
+              ...accountingRows.map((row) => row.map((cell) => String(cell ?? "")).join(" | ")),
+            ];
 
-      const fileName = `rapor-${period}-${fileDate}.pdf`;
+      const fileName =
+        reportType === "accounting"
+          ? `muhasebe-raporu-${period}-${fileDate}.pdf`
+          : `rapor-${period}-${fileDate}.pdf`;
       const pdfBytes = buildSimplePdf(lines);
 
       return new NextResponse(pdfBytes, {
@@ -388,7 +508,10 @@ export async function GET(request: NextRequest) {
     }
 
     const csv = `\uFEFF${toCsv(rows)}`;
-    const fileName = `rapor-${period}-${fileDate}.csv`;
+    const fileName =
+      reportType === "accounting"
+        ? `muhasebe-raporu-${period}-${fileDate}.csv`
+        : `rapor-${period}-${fileDate}.csv`;
 
     return new NextResponse(csv, {
       status: 200,

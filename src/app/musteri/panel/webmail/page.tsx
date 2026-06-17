@@ -6,6 +6,8 @@ import {
 } from "@/lib/dal/webmail";
 import { WebmailContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function WebmailPage() {
   const session = await auth();
   const userId = session!.user.id;

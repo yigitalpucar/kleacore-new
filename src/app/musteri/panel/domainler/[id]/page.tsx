@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { getDomainWithDns } from "@/lib/dal/domains";
 import { DomainDetayContent } from "./content";
+
+export const dynamic = "force-dynamic";
 
 interface DomainDetayPageProps {
   params: Promise<{ id: string }>;
@@ -8,9 +11,10 @@ interface DomainDetayPageProps {
 
 export default async function DomainDetayPage(props: DomainDetayPageProps) {
   const params = await props.params;
+  const session = await auth();
   const domain = await getDomainWithDns(params.id);
 
-  if (!domain) {
+  if (!domain || domain.customerId !== session!.user.id) {
     notFound();
   }
 

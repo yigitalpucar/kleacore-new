@@ -20,6 +20,8 @@ import { getProductStats, getProductCategoryCounts } from "@/lib/dal/products";
 import { getPromotions } from "@/lib/dal/promotions";
 import type { ProductCategorySlug } from "@/types/products";
 
+export const dynamic = "force-dynamic";
+
 export default async function ProductsDashboardPage() {
   const [stats, categoryCounts, promotions] = await Promise.all([
     getProductStats(),

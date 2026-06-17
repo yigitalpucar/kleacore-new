@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { getInvoiceById } from "@/lib/dal/invoices";
 import { FaturaDetayContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 interface FaturaDetayPageProps {
   params: Promise<{ id: string }>;
 }

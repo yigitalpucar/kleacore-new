@@ -8,6 +8,8 @@ import {
 } from "@/lib/dal/system-status";
 import { DurumContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function DurumPage() {
   const [statuses, activeIncidents, recentIncidents] = await Promise.all([
     getStatuses(),

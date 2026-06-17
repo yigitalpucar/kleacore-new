@@ -3,6 +3,8 @@ import { parsePagination } from "@/lib/utils/pagination";
 import { PackagesContent } from "./content";
 import type { ProductCategorySlug, ProductStatus } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 export default async function PackagesPage({
   searchParams,
 }: {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -45,21 +46,23 @@ interface WhoisData {
   dnssec: string;
 }
 
-export default function WhoisPage() {
+function WhoisPageContent() {
+  const searchParams = useSearchParams();
   const [domain, setDomain] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [result, setResult] = useState<WhoisData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async () => {
-    if (!domain.trim()) return;
+  const runLookup = useCallback(async (query: string) => {
+    const normalized = query.trim();
+    if (!normalized) return;
 
     setIsSearching(true);
     setResult(null);
     setError(null);
 
     try {
-      const response = await lookupWhois(domain);
+      const response = await lookupWhois(normalized);
       if (!response.success || !response.data) {
         const message =
           response.error ?? "WHOIS kaydı bulunamadı veya sorgu tamamlanamadı";
@@ -71,10 +74,24 @@ export default function WhoisPage() {
     } finally {
       setIsSearching(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const param = searchParams.get("domain")?.trim();
+    if (!param) return;
+    setDomain(param);
+    void runLookup(param);
+  }, [searchParams, runLookup]);
+
+  const handleSearch = async () => {
+    await runLookup(domain);
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("tr-TR", {
+    if (!dateStr) return "—";
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleDateString("tr-TR", {
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -528,5 +545,19 @@ export default function WhoisPage() {
       </main>
       <Footer />
     </div>
+  );
+}
+
+export default function WhoisPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <WhoisPageContent />
+    </Suspense>
   );
 }

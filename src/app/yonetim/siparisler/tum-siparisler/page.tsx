@@ -2,6 +2,8 @@ import { getOrders, getOrderStats } from "@/lib/dal/orders";
 import { parsePagination } from "@/lib/utils/pagination";
 import { AllOrdersContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 export default async function AllOrdersPage({
   searchParams,
 }: {

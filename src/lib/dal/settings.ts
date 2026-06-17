@@ -1,22 +1,40 @@
 import { db } from "@/lib/db";
+import { resolveSettingValue } from "@/lib/secrets/crypto";
+
+function mapSettingValue<T extends { key: string; value: string }>(setting: T) {
+  return {
+    ...setting,
+    value: resolveSettingValue(setting.key, setting.value),
+  };
+}
 
 export async function getSettings() {
-  return db.setting.findMany({
+  const settings = await db.setting.findMany({
     orderBy: [{ group: "asc" }, { key: "asc" }],
   });
+
+  return settings.map(mapSettingValue);
 }
 
 export async function getSettingsByGroup(group: string) {
-  return db.setting.findMany({
+  const settings = await db.setting.findMany({
     where: { group },
     orderBy: { key: "asc" },
   });
+
+  return settings.map(mapSettingValue);
 }
 
 export async function getSettingByKey(key: string) {
-  return db.setting.findUnique({
+  const setting = await db.setting.findUnique({
     where: { key },
   });
+
+  if (!setting) {
+    return null;
+  }
+
+  return mapSettingValue(setting);
 }
 
 export async function getAdminUsers() {
@@ -39,7 +57,7 @@ export async function getApiKeys() {
     select: {
       id: true,
       name: true,
-      key: true,
+      keyPrefix: true,
       createdAt: true,
       lastUsedAt: true,
     },
@@ -53,7 +71,7 @@ export async function getApiKeysByUser(userId: string) {
     select: {
       id: true,
       name: true,
-      key: true,
+      keyPrefix: true,
       createdAt: true,
       lastUsedAt: true,
     },

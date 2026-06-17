@@ -24,10 +24,13 @@ interface CancellationRequest {
   customerId: string;
   companyName: string | null;
   orderId: string;
+  serviceId?: string | null;
   product: string;
   reason: string;
   requestedAt: string;
+  resolvedAt?: string | null;
   status: string;
+  adminNotes?: string | null;
   refundAmount: number;
 }
 
@@ -52,8 +55,8 @@ const formatPrice = (price: number) => {
 export function IptalTalepleriContent({ requests: initialRequests }: IptalTalepleriContentProps) {
   const [requests, setRequests] = useState(initialRequests);
 
-  const handleApprove = async (orderId: string) => {
-    const result = await approveCancellationRequest(orderId);
+  const handleApprove = async (requestId: string) => {
+    const result = await approveCancellationRequest(requestId);
     if (!result.success) {
       toast.error(result.error || "Talep onaylanamadı");
       return;
@@ -61,15 +64,15 @@ export function IptalTalepleriContent({ requests: initialRequests }: IptalTalepl
 
     setRequests((prev) =>
       prev.map((req) =>
-        req.orderId === orderId ? { ...req, status: "approved" } : req
+        req.id === requestId ? { ...req, status: "approved" } : req
       )
     );
     toast.success("İptal talebi onaylandı");
   };
 
-  const handleReject = async (orderId: string) => {
+  const handleReject = async (requestId: string) => {
     const reason = prompt("Red nedeni (opsiyonel):") ?? "";
-    const result = await rejectCancellationRequest(orderId, reason);
+    const result = await rejectCancellationRequest(requestId, reason);
 
     if (!result.success) {
       toast.error(result.error || "Talep reddedilemedi");
@@ -78,7 +81,7 @@ export function IptalTalepleriContent({ requests: initialRequests }: IptalTalepl
 
     setRequests((prev) =>
       prev.map((req) =>
-        req.orderId === orderId ? { ...req, status: "rejected" } : req
+        req.id === requestId ? { ...req, status: "rejected" } : req
       )
     );
     toast.success("İptal talebi reddedildi");
@@ -168,7 +171,7 @@ export function IptalTalepleriContent({ requests: initialRequests }: IptalTalepl
                                 variant="ghost"
                                 className="h-8 w-8 p-0 text-green-500 hover:text-green-600 hover:bg-green-500/10"
                                 title="Onayla"
-                                onClick={() => handleApprove(req.orderId)}
+                                onClick={() => handleApprove(req.id)}
                               >
                                 <CheckCircle className="h-4 w-4" />
                               </Button>
@@ -177,18 +180,20 @@ export function IptalTalepleriContent({ requests: initialRequests }: IptalTalepl
                                 variant="ghost"
                                 className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
                                 title="Reddet"
-                                onClick={() => handleReject(req.orderId)}
+                                onClick={() => handleReject(req.id)}
                               >
                                 <XCircle className="h-4 w-4" />
                               </Button>
                             </>
                           )}
-                          <Link
-                            href={`/yonetim/siparisler/${req.orderId}`}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                          >
-                            <Search className="h-4 w-4" />
-                          </Link>
+                          {req.orderId && (
+                            <Link
+                              href={`/yonetim/siparisler/${req.orderId}`}
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                            >
+                              <Search className="h-4 w-4" />
+                            </Link>
+                          )}
                         </div>
                       </td>
                     </tr>

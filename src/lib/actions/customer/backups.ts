@@ -1,6 +1,10 @@
 "use server";
 
 import { db } from "@/lib/db";
+import {
+  restoreServiceBackup,
+  runServiceBackup,
+} from "@/lib/integrations/backups";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 
@@ -26,7 +30,22 @@ export async function triggerManualBackup(serviceId: string) {
     },
   });
 
+  const result = await runServiceBackup(serviceId, {
+    backupId: backup.id,
+    customerId: userId,
+    type: "FULL",
+  });
+
   revalidatePath("/musteri/panel/yedekleme");
+
+  if (!result.ok) {
+    return {
+      success: false,
+      error: result.error || "Yedekleme başlatılamadı",
+      backupId: backup.id,
+    };
+  }
+
   return { success: true, backupId: backup.id };
 }
 
@@ -64,9 +83,17 @@ export async function restoreBackup(backupId: string) {
     return { success: false, error: "Geri yüklenecek yedek bulunamadı" };
   }
 
-  // In production, this would trigger actual restore process.
-  // For now, mark as a restore request.
+  const result = await restoreServiceBackup(backupId);
+
   revalidatePath("/musteri/panel/yedekleme");
+
+  if (!result.ok) {
+    return {
+      success: false,
+      error: result.error || "Geri yükleme başlatılamadı",
+    };
+  }
+
   return { success: true };
 }
 
@@ -82,12 +109,21 @@ export async function retryBackup(backupId: string) {
     return { success: false, error: "Tekrar denenecek yedek bulunamadı" };
   }
 
-  await db.backup.update({
-    where: { id: backupId },
-    data: { status: "IN_PROGRESS", startedAt: new Date(), completedAt: null },
+  const result = await runServiceBackup(backup.serviceId, {
+    backupId,
+    customerId: userId,
+    type: backup.type,
   });
 
   revalidatePath("/musteri/panel/yedekleme");
+
+  if (!result.ok) {
+    return {
+      success: false,
+      error: result.error || "Yedek tekrar denenemedi",
+    };
+  }
+
   return { success: true };
 }
 

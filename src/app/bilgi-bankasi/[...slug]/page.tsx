@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { getCategoryBySlug, getArticleBySlug } from "@/lib/dal/knowledge-base";
 import { CategoryContent, ArticleContent } from "./content";
 
+export const dynamic = "force-dynamic";
+
 interface PageProps {
   params: Promise<{ slug: string[] }>;
 }

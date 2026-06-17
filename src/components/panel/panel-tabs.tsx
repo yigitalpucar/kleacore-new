@@ -13,9 +13,18 @@ import {
   CreditCard,
   Users,
   Shield,
+  Store,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-const tabs = [
+interface PanelTab {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+  exact?: boolean;
+}
+
+const baseTabs: PanelTab[] = [
   {
     title: "Anasayfa",
     href: "/musteri/panel",
@@ -64,8 +73,25 @@ const tabs = [
   },
 ];
 
-export function PanelTabs() {
+const resellerTab: PanelTab = {
+  title: "Bayilik",
+  href: "/musteri/panel/bayilik",
+  icon: Store,
+};
+
+interface PanelTabsProps {
+  isReseller?: boolean;
+}
+
+export function PanelTabs({ isReseller = false }: PanelTabsProps) {
   const pathname = usePathname();
+  const tabs = isReseller
+    ? [
+        ...baseTabs.slice(0, baseTabs.length - 1),
+        resellerTab,
+        baseTabs[baseTabs.length - 1],
+      ]
+    : baseTabs;
 
   return (
     <div className="border-b bg-background">

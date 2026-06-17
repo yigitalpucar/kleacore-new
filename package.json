@@ -4,10 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && prisma migrate deploy && next build",
+    "build": "prisma generate && next build",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
@@ -39,22 +44,17 @@
     "next": "16.1.1",
     "next-auth": "5.0.0-beta.30",
     "next-themes": "^0.2.1",
+    "nodemailer": "^8.0.10",
     "pg": "^8.19.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-hook-form": "^7.50.0",
     "simplex-noise": "^4.0.3",
     "sonner": "^2.0.7",
+    "stripe": "^22.2.0",
     "tailwind-merge": "^2.2.1",
     "zod": "^3.22.4",
     "zustand": "^4.5.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/engines",
-      "prisma",
-      "esbuild"
-    ]
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -62,18 +62,20 @@
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.16.0",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "autoprefixer": "^10.0.1",
     "dotenv": "^17.3.1",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.21",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
     "postcss": "^8",
     "prisma": "^7.4.2",
     "tailwindcss": "^3.4.1",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   }
 }
