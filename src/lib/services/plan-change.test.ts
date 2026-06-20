@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   calculateProratedPlanChange,
   determinePlanChangeType,
@@ -12,7 +12,6 @@ function buildService(overrides: {
   nextDueDate?: Date | null;
   expiresAt?: Date | null;
 } = {}) {
-  const now = new Date("2026-06-17T12:00:00.000Z");
   const nextDueDate = new Date("2026-07-17T12:00:00.000Z");
 
   return {
@@ -20,7 +19,6 @@ function buildService(overrides: {
     billingPeriod: overrides.billingPeriod ?? "monthly",
     nextDueDate: overrides.nextDueDate ?? nextDueDate,
     expiresAt: overrides.expiresAt ?? null,
-    _now: now,
   };
 }
 
@@ -44,6 +42,15 @@ function buildProduct(
 }
 
 describe("calculateProratedPlanChange", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-17T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("calculates prorated upgrade amount from remaining days and price diff", () => {
     const service = buildService({ amount: 100 });
     const target = buildProduct(200);

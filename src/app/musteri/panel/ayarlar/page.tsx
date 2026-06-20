@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { isTwoFactorGloballyEnabled } from "@/lib/auth/two-factor-settings";
 import { getUserProfile, getApiKeysByUser } from "@/lib/dal/settings";
 import { AyarlarContent } from "./content";
 
@@ -13,9 +14,10 @@ export default async function AyarlarPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [profile, apiKeys] = await Promise.all([
+  const [profile, apiKeys, twoFactorGloballyEnabled] = await Promise.all([
     getUserProfile(userId),
     getApiKeysByUser(userId),
+    isTwoFactorGloballyEnabled(),
   ]);
 
   const serializedProfile = profile
@@ -42,6 +44,14 @@ export default async function AyarlarPage() {
   }));
 
   return (
-    <AyarlarContent profile={serializedProfile} apiKeys={serializedApiKeys} />
+    <AyarlarContent
+      profile={serializedProfile}
+      apiKeys={serializedApiKeys}
+      twoFactorEnabled={profile?.twoFactorEnabled ?? false}
+      twoFactorSetupPending={
+        !profile?.twoFactorEnabled && Boolean(profile?.twoFactorSecret)
+      }
+      twoFactorGloballyEnabled={twoFactorGloballyEnabled}
+    />
   );
 }

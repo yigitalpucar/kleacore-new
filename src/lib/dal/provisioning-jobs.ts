@@ -1,0 +1,59 @@
+import { db } from "@/lib/db";
+import type { ProvisioningJobStatus } from "@prisma/client";
+
+const defaultStatuses: ProvisioningJobStatus[] = ["FAILED", "PENDING", "PROCESSING"];
+
+export async function getProvisioningJobsForAdmin(statuses = defaultStatuses) {
+  return db.provisioningJob.findMany({
+    where: {
+      status: { in: statuses },
+    },
+    include: {
+      order: {
+        include: {
+          product: {
+            include: {
+              category: true,
+            },
+          },
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              surname: true,
+              companyName: true,
+              email: true,
+            },
+          },
+        },
+      },
+      service: {
+        select: {
+          id: true,
+          label: true,
+          domain: true,
+          status: true,
+        },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }],
+    take: 100,
+  });
+}
+
+export async function getProvisioningJobStats() {
+  const [failed, pending, processing, completed] = await Promise.all([
+    db.provisioningJob.count({ where: { status: "FAILED" } }),
+    db.provisioningJob.count({ where: { status: "PENDING" } }),
+    db.provisioningJob.count({ where: { status: "PROCESSING" } }),
+    db.provisioningJob.count({ where: { status: "COMPLETED" } }),
+  ]);
+
+  return {
+    failed,
+    pending,
+    processing,
+    completed,
+    active: failed + pending + processing,
+  };
+}

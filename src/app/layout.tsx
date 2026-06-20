@@ -4,6 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthSessionProvider } from "@/components/auth/session-provider";
 import { AnnouncementPopup } from "@/components/announcement-popup";
+import { CookieConsent } from "@/components/cookie-consent";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
@@ -68,6 +69,7 @@ export default function RootLayout({
             {children}
             <Toaster />
             <AnnouncementPopup />
+            <CookieConsent />
           </ThemeProvider>
         </AuthSessionProvider>
       </body>

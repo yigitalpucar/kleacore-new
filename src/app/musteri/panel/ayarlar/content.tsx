@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -40,6 +40,11 @@ import {
   revokeApiKey,
   deleteApiKey,
 } from "@/lib/actions/customer/api-keys";
+import {
+  disable2FA,
+  enable2FA,
+  verify2FASetup,
+} from "@/lib/actions/customer/two-factor";
 
 interface ProfileData {
   name: string;
@@ -65,6 +70,9 @@ interface ApiKeyData {
 interface AyarlarContentProps {
   profile: ProfileData | null;
   apiKeys: ApiKeyData[];
+  twoFactorEnabled: boolean;
+  twoFactorSetupPending: boolean;
+  twoFactorGloballyEnabled: boolean;
 }
 
 const notificationSettings = [
@@ -82,7 +90,13 @@ interface NewlyCreatedApiKey {
   createdAt: string;
 }
 
-export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
+export function AyarlarContent({
+  profile,
+  apiKeys,
+  twoFactorEnabled,
+  twoFactorSetupPending,
+  twoFactorGloballyEnabled,
+}: AyarlarContentProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("profile");
   const [showPassword, setShowPassword] = useState(false);
@@ -108,6 +122,33 @@ export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
   const [newKeyName, setNewKeyName] = useState("");
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<NewlyCreatedApiKey | null>(null);
   const [apiKeyActionId, setApiKeyActionId] = useState<string | null>(null);
+  const [twoFactorActive, setTwoFactorActive] = useState(twoFactorEnabled);
+  const [twoFactorSetupOpen, setTwoFactorSetupOpen] = useState(twoFactorSetupPending);
+  const [twoFactorQrCode, setTwoFactorQrCode] = useState<string | null>(null);
+  const [twoFactorManualKey, setTwoFactorManualKey] = useState("");
+  const [twoFactorVerifyCode, setTwoFactorVerifyCode] = useState("");
+  const [twoFactorBackupCodes, setTwoFactorBackupCodes] = useState<string[]>([]);
+  const [twoFactorDisablePassword, setTwoFactorDisablePassword] = useState("");
+  const [twoFactorDisableCode, setTwoFactorDisableCode] = useState("");
+  const [twoFactorLoading, setTwoFactorLoading] = useState(false);
+
+  useEffect(() => {
+    if (!twoFactorSetupPending || twoFactorQrCode || twoFactorActive) {
+      return;
+    }
+
+    void (async () => {
+      setTwoFactorLoading(true);
+      const result = await enable2FA();
+      setTwoFactorLoading(false);
+
+      if (result.success && result.qrCodeDataUrl && result.manualEntryKey) {
+        setTwoFactorSetupOpen(true);
+        setTwoFactorQrCode(result.qrCodeDataUrl);
+        setTwoFactorManualKey(result.manualEntryKey);
+      }
+    })();
+  }, [twoFactorSetupPending, twoFactorQrCode, twoFactorActive]);
 
   const tabs = [
     { id: "profile", label: "Profil", icon: User },
@@ -223,6 +264,94 @@ export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
     } else {
       setMessage({ type: "error", text: result.error ?? "Bir hata oluştu." });
     }
+  };
+
+  const handleEnableTwoFactor = async () => {
+    setTwoFactorLoading(true);
+    setMessage(null);
+
+    const result = await enable2FA();
+    setTwoFactorLoading(false);
+
+    if (result.success && result.qrCodeDataUrl && result.manualEntryKey) {
+      setTwoFactorSetupOpen(true);
+      setTwoFactorQrCode(result.qrCodeDataUrl);
+      setTwoFactorManualKey(result.manualEntryKey);
+      setMessage({
+        type: "success",
+        text: "QR kodu oluşturuldu. Authenticator uygulamanıza ekleyip doğrulama kodunu girin.",
+      });
+      return;
+    }
+
+    setMessage({
+      type: "error",
+      text: result.error ?? "İki faktörlü doğrulama başlatılamadı.",
+    });
+  };
+
+  const handleVerifyTwoFactorSetup = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setTwoFactorLoading(true);
+    setMessage(null);
+
+    const fd = new FormData();
+    fd.set("code", twoFactorVerifyCode.trim());
+
+    const result = await verify2FASetup(fd);
+    setTwoFactorLoading(false);
+
+    if (result.success && result.backupCodes) {
+      setTwoFactorActive(true);
+      setTwoFactorSetupOpen(false);
+      setTwoFactorBackupCodes(result.backupCodes);
+      setTwoFactorVerifyCode("");
+      setTwoFactorQrCode(null);
+      setTwoFactorManualKey("");
+      setMessage({
+        type: "success",
+        text: "İki faktörlü doğrulama başarıyla etkinleştirildi.",
+      });
+      router.refresh();
+      return;
+    }
+
+    setMessage({
+      type: "error",
+      text: result.error ?? "Doğrulama kodu hatalı.",
+    });
+  };
+
+  const handleDisableTwoFactor = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setTwoFactorLoading(true);
+    setMessage(null);
+
+    const fd = new FormData();
+    fd.set("password", twoFactorDisablePassword);
+    fd.set("code", twoFactorDisableCode.trim());
+
+    const result = await disable2FA(fd);
+    setTwoFactorLoading(false);
+
+    if (result.success) {
+      setTwoFactorActive(false);
+      setTwoFactorSetupOpen(false);
+      setTwoFactorBackupCodes([]);
+      setTwoFactorDisablePassword("");
+      setTwoFactorDisableCode("");
+      setMessage({
+        type: "success",
+        text: "İki faktörlü doğrulama devre dışı bırakıldı.",
+      });
+      router.refresh();
+      return;
+    }
+
+    setMessage({
+      type: "error",
+      text: result.error ?? "İki faktörlü doğrulama kapatılamadı.",
+    });
   };
 
   const handleDeleteApiKey = async (id: string) => {
@@ -557,6 +686,12 @@ export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {!twoFactorGloballyEnabled && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
+                    İki faktörlü doğrulama sistem yöneticisi tarafından devre dışı bırakılmış.
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between p-4 rounded-lg border">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-green-500/10">
@@ -569,8 +704,160 @@ export function AyarlarContent({ profile, apiKeys }: AyarlarContentProps) {
                       </p>
                     </div>
                   </div>
-                  <Button variant="outline">Aktifleştir</Button>
+                  {twoFactorActive ? (
+                    <span className="text-sm text-green-500 font-medium">Aktif</span>
+                  ) : twoFactorSetupOpen ? (
+                    <span className="text-sm text-amber-500 font-medium">Kurulumda</span>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={handleEnableTwoFactor}
+                      disabled={!twoFactorGloballyEnabled || twoFactorLoading}
+                    >
+                      {twoFactorLoading ? "Hazırlanıyor..." : "Aktifleştir"}
+                    </Button>
+                  )}
                 </div>
+
+                {twoFactorSetupOpen && (
+                  <div className="space-y-4 rounded-lg border p-4">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">1. Authenticator uygulamanıza ekleyin</p>
+                      {twoFactorQrCode ? (
+                        <div className="flex flex-col items-center gap-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={twoFactorQrCode}
+                            alt="İki faktörlü doğrulama QR kodu"
+                            className="h-56 w-56 rounded-md border bg-white p-2"
+                          />
+                          <div className="w-full space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              QR kodu tarayamıyorsanız bu anahtarı manuel girin:
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="flex-1 rounded-md border bg-muted/40 p-2 font-mono text-xs break-all">
+                                {twoFactorManualKey}
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => copyToClipboard(twoFactorManualKey, "2fa-secret")}
+                              >
+                                {copiedKey === "2fa-secret" ? (
+                                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <Copy className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Kurulum bekleniyor. Lütfen &quot;Aktifleştir&quot; butonuna tekrar tıklayın.
+                        </p>
+                      )}
+                    </div>
+
+                    <form onSubmit={handleVerifyTwoFactorSetup} className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="twoFactorVerifyCode">2. Doğrulama kodunu girin</Label>
+                        <Input
+                          id="twoFactorVerifyCode"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          placeholder="123456"
+                          value={twoFactorVerifyCode}
+                          onChange={(e) => setTwoFactorVerifyCode(e.target.value)}
+                          required
+                          disabled={twoFactorLoading}
+                        />
+                      </div>
+                      <Button type="submit" disabled={twoFactorLoading || !twoFactorVerifyCode.trim()}>
+                        {twoFactorLoading ? "Doğrulanıyor..." : "Doğrula ve Etkinleştir"}
+                      </Button>
+                    </form>
+                  </div>
+                )}
+
+                {twoFactorBackupCodes.length > 0 && (
+                  <div className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Yedek kodlarınızı kaydedin</p>
+                        <p className="text-sm text-muted-foreground">
+                          Telefonunuza erişemezseniz bu kodlardan birini kullanabilirsiniz. Her kod yalnızca bir kez kullanılabilir.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {twoFactorBackupCodes.map((code) => (
+                        <p
+                          key={code}
+                          className="rounded-md border bg-background/80 px-3 py-2 font-mono text-sm"
+                        >
+                          {code}
+                        </p>
+                      ))}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(twoFactorBackupCodes.join("\n"), "2fa-backup")}
+                    >
+                      {copiedKey === "2fa-backup" ? (
+                        <>
+                          <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
+                          Kopyalandı
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="mr-2 h-4 w-4" />
+                          Tümünü Kopyala
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {twoFactorActive && (
+                  <form onSubmit={handleDisableTwoFactor} className="space-y-3 rounded-lg border p-4">
+                    <p className="text-sm font-medium">İki faktörlü doğrulamayı kapat</p>
+                    <div className="space-y-2">
+                      <Label htmlFor="twoFactorDisablePassword">Mevcut Şifre</Label>
+                      <Input
+                        id="twoFactorDisablePassword"
+                        type="password"
+                        value={twoFactorDisablePassword}
+                        onChange={(e) => setTwoFactorDisablePassword(e.target.value)}
+                        required
+                        disabled={twoFactorLoading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="twoFactorDisableCode">Authenticator veya yedek kod</Label>
+                      <Input
+                        id="twoFactorDisableCode"
+                        value={twoFactorDisableCode}
+                        onChange={(e) => setTwoFactorDisableCode(e.target.value)}
+                        required
+                        disabled={twoFactorLoading}
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      className="text-red-500 hover:text-red-500"
+                      disabled={twoFactorLoading}
+                    >
+                      {twoFactorLoading ? "Kapatılıyor..." : "2FA'yı Devre Dışı Bırak"}
+                    </Button>
+                  </form>
+                )}
 
                 <div className="flex items-center justify-between p-4 rounded-lg border">
                   <div className="flex items-center gap-3">

@@ -94,6 +94,8 @@ export async function getUserProfile(userId: string) {
       address: true,
       city: true,
       country: true,
+      twoFactorEnabled: true,
+      twoFactorSecret: true,
     },
   });
 }

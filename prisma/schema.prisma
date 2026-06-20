@@ -296,6 +296,11 @@ model User {
   city          String?
   country       String   @default("Türkiye")
 
+  // Two-factor authentication
+  twoFactorEnabled    Boolean @default(false)
+  twoFactorSecret     String?
+  twoFactorBackupCodes String?
+
   // Balance
   balance       Float    @default(0)
 

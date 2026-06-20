@@ -242,19 +242,19 @@ async function retryServiceProvisioning(
   return { ok: false as const, error: provisioning.error ?? "REMOTE_PROVISIONING_FAILED" };
 }
 
-async function retryProvisioningJob(
-  job: Prisma.ProvisioningJobGetPayload<{
-    include: {
-      order: {
-        include: {
-          product: { include: { category: true } };
-          customer: true;
-          items: true;
-        };
+type ProvisioningJobWithOrder = Prisma.ProvisioningJobGetPayload<{
+  include: {
+    order: {
+      include: {
+        product: { include: { category: true } };
+        customer: true;
+        items: true;
       };
     };
-  }>
-) {
+  };
+}>;
+
+async function retryProvisioningJob(job: ProvisioningJobWithOrder) {
   const { order } = job;
 
   if (order.product.category.slug === "domain") {
@@ -284,6 +284,121 @@ async function retryProvisioningJob(
   }
 
   return { ok: true as const };
+}
+
+async function loadProvisioningJobForRetry(jobId: string) {
+  return db.provisioningJob.findUnique({
+    where: { id: jobId },
+    include: {
+      order: {
+        include: {
+          product: { include: { category: true } },
+          customer: true,
+          items: true,
+        },
+      },
+    },
+  });
+}
+
+async function finalizeProvisioningRetryAttempt(
+  job: ProvisioningJobWithOrder,
+  result: { ok: boolean; error?: string },
+  options?: { respectMaxAttempts?: boolean }
+) {
+  const now = new Date();
+  const respectMaxAttempts = options?.respectMaxAttempts ?? true;
+
+  if (result.ok) {
+    await db.provisioningJob.update({
+      where: { id: job.id },
+      data: {
+        status: "COMPLETED",
+        completedAt: now,
+        lastError: null,
+      },
+    });
+    return { ok: true as const };
+  }
+
+  const nextAttempts = job.attempts + 1;
+  const exhausted = respectMaxAttempts && nextAttempts >= job.maxAttempts;
+
+  await db.provisioningJob.update({
+    where: { id: job.id },
+    data: {
+      status: exhausted ? "FAILED" : "PENDING",
+      attempts: nextAttempts,
+      lastError: result.error,
+      nextRetryAt: exhausted ? job.nextRetryAt : getNextRetryAt(nextAttempts),
+    },
+  });
+
+  return { ok: false as const, error: result.error ?? "PROVISIONING_RETRY_FAILED" };
+}
+
+export async function manualRetryProvisioningJob(jobId: string) {
+  const job = await loadProvisioningJobForRetry(jobId);
+
+  if (!job) {
+    return { ok: false as const, error: "JOB_NOT_FOUND" };
+  }
+
+  if (job.status === "COMPLETED") {
+    return { ok: false as const, error: "JOB_ALREADY_COMPLETED" };
+  }
+
+  if (job.status === "PROCESSING") {
+    return { ok: false as const, error: "JOB_ALREADY_PROCESSING" };
+  }
+
+  await db.provisioningJob.update({
+    where: { id: job.id },
+    data: {
+      status: "PROCESSING",
+      nextRetryAt: new Date(),
+    },
+  });
+
+  try {
+    const result = await retryProvisioningJob(job);
+
+    if (result.ok) {
+      await db.provisioningJob.update({
+        where: { id: job.id },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          lastError: null,
+        },
+      });
+      return { ok: true as const };
+    }
+
+    await db.provisioningJob.update({
+      where: { id: job.id },
+      data: {
+        status: "FAILED",
+        attempts: job.attempts + 1,
+        lastError: result.error,
+      },
+    });
+
+    return { ok: false as const, error: result.error ?? "PROVISIONING_RETRY_FAILED" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "PROVISIONING_RETRY_FAILED";
+
+    await db.provisioningJob.update({
+      where: { id: job.id },
+      data: {
+        status: "FAILED",
+        attempts: job.attempts + 1,
+        lastError: message,
+      },
+    });
+
+    return { ok: false as const, error: message };
+  }
 }
 
 export async function processProvisioningRetries(limit = 10): Promise<CronJobResult> {
@@ -319,54 +434,25 @@ export async function processProvisioningRetries(limit = 10): Promise<CronJobRes
 
     try {
       const result = await retryProvisioningJob(job);
+      const finalized = await finalizeProvisioningRetryAttempt(job, result);
 
-      if (result.ok) {
-        await db.provisioningJob.update({
-          where: { id: job.id },
-          data: {
-            status: "COMPLETED",
-            completedAt: now,
-            lastError: null,
-          },
-        });
+      if (finalized.ok) {
         processedIds.push(job.id);
         continue;
       }
 
       const nextAttempts = job.attempts + 1;
-      const exhausted = nextAttempts >= job.maxAttempts;
-
-      await db.provisioningJob.update({
-        where: { id: job.id },
-        data: {
-          status: exhausted ? "FAILED" : "PENDING",
-          attempts: nextAttempts,
-          lastError: result.error,
-          nextRetryAt: exhausted ? job.nextRetryAt : getNextRetryAt(nextAttempts),
-        },
-      });
-
-      if (exhausted) {
+      if (nextAttempts >= job.maxAttempts) {
         skipped += 1;
       } else {
         processedIds.push(job.id);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "PROVISIONING_RETRY_FAILED";
+      await finalizeProvisioningRetryAttempt(job, { ok: false, error: message });
+
       const nextAttempts = job.attempts + 1;
-      const exhausted = nextAttempts >= job.maxAttempts;
-
-      await db.provisioningJob.update({
-        where: { id: job.id },
-        data: {
-          status: exhausted ? "FAILED" : "PENDING",
-          attempts: nextAttempts,
-          lastError: message,
-          nextRetryAt: exhausted ? job.nextRetryAt : getNextRetryAt(nextAttempts),
-        },
-      });
-
-      if (exhausted) {
+      if (nextAttempts >= job.maxAttempts) {
         skipped += 1;
       }
     }

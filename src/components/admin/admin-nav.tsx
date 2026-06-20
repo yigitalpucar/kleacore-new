@@ -44,6 +44,7 @@ import {
   Newspaper,
   Plug,
   FileCheck,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -168,6 +169,7 @@ const navItems: NavItem[] = [
     icon: Cog,
     children: [
       { title: "Aktivite Logları", href: "/yonetim/aktivite", icon: ScrollText },
+      { title: "Provisioning Kuyruğu", href: "/yonetim/provisioning", icon: RefreshCw },
       { title: "Entegrasyonlar", href: "/yonetim/entegrasyonlar", icon: Plug },
       { title: "Ayarlar", href: "/yonetim/ayarlar", icon: Settings },
     ],

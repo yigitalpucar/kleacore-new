@@ -7,6 +7,8 @@ const {
   findManyReferral,
   updateManyReferral,
   createPayment,
+  findUniquePayment,
+  updatePayment,
   transaction,
 } = vi.hoisted(() => ({
   aggregateReferral: vi.fn(),
@@ -14,6 +16,8 @@ const {
   findManyReferral: vi.fn(),
   updateManyReferral: vi.fn(),
   createPayment: vi.fn(),
+  findUniquePayment: vi.fn(),
+  updatePayment: vi.fn(),
   transaction: vi.fn(),
 }));
 
@@ -27,6 +31,8 @@ vi.mock("@/lib/db", () => ({
     affiliatePayment: {
       aggregate: aggregatePayment,
       create: createPayment,
+      findUnique: findUniquePayment,
+      update: updatePayment,
     },
     $transaction: transaction,
   },
@@ -35,9 +41,24 @@ vi.mock("@/lib/db", () => ({
 import { MIN_PAYOUT_AMOUNT } from "./constants";
 import {
   AffiliatePayoutError,
+  approveAffiliatePayout,
+  completeAffiliatePayout,
   getAffiliateBalance,
+  rejectAffiliatePayout,
   requestAffiliatePayout,
 } from "./payouts";
+
+const pendingPayment = {
+  id: "pay-1",
+  affiliateId: "aff-1",
+  amount: 120,
+  status: "PENDING" as const,
+  referralIds: ["ref-1", "ref-2"],
+  notes: null,
+  processedBy: null,
+  paidAt: null,
+  createdAt: new Date("2026-06-01T10:00:00.000Z"),
+};
 
 describe("getAffiliateBalance", () => {
   beforeEach(() => {
@@ -172,6 +193,185 @@ describe("requestAffiliatePayout", () => {
         status: "PENDING",
       })
     );
+  });
+});
+
+describe("approveAffiliatePayout", () => {
+  beforeEach(() => {
+    findUniquePayment.mockReset();
+    updatePayment.mockReset();
+    findUniquePayment.mockResolvedValue(pendingPayment);
+    updatePayment.mockResolvedValue({
+      ...pendingPayment,
+      processedBy: "admin-1",
+      notes: "Yönetici tarafından onaylandı",
+    });
+  });
+
+  it("records admin approval while keeping payout pending", async () => {
+    const payment = await approveAffiliatePayout("pay-1", "admin-1");
+
+    expect(updatePayment).toHaveBeenCalledWith({
+      where: { id: "pay-1" },
+      data: {
+        processedBy: "admin-1",
+        notes: "Yönetici tarafından onaylandı",
+      },
+    });
+    expect(payment).toMatchObject({
+      status: "PENDING",
+      processedBy: "admin-1",
+    });
+  });
+
+  it("rejects approval when payout is not found", async () => {
+    findUniquePayment.mockResolvedValue(null);
+
+    await expect(approveAffiliatePayout("missing", "admin-1")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    expect(updatePayment).not.toHaveBeenCalled();
+  });
+
+  it("rejects approval when payout is not pending", async () => {
+    findUniquePayment.mockResolvedValue({
+      ...pendingPayment,
+      status: "PAID",
+    });
+
+    await expect(approveAffiliatePayout("pay-1", "admin-1")).rejects.toMatchObject({
+      code: "INVALID_STATUS",
+    });
+    expect(updatePayment).not.toHaveBeenCalled();
+  });
+});
+
+describe("rejectAffiliatePayout", () => {
+  const tx = {
+    affiliateReferral: {
+      updateMany: updateManyReferral,
+    },
+    affiliatePayment: {
+      findUnique: findUniquePayment,
+      update: updatePayment,
+    },
+  } as unknown as Prisma.TransactionClient;
+
+  beforeEach(() => {
+    findUniquePayment.mockReset();
+    updatePayment.mockReset();
+    updateManyReferral.mockReset();
+    transaction.mockReset();
+
+    transaction.mockImplementation(async (callback) => callback(tx));
+    findUniquePayment.mockResolvedValue(pendingPayment);
+    updatePayment.mockResolvedValue({
+      ...pendingPayment,
+      status: "CANCELLED",
+      processedBy: "admin-1",
+      notes: "Yetersiz bilgi",
+    });
+  });
+
+  it("cancels payout and releases reserved referrals", async () => {
+    const payment = await rejectAffiliatePayout("pay-1", "admin-1", "Yetersiz bilgi");
+
+    expect(updateManyReferral).toHaveBeenCalledWith({
+      where: { id: { in: ["ref-1", "ref-2"] } },
+      data: { isPaid: false },
+    });
+    expect(updatePayment).toHaveBeenCalledWith({
+      where: { id: "pay-1" },
+      data: {
+        status: "CANCELLED",
+        processedBy: "admin-1",
+        notes: "Yetersiz bilgi",
+      },
+    });
+    expect(payment).toMatchObject({
+      status: "CANCELLED",
+      processedBy: "admin-1",
+    });
+  });
+
+  it("uses default rejection note when reason is omitted", async () => {
+    await rejectAffiliatePayout("pay-1", "admin-1");
+
+    expect(updatePayment).toHaveBeenCalledWith({
+      where: { id: "pay-1" },
+      data: {
+        status: "CANCELLED",
+        processedBy: "admin-1",
+        notes: "Yönetici tarafından reddedildi",
+      },
+    });
+  });
+
+  it("rejects cancellation when payout is not pending", async () => {
+    findUniquePayment.mockResolvedValue({
+      ...pendingPayment,
+      status: "CANCELLED",
+    });
+
+    await expect(rejectAffiliatePayout("pay-1", "admin-1")).rejects.toMatchObject({
+      code: "INVALID_STATUS",
+    });
+    expect(updateManyReferral).not.toHaveBeenCalled();
+    expect(updatePayment).not.toHaveBeenCalled();
+  });
+});
+
+describe("completeAffiliatePayout", () => {
+  beforeEach(() => {
+    findUniquePayment.mockReset();
+    updatePayment.mockReset();
+    findUniquePayment.mockResolvedValue(pendingPayment);
+    updatePayment.mockImplementation(async ({ data }) => ({
+      ...pendingPayment,
+      ...data,
+    }));
+  });
+
+  it("marks payout as paid with timestamp and optional notes", async () => {
+    const payment = await completeAffiliatePayout("pay-1", "admin-1", "Havale yapıldı");
+
+    expect(updatePayment).toHaveBeenCalledWith({
+      where: { id: "pay-1" },
+      data: expect.objectContaining({
+        status: "PAID",
+        processedBy: "admin-1",
+        notes: "Havale yapıldı",
+        paidAt: expect.any(Date),
+      }),
+    });
+    expect(payment).toMatchObject({
+      status: "PAID",
+      processedBy: "admin-1",
+      notes: "Havale yapıldı",
+      paidAt: expect.any(Date),
+    });
+  });
+
+  it("rejects completion when payout is not found", async () => {
+    findUniquePayment.mockResolvedValue(null);
+
+    await expect(completeAffiliatePayout("missing", "admin-1")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    expect(updatePayment).not.toHaveBeenCalled();
+  });
+
+  it("rejects completion when payout is already paid", async () => {
+    findUniquePayment.mockResolvedValue({
+      ...pendingPayment,
+      status: "PAID",
+      paidAt: new Date("2026-06-02T10:00:00.000Z"),
+    });
+
+    await expect(completeAffiliatePayout("pay-1", "admin-1")).rejects.toMatchObject({
+      code: "INVALID_STATUS",
+    });
+    expect(updatePayment).not.toHaveBeenCalled();
   });
 });
 

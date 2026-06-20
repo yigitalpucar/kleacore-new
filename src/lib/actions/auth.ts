@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { signIn, signOut } from "@/lib/auth";
+import { createLoginTwoFactorChallenge } from "@/lib/auth/two-factor-settings";
 import {
   AFFILIATE_REF_COOKIE,
   createCustomerUser,
@@ -15,7 +16,7 @@ import {
 } from "@/lib/validations/auth";
 import { sendTransactionalEmail } from "@/lib/mail";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
-import { hash } from "bcryptjs";
+import { compare, hash } from "bcryptjs";
 import { AuthError } from "next-auth";
 import { createHash, randomBytes } from "node:crypto";
 
@@ -85,6 +86,37 @@ export async function loginAction(formData: FormData) {
   }
 
   try {
+    const user = await db.user.findUnique({
+      where: { email: parsed.data.email },
+      select: {
+        id: true,
+        password: true,
+        status: true,
+      },
+    });
+
+    if (!user || user.status !== "ACTIVE") {
+      return { success: false, error: "E-posta veya şifre hatalı" };
+    }
+
+    const passwordValid = await compare(parsed.data.password, user.password);
+    if (!passwordValid) {
+      return { success: false, error: "E-posta veya şifre hatalı" };
+    }
+
+    const challengeToken = await createLoginTwoFactorChallenge(
+      parsed.data.email,
+      user.id
+    );
+
+    if (challengeToken) {
+      return {
+        success: false,
+        requires2FA: true,
+        challengeToken,
+      };
+    }
+
     await signIn("credentials", {
       email: parsed.data.email,
       password: parsed.data.password,
