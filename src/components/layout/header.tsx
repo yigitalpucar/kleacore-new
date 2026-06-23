@@ -338,35 +338,69 @@ export function Header() {
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[300px] sm:w-[400px] overflow-y-auto">
-              <SheetHeader>
+            <SheetContent
+              side="right"
+              className="flex w-[min(100vw-2rem,380px)] flex-col gap-0 overflow-hidden p-0 sm:w-[400px]"
+            >
+              <SheetHeader className="border-b px-6 py-5 text-left">
                 <SheetTitle className="text-left">
                   <Image
                     src="/logo.svg"
                     alt="KLEACORE"
                     width={120}
                     height={26}
-                    className="hidden dark:block h-6 w-auto"
+                    className="hidden h-6 w-auto dark:block"
                   />
                   <Image
                     src="/logo-light.svg"
                     alt="KLEACORE"
                     width={120}
                     height={26}
-                    className="dark:hidden h-6 w-auto [filter:brightness(0)_saturate(100%)]"
+                    className="h-6 w-auto [filter:brightness(0)_saturate(100%)] dark:hidden"
                   />
                 </SheetTitle>
               </SheetHeader>
-              <nav className="flex flex-col gap-4 mt-8">
-                {menuItems.map((menu) => (
+
+              <nav className="flex-1 overflow-y-auto px-4 py-4">
+                <div className="mb-4 grid grid-cols-2 gap-2">
+                  <Button variant="outline" size="sm" className="h-11" asChild>
+                    <Link href="/domain/kayit" onClick={() => setIsOpen(false)}>
+                      Domain Sorgula
+                    </Link>
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-11" asChild>
+                    <Link href="/hosting/linux" onClick={() => setIsOpen(false)}>
+                      Hosting
+                    </Link>
+                  </Button>
+                </div>
+
+                {menuItems.map((menu, index) => (
                   <MobileNavSection
                     key={menu.title}
                     title={menu.title}
                     items={menu.items}
+                    defaultOpen={index === 0}
                     onClose={() => setIsOpen(false)}
                   />
                 ))}
               </nav>
+
+              <div className="mt-auto border-t bg-muted/30 p-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="outline" className="h-11" asChild>
+                    <Link href="/musteri/giris" onClick={() => setIsOpen(false)}>
+                      Giriş Yap
+                    </Link>
+                  </Button>
+                  <Button className="h-11" asChild>
+                    <Link href="/sepet" onClick={() => setIsOpen(false)}>
+                      Sepet
+                      {hasHydrated && totalItems > 0 ? ` (${totalItems})` : ""}
+                    </Link>
+                  </Button>
+                </div>
+              </div>
             </SheetContent>
           </Sheet>
         </div>
@@ -470,6 +504,7 @@ function MobileNavSection({
   title,
   items,
   onClose,
+  defaultOpen = false,
 }: {
   title: string;
   items: {
@@ -480,14 +515,19 @@ function MobileNavSection({
     badge?: string;
   }[];
   onClose: () => void;
+  defaultOpen?: boolean;
 }) {
-  const [isOpen, setIsOpen] = React.useState(false);
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+  const sectionId = `mobile-nav-${title.toLowerCase().replace(/\s+/g, "-")}`;
 
   return (
-    <div>
+    <div className="border-b border-border/60 py-1 last:border-b-0">
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between px-2 py-1 text-sm font-medium hover:text-primary transition-colors"
+        aria-expanded={isOpen}
+        aria-controls={sectionId}
+        className="flex min-h-11 w-full items-center justify-between rounded-lg px-2 text-base font-medium transition-colors hover:bg-accent"
       >
         {title}
         <ChevronDown
@@ -497,29 +537,30 @@ function MobileNavSection({
           )}
         />
       </button>
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {isOpen && (
           <motion.div
+            id={sectionId}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="mt-2 flex flex-col gap-1 overflow-hidden"
+            className="mt-1 flex flex-col gap-1 overflow-hidden pb-2"
           >
             {items.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 onClick={onClose}
               >
-                <item.icon className="h-4 w-4" />
-                <span>{item.title}</span>
-                {item.badge && (
-                  <span className="ml-auto px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary">
+                <item.icon className="h-4 w-4 shrink-0 text-primary" />
+                <span className="font-medium">{item.title}</span>
+                {item.badge ? (
+                  <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
                     {item.badge}
                   </span>
-                )}
+                ) : null}
               </Link>
             ))}
           </motion.div>

@@ -5,13 +5,13 @@
 | Faz | Durum | İlerleme |
 |-----|-------|----------|
 | Faz 1: Temel Kurulum | ✅ Tamamlandı | 100% |
-| Faz 2: Ana Sayfa | 🔄 Devam Ediyor | 30% |
-| Faz 3: Domain Sayfaları | ⏳ Bekliyor | 0% |
-| Faz 4: Hosting Sayfaları | ⏳ Bekliyor | 0% |
-| Faz 5: Sunucu & Veri Merkezi | ⏳ Bekliyor | 0% |
-| Faz 6: Kurumsal Sayfalar | ⏳ Bekliyor | 0% |
-| Faz 7: Müşteri & Yasal | ⏳ Bekliyor | 0% |
-| Faz 8: Polish & Deploy | ⏳ Bekliyor | 0% |
+| Faz 2: Ana Sayfa | ✅ Tamamlandı | 100% |
+| Faz 3: Domain Sayfaları | 🔄 Devam Ediyor | 60% |
+| Faz 4: Hosting Sayfaları | ✅ Tamamlandı | 100% |
+| Faz 5: Sunucu & Veri Merkezi | ✅ Tamamlandı | 100% |
+| Faz 6: Kurumsal Sayfalar | ✅ Tamamlandı | 100% |
+| Faz 7: Müşteri & Yasal | 🔄 Devam Ediyor | 80% |
+| Faz 8: Polish & Deploy | 🔄 Devam Ediyor | 85% |
 
 ---
 
@@ -70,6 +70,23 @@
 
 - **Build Durumu**: ✅ Başarılı
 - **Uyarılar**: Particles componentinde ESLint dependency uyarısı (çalışmayı etkilemiyor)
+
+---
+
+### 2026-06-24 — Frontend Polish
+
+- **Yapılan**:
+  - `PageHero` + `TrustStrip` bileşenleri hosting/sunucu sayfalarına uygulandı
+  - Ana sayfaya `TrustStrip` eklendi (hero → domain arama arası)
+  - Hero slider motion polish (`use-reduced-motion`, Ken Burns, accent renkler)
+  - Mobil menü UX iyileştirmeleri (quick links, sticky footer, touch targets)
+  - Kurumsal sayfalar: hakkımızda timeline, kariyer istatistik düzeltmesi, iletişim dead link fix + yanıt süreleri
+  - `layout.tsx` — `images.unsplash.com` preconnect/dns-prefetch
+  - Build ✅ başarılı
+
+- **Bekleyen**:
+  - Lighthouse 90+ doğrulaması (production ortamında manuel audit)
+  - Staging DNS (`staging.kleacore.com` → 502)
 
 ---
 

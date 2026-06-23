@@ -5,6 +5,8 @@ import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { PageHero } from "@/components/sections/page-hero";
+import { TrustStrip } from "@/components/sections/trust-strip";
 import { ServerFeatures } from "@/components/sunucu/server-features";
 import { ServerFaq } from "@/components/sunucu/server-faq";
 import { Cpu, HardDrive, Globe, Shield, Zap, Check, ChevronDown, Headphones, MapPin } from "lucide-react";
@@ -114,14 +116,19 @@ export const Content = ({ products }: ContentProps) => {
     <div className="flex min-h-screen flex-col">
       <Topbar /><Header />
       <main className="flex-1">
-        <section className="py-16 md:py-24">
+        <PageHero
+          badge="Ölçeklenebilir Bulut"
+          badgeIcon={Cpu}
+          title="Bulut Sunucu"
+          titleHighlight="Paketleri"
+          description="Esnek, ölçeklenebilir ve yüksek performanslı bulut sunucu çözümleri. İhtiyacınıza göre anında kaynak yönetimi."
+          accent="violet"
+        />
+
+        <TrustStrip />
+
+        <section className="py-12 md:py-16">
           <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Bulut Sunucu Paketleri</h1>
-                <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">Esnek, ölçeklenebilir ve yüksek performanslı bulut sunucu çözümleri. İhtiyacınıza göre anında kaynak yönetimi.</p>
-              </div>
-            </BlurFade>
             <BlurFade delay={0.15} inView>
               <div className="flex justify-center mb-6">
                 <div className="inline-flex items-center gap-2 p-1 rounded-xl border bg-muted/50">

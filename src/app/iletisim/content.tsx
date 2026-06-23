@@ -1,7 +1,9 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { PageHero } from "@/components/sections/page-hero";
 import {
   MapPin,
   Mail,
@@ -58,18 +60,24 @@ const supportChannels = [
   },
   {
     icon: MessageSquare,
-    title: "Canlı Sohbet",
-    description: "Anlık yardım alın",
-    action: "Sohbet Başlat",
-    href: "#",
+    title: "Online Destek",
+    description: "Destek merkezinden yardım alın",
+    action: "Destek Merkezi",
+    href: "/musteri/destek",
   },
   {
     icon: Building2,
     title: "Kurumsal Satış",
     description: "Özel çözümler için",
     action: "Teklif Al",
-    href: "#",
+    href: "/iletisim?konu=Kurumsal Satış Teklifi",
   },
+];
+
+const responseTimes = [
+  { channel: "Teknik Destek", time: "< 2 saat", note: "7/24 aktif" },
+  { channel: "Satış Talepleri", time: "< 4 saat", note: "Hafta içi 09:00–18:00" },
+  { channel: "Genel İletişim", time: "< 24 saat", note: "Tüm kanallar" },
 ];
 
 const departments = [
@@ -98,6 +106,8 @@ const features = [
 ];
 
 export function IletisimContent() {
+  const searchParams = useSearchParams();
+  const defaultSubject = searchParams.get("konu") ?? "";
   const [isSuccess, setIsSuccess] = useState(false);
   const [state, formAction, isPending] = useActionState(
     async (_prev: { success: boolean; error?: string } | null, formData: FormData) => {
@@ -123,27 +133,17 @@ export function IletisimContent() {
 
   return (
     <>
-      {/* Hero */}
-      <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
+      <PageHero
+        badge="7/24 Destek"
+        badgeIcon={MessageSquare}
+        title="Bize Ulaşın"
+        description="Sorularınız için bize ulaşın. Sizin dilinizden konuşan ekibimiz yardımcı olmaktan mutluluk duyacaktır."
+        accent="emerald"
+      />
+
+      <section className="border-b bg-muted/30 py-12">
         <div className="container">
           <BlurFade delay={0.1} inView>
-            <div className="text-center mb-12">
-              <div className="inline-flex items-center gap-2 rounded-full border bg-background px-4 py-1.5 text-sm font-medium mb-4">
-                <MessageSquare className="h-4 w-4 text-primary" />
-                7/24 Destek
-              </div>
-              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                Bize Ulaşın
-              </h1>
-              <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                Sorularınız için bize ulaşın. Sizin dilinizden konuşan ekibimiz
-                yardımcı olmaktan mutluluk duyacaktır.
-              </p>
-            </div>
-          </BlurFade>
-
-          {/* Contact Info Cards */}
-          <BlurFade delay={0.2} inView>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
               {contactInfo.map((info) => (
                 <Card key={info.title} className="text-center hover:border-primary/50 transition-colors">
@@ -168,10 +168,9 @@ export function IletisimContent() {
         </div>
       </section>
 
-      {/* Features */}
-      <section className="py-12 border-b bg-muted/30">
+      <section className="py-12 border-b">
         <div className="container">
-          <div className="grid gap-8 md:grid-cols-3 max-w-4xl mx-auto">
+          <div className="grid gap-8 md:grid-cols-3 max-w-4xl mx-auto mb-10">
             {features.map((feature) => (
               <div key={feature.title} className="flex items-start gap-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
@@ -184,6 +183,25 @@ export function IletisimContent() {
               </div>
             ))}
           </div>
+
+          <BlurFade delay={0.1} inView>
+            <div className="max-w-3xl mx-auto">
+              <h2 className="text-center text-xl font-semibold mb-6">
+                Yanıt Süreleri
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-3">
+                {responseTimes.map((item) => (
+                  <Card key={item.channel}>
+                    <CardContent className="p-4 text-center">
+                      <p className="text-sm text-muted-foreground">{item.channel}</p>
+                      <p className="text-2xl font-bold text-primary mt-1">{item.time}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{item.note}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </BlurFade>
         </div>
       </section>
 
@@ -259,6 +277,8 @@ export function IletisimContent() {
                             id="subject"
                             name="subject"
                             placeholder="Mesaj konusu"
+                            defaultValue={defaultSubject}
+                            key={defaultSubject}
                             required
                             disabled={isPending}
                           />

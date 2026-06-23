@@ -8,7 +8,10 @@ import { PricingCard, type HostingPlan } from "@/components/hosting/pricing-card
 import { BillingToggle } from "@/components/hosting/billing-toggle";
 import { FeatureComparison } from "@/components/hosting/feature-comparison";
 import { HostingFeatures } from "@/components/hosting/hosting-features";
+import { PageHero } from "@/components/sections/page-hero";
+import { TrustStrip } from "@/components/sections/trust-strip";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { Server } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Accordion,
@@ -86,28 +89,21 @@ export const Content = ({ products }: ContentProps) => {
       <Topbar />
       <Header />
       <main className="flex-1">
-        {/* Hero */}
-        <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
+        <PageHero
+          badge="NVMe SSD + LiteSpeed"
+          badgeIcon={Server}
+          title="Linux Web Hosting"
+          description="NVMe SSD diskler, LiteSpeed web server ve cPanel ile güçlü, hızlı ve güvenilir hosting çözümleri."
+          accent="emerald"
+        >
+          <BillingToggle isYearly={isYearly} onToggle={setIsYearly} />
+        </PageHero>
+
+        <TrustStrip />
+
+        <section className="py-12 md:py-16">
           <div className="container">
             <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                  Linux Web Hosting
-                </h1>
-                <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                  NVMe SSD diskler, LiteSpeed web server ve cPanel ile güçlü,
-                  hızlı ve güvenilir hosting çözümleri.
-                </p>
-                <BillingToggle
-                  isYearly={isYearly}
-                  onToggle={setIsYearly}
-                  className="mt-8"
-                />
-              </div>
-            </BlurFade>
-
-            {/* Pricing Cards */}
-            <BlurFade delay={0.2} inView>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
                 {plans.map((plan) => (
                   <PricingCard key={plan.name} plan={plan} isYearly={isYearly} />

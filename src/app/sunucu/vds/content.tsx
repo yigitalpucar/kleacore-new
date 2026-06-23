@@ -5,6 +5,8 @@ import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { PageHero } from "@/components/sections/page-hero";
+import { TrustStrip } from "@/components/sections/trust-strip";
 import { ServerFeatures } from "@/components/sunucu/server-features";
 import { ServerFaq } from "@/components/sunucu/server-faq";
 import {
@@ -195,20 +197,19 @@ export const Content = ({ products }: ContentProps) => {
       <Topbar />
       <Header />
       <main className="flex-1">
-        <section className="py-16 md:py-24">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-                  VDS Sunucu Paketleri
-                </h1>
-                <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Yeni nesil donanımlara sahip sunucular ile güçlü ve ekonomik VDS sunucu hizmetine
-                  KLEACORE ile sahip olun.
-                </p>
-              </div>
-            </BlurFade>
+        <PageHero
+          badge="NVMe VDS"
+          badgeIcon={Cpu}
+          title="VDS Sunucu"
+          titleHighlight="Paketleri"
+          description="Yeni nesil donanımlara sahip sunucular ile güçlü ve ekonomik VDS sunucu hizmetine KLEACORE ile sahip olun."
+          accent="emerald"
+        />
 
+        <TrustStrip />
+
+        <section className="py-12 md:py-16">
+          <div className="container">
             <BlurFade delay={0.15} inView>
               <div className="flex justify-center mb-6">
                 <div className="inline-flex items-center gap-2 p-1 rounded-xl border bg-muted/50">

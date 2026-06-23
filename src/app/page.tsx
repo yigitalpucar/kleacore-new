@@ -2,6 +2,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { HeroSlider } from "@/components/sections/hero-slider";
+import { TrustStrip } from "@/components/sections/trust-strip";
 import { HostingSolutions } from "@/components/sections/hosting-solutions";
 import { DomainSearchSection } from "@/components/sections/domain-search-section";
 import { getProductsBySubType } from "@/lib/dal/products";
@@ -37,6 +38,7 @@ export default async function Home() {
       <Header />
       <main className="flex-1">
         <HeroSlider />
+        <TrustStrip />
         <DomainSearchSection tlds={featuredTlds} />
         <HostingSolutions linuxPlans={linuxPlans} vdsPlans={vdsPlans} />
       </main>

@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { motion, useInView, Variants } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useReducedMotion } from "@/lib/hooks/use-reduced-motion";
 
 interface BlurFadeProps {
   children: React.ReactNode;
@@ -31,13 +32,28 @@ export function BlurFade({
   blur = "6px",
 }: BlurFadeProps) {
   const ref = useRef(null);
+  const reducedMotion = useReducedMotion();
   const inViewResult = useInView(ref, { once: true, margin: inViewMargin as any });
   const isInView = !inView || inViewResult;
-  const defaultVariants: Variants = {
-    hidden: { y: yOffset, opacity: 0, filter: `blur(${blur})` },
-    visible: { y: -yOffset, opacity: 1, filter: `blur(0px)` },
-  };
+  const defaultVariants: Variants = reducedMotion
+    ? {
+        hidden: { opacity: 0 },
+        visible: { opacity: 1 },
+      }
+    : {
+        hidden: { y: yOffset, opacity: 0, filter: `blur(${blur})` },
+        visible: { y: -yOffset, opacity: 1, filter: "blur(0px)" },
+      };
   const combinedVariants = variant || defaultVariants;
+
+  if (reducedMotion) {
+    return (
+      <div ref={ref} className={cn(className, isInView ? "opacity-100" : "opacity-0")}>
+        {children}
+      </div>
+    );
+  }
+
   return (
     <motion.div
       ref={ref}

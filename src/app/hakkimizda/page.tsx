@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { NumberTicker } from "@/components/magicui/number-ticker";
+import { PageHero } from "@/components/sections/page-hero";
 import {
   Building2,
   Target,
@@ -49,6 +50,33 @@ const stats = [
   },
 ];
 
+const milestones = [
+  {
+    year: "2026 Q1",
+    title: "KLEACORE Kuruluşu",
+    description:
+      "KLEAWORK DIGITAL LLC bünyesinde, modern hosting standartlarıyla yola çıktık.",
+  },
+  {
+    year: "2026 Q1",
+    title: "Altyapı Lansmanı",
+    description:
+      "NVMe SSD, LiteSpeed ve yedekli ağ altyapısı ile hosting ve sunucu hizmetlerini yayına aldık.",
+  },
+  {
+    year: "2026 Q2",
+    title: "Müşteri Paneli",
+    description:
+      "Domain, hosting ve sunucu yönetimini tek panelden sunan müşteri altyapısını devreye aldık.",
+  },
+  {
+    year: "2026",
+    title: "Büyüme Hedefi",
+    description:
+      "Türkiye ve global pazarda güvenilir, hızlı ve şeffaf bir teknoloji ortağı olmayı hedefliyoruz.",
+  },
+];
+
 const values = [
   {
     icon: Lightbulb,
@@ -82,30 +110,18 @@ export default function HakkimizdaPage() {
       <Topbar />
       <Header />
       <main className="flex-1">
-        {/* Hero */}
-        <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
+        <PageHero
+          badge="2026'da Kurulan"
+          title="İşinizi Dijitalde Büyüten"
+          titleHighlight="Teknoloji Ortağınız"
+          description="Dijital dünyanın hızına ve dinamizmine uyum sağlamak amacıyla temellerimizi attık. Yalnızca bir yer sağlayıcı değil, işinizi dijitalde büyüten teknoloji ortağınız olmayı hedefliyoruz."
+          accent="default"
+        />
+
+        <section className="border-b bg-muted/30 py-12">
           <div className="container">
             <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <div className="inline-flex items-center gap-2 rounded-full border bg-background px-4 py-1.5 text-sm font-medium mb-4">
-                  <Building2 className="h-4 w-4 text-primary" />
-                  2026&apos;da Kurulan
-                </div>
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                  İşinizi Dijitalde Büyüten
-                  <br />
-                  <span className="text-primary">Teknoloji Ortağınız</span>
-                </h1>
-                <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Dijital dünyanın hızına ve dinamizmine uyum sağlamak amacıyla temellerimizi attık.
-                  Yalnızca bir yer sağlayıcı değil, işinizi dijitalde büyüten teknoloji ortağınız olmayı hedefliyoruz.
-                </p>
-              </div>
-            </BlurFade>
-
-            {/* Stats */}
-            <BlurFade delay={0.2} inView>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
+              <div className="grid grid-cols-2 gap-6 md:grid-cols-4 max-w-4xl mx-auto">
                 {stats.map((stat) => (
                   <Card key={stat.label} className="text-center">
                     <CardContent className="p-6">
@@ -172,8 +188,56 @@ export default function HakkimizdaPage() {
           </div>
         </section>
 
-        {/* Mission & Vision */}
+        {/* Timeline */}
         <section className="py-16 md:py-24 bg-muted/30">
+          <div className="container">
+            <BlurFade delay={0.1} inView>
+              <div className="text-center mb-12">
+                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                  Yolculuğumuz
+                </h2>
+                <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
+                  2026&apos;da kurulan KLEACORE&apos;un kısa ama hızlı büyüme hikayesi
+                </p>
+              </div>
+            </BlurFade>
+
+            <BlurFade delay={0.2} inView>
+              <div className="relative max-w-3xl mx-auto">
+                <div className="absolute left-4 top-0 bottom-0 w-px bg-border md:left-1/2 md:-translate-x-px" />
+                <div className="space-y-8">
+                  {milestones.map((item, index) => (
+                    <div
+                      key={item.title}
+                      className={`relative flex flex-col gap-4 md:flex-row md:items-center ${
+                        index % 2 === 0 ? "md:flex-row-reverse" : ""
+                      }`}
+                    >
+                      <div className="hidden md:block md:w-1/2" />
+                      <div className="absolute left-4 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border bg-background md:left-1/2">
+                        <Clock className="h-4 w-4 text-primary" />
+                      </div>
+                      <Card className={`ml-12 md:ml-0 md:w-1/2 ${index % 2 === 0 ? "md:pr-12" : "md:pl-12 md:ml-auto"}`}>
+                        <CardContent className="p-6">
+                          <p className="text-sm font-medium text-primary mb-1">
+                            {item.year}
+                          </p>
+                          <h3 className="font-semibold text-lg mb-2">{item.title}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {item.description}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </BlurFade>
+          </div>
+        </section>
+
+        {/* Mission & Vision */}
+        <section className="py-16 md:py-24">
           <div className="container">
             <BlurFade delay={0.1} inView>
               <div className="text-center mb-12">

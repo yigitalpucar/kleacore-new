@@ -2,6 +2,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { PageHero } from "@/components/sections/page-hero";
 import {
   Briefcase,
   MapPin,
@@ -124,12 +125,10 @@ const culture = [
 ];
 
 const departments = [
-  { name: "Yazılım", positions: 8 },
-  { name: "Altyapı", positions: 5 },
-  { name: "Destek", positions: 4 },
-  { name: "Satış", positions: 3 },
-  { name: "Pazarlama", positions: 2 },
-  { name: "İnsan Kaynakları", positions: 1 },
+  { name: "Yazılım", positions: 2 },
+  { name: "Altyapı", positions: 2 },
+  { name: "Destek", positions: 1 },
+  { name: "Satış", positions: 1 },
 ];
 
 export default function KariyerPage() {
@@ -138,43 +137,32 @@ export default function KariyerPage() {
       <Topbar />
       <Header />
       <main className="flex-1">
-        {/* Hero */}
-        <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
+        <PageHero
+          badge={`${openPositions.length} Açık Pozisyon`}
+          title="Kariyer"
+          description="2026'da kurulan yenilikçi hosting ekibimize katılın. Hibrit ve uzaktan çalışma imkanıyla birlikte büyüyoruz."
+          accent="sky"
+        />
+
+        <section className="border-b bg-muted/30 py-12">
           <div className="container">
             <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <div className="inline-flex items-center gap-2 rounded-full border bg-background px-4 py-1.5 text-sm font-medium mb-4">
-                  <Briefcase className="h-4 w-4 text-primary" />
-                  {openPositions.length} Açık Pozisyon
-                </div>
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                  Kariyer
-                </h1>
-                <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Türkiye&apos;nin lider hosting şirketinde kariyer fırsatlarını keşfedin.
-                  Yetenekli ekibimize katılın!
-                </p>
-              </div>
-            </BlurFade>
-
-            {/* Stats */}
-            <BlurFade delay={0.2} inView>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto">
+              <div className="grid grid-cols-2 gap-6 md:grid-cols-4 max-w-3xl mx-auto">
                 <div className="text-center p-4 rounded-xl bg-card border">
-                  <p className="text-3xl font-bold text-primary">120+</p>
-                  <p className="text-sm text-muted-foreground">Çalışan</p>
+                  <p className="text-3xl font-bold text-primary">15+</p>
+                  <p className="text-sm text-muted-foreground">Ekip Üyesi</p>
                 </div>
                 <div className="text-center p-4 rounded-xl bg-card border">
-                  <p className="text-3xl font-bold text-primary">6</p>
+                  <p className="text-3xl font-bold text-primary">4</p>
                   <p className="text-sm text-muted-foreground">Departman</p>
                 </div>
                 <div className="text-center p-4 rounded-xl bg-card border">
-                  <p className="text-3xl font-bold text-primary">15</p>
-                  <p className="text-sm text-muted-foreground">Yıllık Deneyim</p>
+                  <p className="text-3xl font-bold text-primary">2026</p>
+                  <p className="text-sm text-muted-foreground">Kuruluş Yılı</p>
                 </div>
                 <div className="text-center p-4 rounded-xl bg-card border">
-                  <p className="text-3xl font-bold text-primary">4.6/5</p>
-                  <p className="text-sm text-muted-foreground">Çalışan Memnuniyeti</p>
+                  <p className="text-3xl font-bold text-primary">{openPositions.length}</p>
+                  <p className="text-sm text-muted-foreground">Açık Pozisyon</p>
                 </div>
               </div>
             </BlurFade>
@@ -354,12 +342,14 @@ export default function KariyerPage() {
                   sizi arayalım.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Button size="lg" className="px-8">
-                    Açık Başvuru Yap
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                  <Button size="lg" className="px-8" asChild>
+                    <Link href="/iletisim?konu=Açık Kariyer Başvurusu">
+                      Açık Başvuru Yap
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
                   </Button>
-                  <Button size="lg" variant="outline" className="px-8">
-                    careers@kleacore.com
+                  <Button size="lg" variant="outline" className="px-8" asChild>
+                    <a href="mailto:careers@kleacore.com">careers@kleacore.com</a>
                   </Button>
                 </div>
               </div>

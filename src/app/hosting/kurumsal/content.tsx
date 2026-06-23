@@ -7,7 +7,10 @@ import { Footer } from "@/components/layout/footer";
 import { PricingCard, type HostingPlan } from "@/components/hosting/pricing-card";
 import { BillingToggle } from "@/components/hosting/billing-toggle";
 import { HostingFeatures } from "@/components/hosting/hosting-features";
+import { PageHero } from "@/components/sections/page-hero";
+import { TrustStrip } from "@/components/sections/trust-strip";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { Building2 } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -83,28 +86,21 @@ export const Content = ({ products }: ContentProps) => {
       <Topbar />
       <Header />
       <main className="flex-1">
-        {/* Hero */}
-        <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
+        <PageHero
+          badge="Kurumsal Çözümler"
+          badgeIcon={Building2}
+          title="Kurumsal Web Hosting"
+          description="Büyük ölçekli projeler için yüksek performans, güvenlik ve 7/24 öncelikli destek."
+          accent="violet"
+        >
+          <BillingToggle isYearly={isYearly} onToggle={setIsYearly} />
+        </PageHero>
+
+        <TrustStrip />
+
+        <section className="py-12 md:py-16">
           <div className="container">
             <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                  Kurumsal Web Hosting
-                </h1>
-                <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Büyük ölçekli projeler için yüksek performans, güvenlik ve
-                  7/24 öncelikli destek.
-                </p>
-                <BillingToggle
-                  isYearly={isYearly}
-                  onToggle={setIsYearly}
-                  className="mt-8"
-                />
-              </div>
-            </BlurFade>
-
-            {/* Pricing */}
-            <BlurFade delay={0.2} inView>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
                 {plans.map((plan) => (
                   <PricingCard key={plan.name} plan={plan} isYearly={isYearly} />
