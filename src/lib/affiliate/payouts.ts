@@ -90,6 +90,21 @@ async function selectReferralsForPayout(
   return selectedIds;
 }
 
+function normalizeIban(value: string | null | undefined) {
+  return value?.replace(/\s+/g, "").toUpperCase() ?? "";
+}
+
+export function isValidPayoutIban(value: string | null | undefined) {
+  const iban = normalizeIban(value);
+  if (iban.length < 15) {
+    return false;
+  }
+  if (iban.startsWith("TR") && iban.length !== 26) {
+    return false;
+  }
+  return true;
+}
+
 export async function requestAffiliatePayout(affiliateId: string, amount: number) {
   const normalizedAmount = roundMoney(amount);
 
@@ -101,6 +116,18 @@ export async function requestAffiliatePayout(affiliateId: string, amount: number
     throw new AffiliatePayoutError(
       `Minimum ödeme talep tutarı ${MIN_PAYOUT_AMOUNT} TL'dir`,
       "BELOW_MINIMUM"
+    );
+  }
+
+  const affiliate = await db.user.findUnique({
+    where: { id: affiliateId },
+    select: { affiliatePayoutIban: true },
+  });
+
+  if (!isValidPayoutIban(affiliate?.affiliatePayoutIban)) {
+    throw new AffiliatePayoutError(
+      "Ödeme talebi için geçerli bir IBAN tanımlamanız gerekiyor",
+      "INVALID_AMOUNT"
     );
   }
 
@@ -215,6 +242,10 @@ export async function completeAffiliatePayout(
     throw new AffiliatePayoutError("Bu talep işlenemez", "INVALID_STATUS");
   }
 
+  if (!payment.processedBy) {
+    throw new AffiliatePayoutError("Ödeme talebi önce onaylanmalıdır", "INVALID_STATUS");
+  }
+
   const now = new Date();
 
   return db.affiliatePayment.update({
@@ -267,6 +298,7 @@ export async function listAffiliatePayouts(status?: "PENDING" | "PAID" | "CANCEL
           surname: true,
           email: true,
           companyName: true,
+          affiliatePayoutIban: true,
         },
       },
     },

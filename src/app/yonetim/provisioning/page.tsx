@@ -13,8 +13,12 @@ function readStatusFilter(
   const value = searchParams.status;
   const status = typeof value === "string" ? value : undefined;
 
-  if (!status || status === "all") {
+  if (!status || status === "active") {
     return "all";
+  }
+
+  if (status === "all") {
+    return ["FAILED", "PENDING", "PROCESSING", "COMPLETED"];
   }
 
   const allowed: ProvisioningJobStatus[] = ["FAILED", "PENDING", "PROCESSING", "COMPLETED"];
@@ -33,10 +37,15 @@ export default async function ProvisioningPage({
   const sp = await searchParams;
   const statusFilter = readStatusFilter(sp);
 
+  const jobStatuses =
+    statusFilter === "all"
+      ? ["FAILED", "PENDING", "PROCESSING"]
+      : Array.isArray(statusFilter)
+        ? statusFilter
+        : ["FAILED", "PENDING", "PROCESSING"];
+
   const [jobs, stats] = await Promise.all([
-    getProvisioningJobsForAdmin(
-      statusFilter === "all" ? ["FAILED", "PENDING", "PROCESSING"] : statusFilter
-    ),
+    getProvisioningJobsForAdmin(jobStatuses as ProvisioningJobStatus[]),
     getProvisioningJobStats(),
   ]);
 

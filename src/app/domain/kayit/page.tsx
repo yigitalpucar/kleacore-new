@@ -3,6 +3,8 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { DomainSearch } from "@/components/domain/domain-search";
 import { TldPricing } from "@/components/domain/tld-pricing";
+import { PageHero } from "@/components/sections/page-hero";
+import { TrustStrip, domainTrustItems } from "@/components/sections/trust-strip";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import {
   Accordion,
@@ -41,36 +43,29 @@ export default async function DomainKayitPage() {
       <Topbar />
       <Header />
       <main className="flex-1">
-        {/* Hero */}
-        <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
+        <PageHero
+          badge="500+ Domain Uzantısı"
+          badgeIcon={Globe}
+          title="Domain Kaydı"
+          description="500+ uzantı arasından hayalinizdeki domain adını bulun ve kaydedin. Hemen arama yapın!"
+        >
+          <div className="max-w-4xl mx-auto">
+            <DomainSearch
+              tlds={tlds.slice(0, 12).map((tld) => ({
+                ext: tld.ext,
+                price: tld.registerPrice,
+                renewPrice: tld.renewPrice,
+              }))}
+            />
+          </div>
+        </PageHero>
+
+        <TrustStrip items={domainTrustItems} />
+
+        <section className="py-12 md:py-16 border-b">
           <div className="container">
             <BlurFade delay={0.1} inView>
-              <div className="text-center mb-10">
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                  Domain Kaydı
-                </h1>
-                <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                  500+ uzantı arasından hayalinizdeki domain adını bulun ve
-                  kaydedin. Hemen arama yapın!
-                </p>
-              </div>
-            </BlurFade>
-
-            <BlurFade delay={0.2} inView>
-              <div className="max-w-4xl mx-auto">
-                <DomainSearch
-                  tlds={tlds.slice(0, 12).map((tld) => ({
-                    ext: tld.ext,
-                    price: tld.registerPrice,
-                    renewPrice: tld.renewPrice,
-                  }))}
-                />
-              </div>
-            </BlurFade>
-
-            {/* Features */}
-            <BlurFade delay={0.3} inView>
-              <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
                 {features.map((feature) => (
                   <div
                     key={feature.title}

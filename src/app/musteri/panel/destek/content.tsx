@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   Clock,
   ChevronRight,
-  User,
   Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -88,6 +87,7 @@ const departmentLabels: Record<string, string> = {
 const filterOptions = [
   { value: "all", label: "Tümü" },
   { value: "OPEN", label: "Açık" },
+  { value: "WAITING", label: "Beklemede" },
   { value: "CUSTOMER_REPLY", label: "Yanıt Bekliyor" },
   { value: "ADMIN_REPLY", label: "Yanıtlandı" },
   { value: "CLOSED", label: "Kapalı" },
@@ -107,13 +107,15 @@ export function DestekListContent({ tickets }: DestekListContentProps) {
 
   const stats = {
     total: tickets.length,
-    open: tickets.filter(
-      (t) => t.status === "OPEN" || t.status === "ADMIN_REPLY"
-    ).length,
+    open: tickets.filter((t) => t.status === "OPEN").length,
+    answered: tickets.filter((t) => t.status === "ADMIN_REPLY").length,
     waiting: tickets.filter(
       (t) => t.status === "CUSTOMER_REPLY" || t.status === "WAITING"
     ).length,
   };
+
+  const hasTickets = tickets.length > 0;
+  const isFilteredEmpty = hasTickets && filteredTickets.length === 0;
 
   return (
     <div className="space-y-6">
@@ -137,7 +139,7 @@ export function DestekListContent({ tickets }: DestekListContentProps) {
 
       {/* Stats */}
       <BlurFade delay={0.15} inView>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -154,12 +156,25 @@ export function DestekListContent({ tickets }: DestekListContentProps) {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <MessageSquare className="h-5 w-5 text-green-500" />
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <MessageSquare className="h-5 w-5 text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Açık Talepler</p>
+                  <p className="text-sm text-muted-foreground">Açık</p>
                   <p className="text-2xl font-bold">{stats.open}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-green-500/10">
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Yanıtlandı</p>
+                  <p className="text-2xl font-bold">{stats.answered}</p>
                 </div>
               </div>
             </CardContent>
@@ -185,7 +200,7 @@ export function DestekListContent({ tickets }: DestekListContentProps) {
         <Card>
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {filterOptions.map((option) => (
                   <Button
                     key={option.value}
@@ -270,7 +285,7 @@ export function DestekListContent({ tickets }: DestekListContentProps) {
                         {status.label}
                       </div>
                       <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
-                        <User className="h-3 w-3" />
+                        <Clock className="h-3 w-3" />
                         {new Date(ticket.updatedAt).toLocaleDateString("tr-TR")}
                       </p>
                     </div>
@@ -280,7 +295,17 @@ export function DestekListContent({ tickets }: DestekListContentProps) {
                 );
               })}
 
-              {filteredTickets.length === 0 && (
+              {!hasTickets && (
+                <div className="text-center py-10">
+                  <Headphones className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground mb-4">Henüz destek talebiniz bulunmuyor.</p>
+                  <Button asChild>
+                    <Link href="/musteri/panel/destek/yeni">Yeni Talep Oluştur</Link>
+                  </Button>
+                </div>
+              )}
+
+              {isFilteredEmpty && (
                 <div className="text-center py-8 text-muted-foreground">
                   Aramanızla eşleşen talep bulunamadı.
                 </div>

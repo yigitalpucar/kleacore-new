@@ -181,3 +181,94 @@ export async function queueEInvoiceDraft(invoiceId: string) {
 
   return record;
 }
+
+export async function retryEInvoiceRecord(recordId: string) {
+  const config = await getEInvoiceConfig();
+
+  if (!isEInvoiceConfigured(config)) {
+    throw new Error("EFATURA_NOT_CONFIGURED");
+  }
+
+  const record = await db.eInvoiceRecord.findUnique({
+    where: { id: recordId },
+    include: {
+      invoice: {
+        include: {
+          items: true,
+          customer: {
+            select: {
+              name: true,
+              surname: true,
+              email: true,
+              phone: true,
+              customerType: true,
+              companyName: true,
+              taxNumber: true,
+              taxOffice: true,
+              address: true,
+              city: true,
+              country: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!record) {
+    throw new Error("EFATURA_RECORD_NOT_FOUND");
+  }
+
+  if (!["FAILED", "DRAFT", "QUEUED"].includes(record.status)) {
+    throw new Error("EFATURA_RECORD_NOT_RETRYABLE");
+  }
+
+  if (record.invoice.status !== "PAID") {
+    throw new Error("INVOICE_NOT_PAID");
+  }
+
+  const draft = buildUblTrDraft(record.invoice, config.companyVkn);
+  const provider = await getEInvoiceProvider();
+
+  await db.eInvoiceRecord.update({
+    where: { id: record.id },
+    data: {
+      status: "QUEUED",
+      errorMessage: null,
+      documentUuid: draft.ubl.uuid,
+      documentNumber: draft.ubl.id,
+      ublPayload: draft.ubl as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  const result = await provider.submitDraft({
+    draft,
+    recordId: record.id,
+  });
+
+  if (!result.ok) {
+    await db.eInvoiceRecord.update({
+      where: { id: record.id },
+      data: {
+        status: result.skipped ? "DRAFT" : "FAILED",
+        errorMessage: result.error ?? "EFATURA_SUBMIT_FAILED",
+        providerResponse: result.providerResponse ?? undefined,
+      },
+    });
+    throw new Error(result.error ?? "EFATURA_SUBMIT_FAILED");
+  }
+
+  await db.eInvoiceRecord.update({
+    where: { id: record.id },
+    data: {
+      status: "SENT",
+      documentUuid: result.documentUuid ?? draft.ubl.uuid,
+      documentNumber: result.documentNumber ?? draft.ubl.id,
+      providerResponse: result.providerResponse ?? undefined,
+      sentAt: new Date(),
+      errorMessage: null,
+    },
+  });
+
+  return record;
+}

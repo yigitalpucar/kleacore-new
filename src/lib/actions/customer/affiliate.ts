@@ -5,6 +5,8 @@ import {
   getAffiliateBalance,
   requestAffiliatePayout,
 } from "@/lib/affiliate/payouts";
+import { isValidPayoutIban } from "@/lib/affiliate/payouts";
+import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 
@@ -25,6 +27,25 @@ export async function getAvailableAffiliateBalance() {
   } catch {
     return { success: false as const, error: "Bakiye bilgisi alınamadı" };
   }
+}
+
+export async function saveAffiliatePayoutIban(iban: string) {
+  const session = await requireCustomer();
+  const normalized = iban.replace(/\s+/g, "").toUpperCase();
+
+  if (!isValidPayoutIban(normalized)) {
+    return { success: false as const, error: "Geçerli bir IBAN girin (TR için 26 karakter)" };
+  }
+
+  await db.user.update({
+    where: { id: session.user.id },
+    data: { affiliatePayoutIban: normalized },
+  });
+
+  revalidatePath("/musteri/panel/satis-ortakligi");
+  revalidatePath("/yonetim/affiliate-odemeleri");
+
+  return { success: true as const };
 }
 
 export async function requestPayout(amount: number) {

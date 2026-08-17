@@ -110,6 +110,15 @@ function RetryButton({ jobId, disabled }: { jobId: string; disabled?: boolean })
   );
 }
 
+const statusTabs = [
+  { value: "active", label: "Aktif", href: "/yonetim/provisioning" },
+  { value: "FAILED", label: "Başarısız", href: "/yonetim/provisioning?status=FAILED" },
+  { value: "PENDING", label: "Bekleyen", href: "/yonetim/provisioning?status=PENDING" },
+  { value: "PROCESSING", label: "İşleniyor", href: "/yonetim/provisioning?status=PROCESSING" },
+  { value: "COMPLETED", label: "Tamamlanan", href: "/yonetim/provisioning?status=COMPLETED" },
+  { value: "all", label: "Tümü", href: "/yonetim/provisioning?status=all" },
+];
+
 export function ProvisioningContent({ jobs, stats, statusFilter }: ProvisioningContentProps) {
   return (
     <div className="space-y-6">
@@ -167,10 +176,25 @@ export function ProvisioningContent({ jobs, stats, statusFilter }: ProvisioningC
         </div>
       </BlurFade>
 
+      <BlurFade delay={0.09}>
+        <div className="flex flex-wrap gap-2">
+          {statusTabs.map((tab) => (
+            <Button
+              key={tab.value}
+              asChild
+              size="sm"
+              variant={statusFilter === tab.value ? "default" : "outline"}
+            >
+              <Link href={tab.href}>{tab.label}</Link>
+            </Button>
+          ))}
+        </div>
+      </BlurFade>
+
       <BlurFade delay={0.1}>
         <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
           <CardHeader>
-            <CardTitle className="text-zinc-900 dark:text-white">Aktif İşler</CardTitle>
+            <CardTitle className="text-zinc-900 dark:text-white">Provisioning İşleri</CardTitle>
             <CardDescription>
               {jobs.length} kayıt listeleniyor
               {statusFilter !== "all" ? ` (${statusFilter})` : " (başarısız, bekleyen, işleniyor)"}

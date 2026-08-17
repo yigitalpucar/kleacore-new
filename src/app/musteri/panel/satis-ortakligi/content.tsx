@@ -15,7 +15,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { requestPayout } from "@/lib/actions/customer/affiliate";
+import {
+  requestPayout,
+  saveAffiliatePayoutIban,
+} from "@/lib/actions/customer/affiliate";
 import { MIN_PAYOUT_AMOUNT } from "@/lib/affiliate/constants";
 import { toast } from "@/lib/toast";
 import {
@@ -161,6 +164,7 @@ interface AffiliateStats {
 interface SatisOrtakligiContentProps {
   referralCode: string;
   referralLink: string;
+  payoutIban: string;
   referrals: Referral[];
   payments: Payment[];
   stats: AffiliateStats;
@@ -169,6 +173,7 @@ interface SatisOrtakligiContentProps {
 export function SatisOrtakligiContent({
   referralCode,
   referralLink,
+  payoutIban: initialPayoutIban,
   referrals,
   payments,
   stats,
@@ -178,7 +183,9 @@ export function SatisOrtakligiContent({
   const [activeTab, setActiveTab] = useState<"referrals" | "payments">("referrals");
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState("");
+  const [payoutIban, setPayoutIban] = useState(initialPayoutIban);
   const [isSubmittingPayout, setIsSubmittingPayout] = useState(false);
+  const [isSavingIban, setIsSavingIban] = useState(false);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -189,10 +196,29 @@ export function SatisOrtakligiContent({
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(amount);
 
+  const handleSaveIban = async () => {
+    setIsSavingIban(true);
+    const result = await saveAffiliatePayoutIban(payoutIban);
+    setIsSavingIban(false);
+
+    if (!result.success) {
+      toast.error(result.error || "IBAN kaydedilemedi");
+      return;
+    }
+
+    toast.success("IBAN kaydedildi");
+    router.refresh();
+  };
+
   const handleRequestPayout = async () => {
     const amount = Number(payoutAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error("Geçerli bir tutar girin");
+      return;
+    }
+
+    if (!payoutIban.trim()) {
+      toast.error("Ödeme talebi için IBAN tanımlayın");
       return;
     }
 
@@ -311,6 +337,31 @@ export function SatisOrtakligiContent({
             </CardContent>
           </Card>
         </div>
+      </BlurFade>
+
+      <BlurFade delay={0.18} inView>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Ödeme IBAN Bilgisi
+            </CardTitle>
+            <CardDescription>
+              Komisyon ödemeleri bu hesaba yapılır. Ödeme talebi oluşturmadan önce kaydedin.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col sm:flex-row gap-3">
+            <Input
+              value={payoutIban}
+              onChange={(event) => setPayoutIban(event.target.value.toUpperCase())}
+              placeholder="TR00 0000 0000 0000 0000 0000 00"
+              className="font-mono"
+            />
+            <Button onClick={handleSaveIban} disabled={isSavingIban}>
+              {isSavingIban ? "Kaydediliyor..." : "IBAN Kaydet"}
+            </Button>
+          </CardContent>
+        </Card>
       </BlurFade>
 
       {/* Referral Link */}
@@ -565,18 +616,30 @@ export function SatisOrtakligiContent({
               {formatCurrency(MIN_PAYOUT_AMOUNT)}&apos;dir.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="payout-amount">Talep Tutarı (TL)</Label>
-            <Input
-              id="payout-amount"
-              type="number"
-              min={MIN_PAYOUT_AMOUNT}
-              max={availableBalance}
-              step="0.01"
-              value={payoutAmount}
-              onChange={(event) => setPayoutAmount(event.target.value)}
-              placeholder={String(MIN_PAYOUT_AMOUNT)}
-            />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="payout-iban">IBAN</Label>
+              <Input
+                id="payout-iban"
+                value={payoutIban}
+                onChange={(event) => setPayoutIban(event.target.value.toUpperCase())}
+                placeholder="TR00 0000 0000 0000 0000 0000 00"
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="payout-amount">Talep Tutarı (TL)</Label>
+              <Input
+                id="payout-amount"
+                type="number"
+                min={MIN_PAYOUT_AMOUNT}
+                max={availableBalance}
+                step="0.01"
+                value={payoutAmount}
+                onChange={(event) => setPayoutAmount(event.target.value)}
+                placeholder={String(MIN_PAYOUT_AMOUNT)}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPayoutDialogOpen(false)}>

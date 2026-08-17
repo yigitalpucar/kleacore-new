@@ -2,6 +2,8 @@ import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { PageHero } from "@/components/sections/page-hero";
+import { TrustStrip, domainTrustItems } from "@/components/sections/trust-strip";
 import { DomainTransferForm } from "@/components/domain/domain-transfer-form";
 import { isAutomatedDomainTransferAvailable } from "@/lib/actions/customer/domain-transfer";
 import {
@@ -73,31 +75,24 @@ export default async function DomainTransferPage() {
       <Topbar />
       <Header />
       <main className="flex-1">
-        {/* Hero */}
-        <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
+        <PageHero
+          badge="Hızlı & Güvenli Transfer"
+          badgeIcon={RefreshCw}
+          title="Domain Transferi"
+          description="Domaininizi bize transfer edin, +1 yıl ücretsiz uzatma kazanın. Hızlı ve güvenli transfer süreci."
+        >
+          <DomainTransferForm
+            isLoggedIn={transferStatus.isLoggedIn}
+            isAutomatedTransferAvailable={transferStatus.isAutomatedTransferAvailable}
+          />
+        </PageHero>
+
+        <TrustStrip items={domainTrustItems} />
+
+        <section className="py-12 md:py-16 border-b">
           <div className="container">
             <BlurFade delay={0.1} inView>
-              <div className="text-center mb-10">
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                  Domain Transferi
-                </h1>
-                <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Domaininizi bize transfer edin, +1 yıl ücretsiz uzatma kazanın.
-                  Hızlı ve güvenli transfer süreci.
-                </p>
-              </div>
-            </BlurFade>
-
-            <BlurFade delay={0.2} inView>
-              <DomainTransferForm
-                isLoggedIn={transferStatus.isLoggedIn}
-                isAutomatedTransferAvailable={transferStatus.isAutomatedTransferAvailable}
-              />
-            </BlurFade>
-
-            {/* Benefits */}
-            <BlurFade delay={0.3} inView>
-              <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-4xl mx-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-4xl mx-auto">
                 {benefits.map((benefit) => (
                   <div
                     key={benefit.title}

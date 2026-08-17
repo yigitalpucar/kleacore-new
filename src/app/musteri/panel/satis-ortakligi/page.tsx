@@ -18,7 +18,7 @@ export default async function SatisOrtakligiPage() {
     getAffiliateBalance(userId),
     db.user.findUnique({
       where: { id: userId },
-      select: { affiliateCode: true },
+      select: { affiliateCode: true, affiliatePayoutIban: true },
     }),
   ]);
 
@@ -58,6 +58,7 @@ export default async function SatisOrtakligiPage() {
       referralLink={referralLink}
       referrals={serializedReferrals}
       payments={serializedPayments}
+      payoutIban={user?.affiliatePayoutIban ?? ""}
       stats={{
         totalReferrals: stats.totalReferrals,
         totalEarnings: Number(stats.totalEarnings),

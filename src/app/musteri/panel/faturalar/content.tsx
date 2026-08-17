@@ -15,10 +15,15 @@ import {
   AlertCircle,
   XCircle,
   Clock,
-  Eye,
-  Printer,
   Calendar,
+  ChevronRight,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  getCustomerEInvoiceBadgeClass,
+  getCustomerEInvoiceLabel,
+} from "@/lib/efatura/customer-status";
+import type { EInvoiceStatus } from "@prisma/client";
 import { cn } from "@/lib/utils";
 
 const statusConfig = {
@@ -82,12 +87,17 @@ interface SerializedInvoice {
     unitPrice: number;
     totalPrice: number;
   }[];
+  eInvoice: {
+    status: string;
+    type: string;
+    sentAt: string | null;
+  } | null;
 }
 
 interface FaturalarContentProps {
   invoices: SerializedInvoice[];
   stats: {
-    total: number;
+    outstanding: number;
     pending: number;
     overdue: number;
   };
@@ -106,9 +116,11 @@ export function FaturalarContent({ invoices, stats }: FaturalarContentProps) {
     return matchesSearch && matchesFilter;
   });
 
+  const hasInvoices = invoices.length > 0;
+  const isFilteredEmpty = hasInvoices && filteredInvoices.length === 0;
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <BlurFade delay={0.1} inView>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -120,7 +132,6 @@ export function FaturalarContent({ invoices, stats }: FaturalarContentProps) {
         </div>
       </BlurFade>
 
-      {/* Stats */}
       <BlurFade delay={0.15} inView>
         <div className="grid gap-4 sm:grid-cols-3">
           <Card>
@@ -130,8 +141,8 @@ export function FaturalarContent({ invoices, stats }: FaturalarContentProps) {
                   <FileText className="h-5 w-5 text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Toplam Tutar</p>
-                  <p className="text-2xl font-bold">{currencyFormatter.format(stats.total)}</p>
+                  <p className="text-sm text-muted-foreground">Ödenmemiş Toplam</p>
+                  <p className="text-2xl font-bold">{currencyFormatter.format(stats.outstanding)}</p>
                 </div>
               </div>
             </CardContent>
@@ -165,12 +176,11 @@ export function FaturalarContent({ invoices, stats }: FaturalarContentProps) {
         </div>
       </BlurFade>
 
-      {/* Filters */}
       <BlurFade delay={0.2} inView>
         <Card>
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {filterOptions.map((option) => (
                   <Button
                     key={option.value}
@@ -196,7 +206,6 @@ export function FaturalarContent({ invoices, stats }: FaturalarContentProps) {
         </Card>
       </BlurFade>
 
-      {/* Invoices List */}
       <BlurFade delay={0.25} inView>
         <Card>
           <CardHeader>
@@ -209,63 +218,89 @@ export function FaturalarContent({ invoices, stats }: FaturalarContentProps) {
                 const StatusIcon = status.icon;
                 const canPay = invoice.status === "PENDING" || invoice.status === "OVERDUE";
                 const description = invoice.items[0]?.description ?? invoice.invoiceNumber;
+                const detailHref = `/musteri/panel/faturalar/${invoice.id}`;
+                const pdfHref = `/api/faturalar/${invoice.id}/pdf`;
 
                 return (
                   <div
                     key={invoice.id}
-                    className="flex items-center gap-4 p-4 rounded-lg border hover:shadow-sm transition-shadow"
+                    className="flex items-center gap-4 p-4 rounded-lg border hover:shadow-sm transition-shadow group"
                   >
-                    <div className={cn("p-3 rounded-lg", status.bgColor)}>
-                      <FileText className={cn("h-6 w-6", status.color)} />
-                    </div>
+                    <Link href={detailHref} className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className={cn("p-3 rounded-lg shrink-0", status.bgColor)}>
+                        <FileText className={cn("h-6 w-6", status.color)} />
+                      </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold">{invoice.invoiceNumber}</p>
-                        <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", status.bgColor, status.color)}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold">{invoice.invoiceNumber}</p>
+                        <div
+                          className={cn(
+                            "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
+                            status.bgColor,
+                            status.color
+                          )}
+                        >
                           <StatusIcon className="h-3 w-3" />
                           {status.label}
                         </div>
+                        {invoice.status === "PAID" && invoice.eInvoice && (
+                          <Badge
+                            variant="outline"
+                            className={getCustomerEInvoiceBadgeClass(
+                              invoice.eInvoice.status as EInvoiceStatus
+                            )}
+                          >
+                            {getCustomerEInvoiceLabel(
+                              invoice.eInvoice.status as EInvoiceStatus,
+                              invoice.eInvoice.type as "e-fatura" | "e-arsiv"
+                            )}
+                          </Badge>
+                        )}
                       </div>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {description}
-                      </p>
-                    </div>
+                        <p className="text-sm text-muted-foreground truncate">{description}</p>
+                      </div>
 
-                    <div className="hidden md:block text-right">
-                      <p className="text-lg font-bold">{currencyFormatter.format(invoice.totalAmount)}</p>
-                      <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {invoice.status === "PAID" && invoice.paidAt
-                          ? `Ödeme: ${new Date(invoice.paidAt).toLocaleDateString("tr-TR")}`
-                          : `Son: ${new Date(invoice.dueDate).toLocaleDateString("tr-TR")}`}
-                      </p>
-                    </div>
+                      <div className="hidden md:block text-right shrink-0">
+                        <p className="text-lg font-bold">{currencyFormatter.format(invoice.totalAmount)}</p>
+                        <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {invoice.status === "PAID" && invoice.paidAt
+                            ? `Ödeme: ${new Date(invoice.paidAt).toLocaleDateString("tr-TR")}`
+                            : `Son: ${new Date(invoice.dueDate).toLocaleDateString("tr-TR")}`}
+                        </p>
+                      </div>
 
-                    <div className="flex items-center gap-2">
+                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
+                    </Link>
+
+                    <div className="flex items-center gap-2 shrink-0">
                       {canPay && (
-                        <Button size="sm">
-                          <CreditCard className="mr-2 h-4 w-4" />
-                          Öde
+                        <Button size="sm" asChild>
+                          <Link href={detailHref}>
+                            <CreditCard className="mr-2 h-4 w-4" />
+                            Öde
+                          </Link>
                         </Button>
                       )}
                       <Button variant="outline" size="icon" asChild>
-                        <Link href={`/musteri/panel/faturalar/${invoice.id}`}>
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      <Button variant="outline" size="icon">
-                        <Download className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon">
-                        <Printer className="h-4 w-4" />
+                        <a href={pdfHref} target="_blank" rel="noopener noreferrer">
+                          <Download className="h-4 w-4" />
+                        </a>
                       </Button>
                     </div>
                   </div>
                 );
               })}
 
-              {filteredInvoices.length === 0 && (
+              {!hasInvoices && (
+                <div className="text-center py-10">
+                  <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground">Henüz faturanız bulunmuyor.</p>
+                </div>
+              )}
+
+              {isFilteredEmpty && (
                 <div className="text-center py-8 text-muted-foreground">
                   Aramanızla eşleşen fatura bulunamadı.
                 </div>

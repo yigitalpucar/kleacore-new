@@ -1,13 +1,38 @@
+import type { LucideIcon } from "lucide-react";
 import { Shield, Zap, Headphones, Globe } from "lucide-react";
 
-const items = [
+export interface TrustStripItem {
+  icon: LucideIcon;
+  label: string;
+  desc: string;
+}
+
+const defaultItems: TrustStripItem[] = [
   { icon: Shield, label: "%99.9 Uptime", desc: "Yedekli altyapı" },
   { icon: Zap, label: "NVMe SSD", desc: "Yüksek IOPS" },
   { icon: Headphones, label: "7/24 Destek", desc: "Türkçe ekip" },
   { icon: Globe, label: "Global DNS", desc: "Düşük gecikme" },
 ];
 
-export function TrustStrip() {
+export const domainTrustItems: TrustStripItem[] = [
+  { icon: Globe, label: "500+ Uzantı", desc: ".com, .net, .tr ve daha fazlası" },
+  { icon: Shield, label: "WHOIS Gizlilik", desc: "Ücretsiz koruma" },
+  { icon: Zap, label: "Anında Aktivasyon", desc: "Dakikalar içinde" },
+  { icon: Headphones, label: "7/24 Destek", desc: "Türkçe ekip" },
+];
+
+export const sslTrustItems: TrustStripItem[] = [
+  { icon: Shield, label: "256-bit Şifreleme", desc: "Güvenli HTTPS" },
+  { icon: Zap, label: "Hızlı Kurulum", desc: "Otomatik aktivasyon" },
+  { icon: Globe, label: "Global CA", desc: "Sectigo, GeoTrust" },
+  { icon: Headphones, label: "7/24 Destek", desc: "Kurulum yardımı" },
+];
+
+interface TrustStripProps {
+  items?: TrustStripItem[];
+}
+
+export function TrustStrip({ items = defaultItems }: TrustStripProps) {
   return (
     <section className="border-b bg-muted/30 py-8">
       <div className="container">

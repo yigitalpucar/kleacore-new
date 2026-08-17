@@ -88,6 +88,15 @@ export async function getInvoiceById(id: string) {
       payments: {
         orderBy: { createdAt: "desc" },
       },
+      eInvoiceRecord: {
+        select: {
+          status: true,
+          type: true,
+          documentNumber: true,
+          sentAt: true,
+          errorMessage: true,
+        },
+      },
     },
   });
 }
@@ -123,6 +132,13 @@ export async function getInvoicesByCustomer(customerId: string) {
     where: { customerId },
     include: {
       items: true,
+      eInvoiceRecord: {
+        select: {
+          status: true,
+          type: true,
+          sentAt: true,
+        },
+      },
       _count: {
         select: { payments: true },
       },

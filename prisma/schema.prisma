@@ -306,6 +306,7 @@ model User {
 
   // Affiliate
   affiliateCode String?  @unique
+  affiliatePayoutIban String?
   referredById  String?
   referredBy    User?    @relation("Referrals", fields: [referredById], references: [id])
   referrals     User[]   @relation("Referrals")

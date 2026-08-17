@@ -6,6 +6,8 @@ import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BlurFade } from "@/components/magicui/blur-fade";
+import { PageHero } from "@/components/sections/page-hero";
+import { TrustStrip, domainTrustItems } from "@/components/sections/trust-strip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,58 +105,47 @@ function WhoisPageContent() {
       <Topbar />
       <Header />
       <main className="flex-1">
-        {/* Hero */}
-        <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="text-center mb-10">
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                  WHOIS Sorgulama
-                </h1>
-                <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Domain sahiplik bilgilerini, kayıt tarihini ve nameserver
-                  bilgilerini öğrenin.
-                </p>
+        <PageHero
+          badge="Ücretsiz WHOIS Sorgulama"
+          badgeIcon={Search}
+          title="WHOIS Sorgulama"
+          description="Domain sahiplik bilgilerini, kayıt tarihini ve nameserver bilgilerini öğrenin."
+        >
+          <div className="max-w-2xl mx-auto">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Globe className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Domain adı girin (örn: example.com)"
+                  className="h-14 pl-12 text-lg"
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                />
               </div>
-            </BlurFade>
-
-            {/* Search */}
-            <BlurFade delay={0.2} inView>
-              <div className="max-w-2xl mx-auto">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <Globe className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Domain adı girin (örn: example.com)"
-                      className="h-14 pl-12 text-lg"
-                      value={domain}
-                      onChange={(e) => setDomain(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                    />
-                  </div>
-                  <Button
-                    size="lg"
-                    className="h-14 px-8"
-                    onClick={handleSearch}
-                    disabled={isSearching || !domain.trim()}
-                  >
-                    {isSearching ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        Sorgulanıyor...
-                      </>
-                    ) : (
-                      <>
-                        <Search className="mr-2 h-5 w-5" />
-                        Sorgula
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </BlurFade>
+              <Button
+                size="lg"
+                className="h-14 px-8"
+                onClick={handleSearch}
+                disabled={isSearching || !domain.trim()}
+              >
+                {isSearching ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Sorgulanıyor...
+                  </>
+                ) : (
+                  <>
+                    <Search className="mr-2 h-5 w-5" />
+                    Sorgula
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
-        </section>
+        </PageHero>
+
+        <TrustStrip items={domainTrustItems} />
 
         {/* Results */}
         {(result || error) && (

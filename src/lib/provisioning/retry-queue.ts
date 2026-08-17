@@ -337,6 +337,28 @@ async function finalizeProvisioningRetryAttempt(
   return { ok: false as const, error: result.error ?? "PROVISIONING_RETRY_FAILED" };
 }
 
+const STALE_PROCESSING_MS = 15 * 60 * 1000;
+
+export async function recoverStaleProcessingJobs(
+  staleAfterMs = STALE_PROCESSING_MS,
+  client: DbClient = db
+) {
+  const threshold = new Date(Date.now() - staleAfterMs);
+
+  const result = await client.provisioningJob.updateMany({
+    where: {
+      status: "PROCESSING",
+      updatedAt: { lt: threshold },
+    },
+    data: {
+      status: "PENDING",
+      nextRetryAt: new Date(),
+    },
+  });
+
+  return result.count;
+}
+
 export async function manualRetryProvisioningJob(jobId: string) {
   const job = await loadProvisioningJobForRetry(jobId);
 
@@ -363,38 +385,28 @@ export async function manualRetryProvisioningJob(jobId: string) {
   try {
     const result = await retryProvisioningJob(job);
 
-    if (result.ok) {
-      await db.provisioningJob.update({
-        where: { id: job.id },
-        data: {
-          status: "COMPLETED",
-          completedAt: new Date(),
-          lastError: null,
-        },
-      });
+    const finalized = await finalizeProvisioningRetryAttempt(job, result, {
+      respectMaxAttempts: false,
+    });
+
+    if (finalized.ok) {
       return { ok: true as const };
     }
 
     await db.provisioningJob.update({
       where: { id: job.id },
-      data: {
-        status: "FAILED",
-        attempts: job.attempts + 1,
-        lastError: result.error,
-      },
+      data: { status: "FAILED" },
     });
 
-    return { ok: false as const, error: result.error ?? "PROVISIONING_RETRY_FAILED" };
+    return { ok: false as const, error: finalized.error ?? "PROVISIONING_RETRY_FAILED" };
   } catch (error) {
     const message = error instanceof Error ? error.message : "PROVISIONING_RETRY_FAILED";
-
+    await finalizeProvisioningRetryAttempt(job, { ok: false, error: message }, {
+      respectMaxAttempts: false,
+    });
     await db.provisioningJob.update({
       where: { id: job.id },
-      data: {
-        status: "FAILED",
-        attempts: job.attempts + 1,
-        lastError: message,
-      },
+      data: { status: "FAILED" },
     });
 
     return { ok: false as const, error: message };
@@ -403,6 +415,8 @@ export async function manualRetryProvisioningJob(jobId: string) {
 
 export async function processProvisioningRetries(limit = 10): Promise<CronJobResult> {
   const now = new Date();
+
+  await recoverStaleProcessingJobs(STALE_PROCESSING_MS);
 
   const jobs = await db.provisioningJob.findMany({
     where: {

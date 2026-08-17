@@ -26,17 +26,30 @@ export default async function FaturalarPage() {
       unitPrice: Number(item.unitPrice),
       totalPrice: Number(item.totalPrice),
     })),
+    eInvoice: inv.eInvoiceRecord
+      ? {
+          status: inv.eInvoiceRecord.status,
+          type: inv.eInvoiceRecord.type,
+          sentAt: inv.eInvoiceRecord.sentAt
+            ? inv.eInvoiceRecord.sentAt.toISOString()
+            : null,
+        }
+      : null,
   }));
 
-  // Compute stats server-side
+  const outstandingAmount = (inv: (typeof serializedInvoices)[number]) =>
+    Math.max(0, inv.totalAmount - inv.paidAmount);
+
   const stats = {
-    total: serializedInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0),
+    outstanding: serializedInvoices
+      .filter((i) => i.status === "PENDING" || i.status === "OVERDUE")
+      .reduce((sum, inv) => sum + outstandingAmount(inv), 0),
     pending: serializedInvoices
       .filter((i) => i.status === "PENDING")
-      .reduce((sum, inv) => sum + inv.totalAmount, 0),
+      .reduce((sum, inv) => sum + outstandingAmount(inv), 0),
     overdue: serializedInvoices
       .filter((i) => i.status === "OVERDUE")
-      .reduce((sum, inv) => sum + inv.totalAmount, 0),
+      .reduce((sum, inv) => sum + outstandingAmount(inv), 0),
   };
 
   return <FaturalarContent invoices={serializedInvoices} stats={stats} />;

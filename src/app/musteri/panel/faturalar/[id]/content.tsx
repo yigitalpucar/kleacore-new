@@ -24,6 +24,12 @@ import {
   Banknote,
   Info,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  getCustomerEInvoiceBadgeClass,
+  getCustomerEInvoiceLabel,
+} from "@/lib/efatura/customer-status";
+import type { EInvoiceStatus } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { handleCreditCardCheckoutRedirect } from "@/lib/payments/checkout-redirect";
 import {
@@ -123,6 +129,13 @@ interface SerializedInvoice {
   order: {
     id: string;
     orderNumber: string;
+  } | null;
+  eInvoice: {
+    status: string;
+    type: string;
+    documentNumber: string | null;
+    sentAt: string | null;
+    errorMessage: string | null;
   } | null;
 }
 
@@ -226,7 +239,28 @@ export function FaturaDetayContent({ invoice }: FaturaDetayContentProps) {
                     <StatusIcon className="h-3 w-3" />
                     {status.label}
                   </span>
+                  {invoice.status === "PAID" && invoice.eInvoice && (
+                    <Badge
+                      variant="outline"
+                      className={getCustomerEInvoiceBadgeClass(
+                        invoice.eInvoice.status as EInvoiceStatus
+                      )}
+                    >
+                      {getCustomerEInvoiceLabel(
+                        invoice.eInvoice.status as EInvoiceStatus,
+                        invoice.eInvoice.type as "e-fatura" | "e-arsiv"
+                      )}
+                    </Badge>
+                  )}
                 </div>
+                {invoice.status === "PAID" && invoice.eInvoice?.documentNumber && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    E-belge no: {invoice.eInvoice.documentNumber}
+                    {invoice.eInvoice.sentAt
+                      ? ` · ${new Date(invoice.eInvoice.sentAt).toLocaleDateString("tr-TR")}`
+                      : ""}
+                  </p>
+                )}
                 <p className="text-muted-foreground mt-1">{description}</p>
                 <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1">

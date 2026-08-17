@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { PageHero } from "@/components/sections/page-hero";
+import { TrustStrip, domainTrustItems } from "@/components/sections/trust-strip";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -100,100 +102,88 @@ export const BelgesizTRContent = ({ tlds }: BelgesizTRContentProps) => {
 
   return (
     <main className="flex-1">
-      {/* Hero */}
-      <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
+      <PageHero
+        badge="Belge Gerektirmez"
+        badgeIcon={FileX}
+        title="Belgesiz .TR Domain"
+        description="Kimlik veya şirket belgesi olmadan Türkiye uzantılı domain kaydedin. Anında aktivasyon, uygun fiyat."
+      >
+        <Card className="max-w-2xl mx-auto relative overflow-hidden">
+          <BorderBeam size={150} duration={10} />
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Input
+                  placeholder="Domain adınız"
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  className="pr-24"
+                />
+                <select
+                  value={selectedTld}
+                  onChange={(e) => setSelectedTld(e.target.value)}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-2 rounded bg-muted border-0 text-sm focus:ring-0"
+                >
+                  {tlds.map((tld) => (
+                    <option key={tld.ext} value={tld.ext}>
+                      {tld.ext}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                onClick={handleSearch}
+                disabled={isSearching || !domain.trim()}
+              >
+                {isSearching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Search className="mr-2 h-4 w-4" />
+                    Sorgula
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {result && (
+              <div
+                className={`mt-4 p-4 rounded-lg flex items-center justify-between ${
+                  result.available
+                    ? "bg-primary/10 border border-primary/30"
+                    : "bg-destructive/10 border border-destructive/30"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {result.available ? (
+                    <Check className="h-5 w-5 text-primary" />
+                  ) : (
+                    <FileX className="h-5 w-5 text-destructive" />
+                  )}
+                  <div>
+                    <p className="font-semibold">{result.domain}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {result.available
+                        ? "Bu domain müsait!"
+                        : "Bu domain alınmış"}
+                    </p>
+                  </div>
+                </div>
+                {result.available && (
+                  <Button>₺{result.price} - Satın Al</Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </PageHero>
+
+      <TrustStrip items={domainTrustItems} />
+
+      <section className="py-12 md:py-16 border-b">
         <div className="container">
           <BlurFade delay={0.1} inView>
-            <div className="text-center mb-10">
-              <div className="inline-flex items-center gap-2 rounded-full border bg-primary/10 border-primary/30 px-4 py-1.5 text-sm font-medium text-primary mb-4">
-                <FileX className="h-4 w-4" />
-                Belge Gerektirmez
-              </div>
-              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                Belgesiz .TR Domain
-              </h1>
-              <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                Kimlik veya şirket belgesi olmadan Türkiye uzantılı domain
-                kaydedin. Anında aktivasyon, uygun fiyat.
-              </p>
-            </div>
-          </BlurFade>
-
-          {/* Search */}
-          <BlurFade delay={0.2} inView>
-            <Card className="max-w-2xl mx-auto relative overflow-hidden">
-              <BorderBeam size={150} duration={10} />
-              <CardContent className="p-6">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <Input
-                      placeholder="Domain adınız"
-                      value={domain}
-                      onChange={(e) => setDomain(e.target.value)}
-                      className="pr-24"
-                    />
-                    <select
-                      value={selectedTld}
-                      onChange={(e) => setSelectedTld(e.target.value)}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-2 rounded bg-muted border-0 text-sm focus:ring-0"
-                    >
-                      {tlds.map((tld) => (
-                        <option key={tld.ext} value={tld.ext}>
-                          {tld.ext}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <Button
-                    onClick={handleSearch}
-                    disabled={isSearching || !domain.trim()}
-                  >
-                    {isSearching ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Search className="mr-2 h-4 w-4" />
-                        Sorgula
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                {result && (
-                  <div
-                    className={`mt-4 p-4 rounded-lg flex items-center justify-between ${
-                      result.available
-                        ? "bg-primary/10 border border-primary/30"
-                        : "bg-destructive/10 border border-destructive/30"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      {result.available ? (
-                        <Check className="h-5 w-5 text-primary" />
-                      ) : (
-                        <FileX className="h-5 w-5 text-destructive" />
-                      )}
-                      <div>
-                        <p className="font-semibold">{result.domain}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {result.available
-                            ? "Bu domain müsait!"
-                            : "Bu domain alınmış"}
-                        </p>
-                      </div>
-                    </div>
-                    {result.available && (
-                      <Button>₺{result.price} - Satın Al</Button>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </BlurFade>
-
-          {/* Features */}
-          <BlurFade delay={0.3} inView>
-            <div className="mt-12 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
               {features.map((feature) => (
                 <div key={feature.title} className="text-center p-4">
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 mb-3">

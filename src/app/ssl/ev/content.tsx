@@ -5,6 +5,8 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { SSLFeatures } from "@/components/ssl/ssl-features";
 import { SSLFaq } from "@/components/ssl/ssl-faq";
+import { PageHero } from "@/components/sections/page-hero";
+import { TrustStrip, sslTrustItems } from "@/components/sections/trust-strip";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import {
   Shield,
@@ -117,27 +119,19 @@ export const Content = ({ products }: ContentProps) => {
       <Topbar />
       <Header />
       <main className="flex-1">
-        {/* Hero */}
-        <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
+        <PageHero
+          badge="En Yüksek Güven Seviyesi"
+          badgeIcon={Shield}
+          title="EV (Extended Validation) SSL"
+          description="Yeşil adres çubuğu ile maksimum müşteri güveni. E-ticaret ve finansal siteler için en yüksek güvenlik standardı."
+          accent="amber"
+        />
+
+        <TrustStrip items={sslTrustItems} />
+
+        <section className="py-12 md:py-16">
           <div className="container">
             <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 border-primary/30 border px-4 py-1.5 text-sm font-medium text-primary mb-4">
-                  <Shield className="h-4 w-4" />
-                  En Yüksek Güven Seviyesi
-                </div>
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                  EV (Extended Validation) SSL
-                </h1>
-                <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Yeşil adres çubuğu ile maksimum müşteri güveni. E-ticaret ve
-                  finansal siteler için en yüksek güvenlik standardı.
-                </p>
-              </div>
-            </BlurFade>
-
-            {/* Plans */}
-            <BlurFade delay={0.2} inView>
               <div className="grid gap-8 md:grid-cols-3 max-w-5xl mx-auto">
                 {plans.map((plan) => (
                   <Card

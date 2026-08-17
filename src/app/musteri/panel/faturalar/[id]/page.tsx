@@ -60,6 +60,17 @@ export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
     order: invoice.order
       ? { id: invoice.order.id, orderNumber: invoice.order.orderNumber }
       : null,
+    eInvoice: invoice.eInvoiceRecord
+      ? {
+          status: invoice.eInvoiceRecord.status,
+          type: invoice.eInvoiceRecord.type,
+          documentNumber: invoice.eInvoiceRecord.documentNumber,
+          sentAt: invoice.eInvoiceRecord.sentAt
+            ? invoice.eInvoiceRecord.sentAt.toISOString()
+            : null,
+          errorMessage: invoice.eInvoiceRecord.errorMessage,
+        }
+      : null,
   };
 
   return <FaturaDetayContent invoice={serializedInvoice} />;

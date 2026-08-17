@@ -960,13 +960,16 @@ export function EntegrasyonlarContent({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>API Anahtarı (Paraşüt)</Label>
+                    <Label>API Kimlik Bilgileri (Paraşüt)</Label>
                     <Input
                       name="efatura_api_key"
                       type="password"
                       defaultValue={efatura.hasApiKey ? "********" : ""}
-                      placeholder="Sağlayıcı API anahtarı"
+                      placeholder='JSON veya clientId:clientSecret:username:password:companyId'
                     />
+                    <p className="text-xs text-zinc-500">
+                      Örnek JSON: clientId, clientSecret, username, password, companyId alanları
+                    </p>
                   </div>
 
                   <div className="rounded-lg bg-zinc-100 dark:bg-zinc-800/50 p-4 text-sm text-zinc-600 dark:text-zinc-400">

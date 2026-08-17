@@ -8,6 +8,7 @@ const {
   updateManyReferral,
   createPayment,
   findUniquePayment,
+  findUniqueUser,
   updatePayment,
   transaction,
 } = vi.hoisted(() => ({
@@ -17,12 +18,16 @@ const {
   updateManyReferral: vi.fn(),
   createPayment: vi.fn(),
   findUniquePayment: vi.fn(),
+  findUniqueUser: vi.fn(),
   updatePayment: vi.fn(),
   transaction: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
   db: {
+    user: {
+      findUnique: findUniqueUser,
+    },
     affiliateReferral: {
       aggregate: aggregateReferral,
       findMany: findManyReferral,
@@ -126,8 +131,12 @@ describe("requestAffiliatePayout", () => {
     findManyReferral.mockReset();
     updateManyReferral.mockReset();
     createPayment.mockReset();
+    findUniqueUser.mockReset();
     transaction.mockReset();
 
+    findUniqueUser.mockResolvedValue({
+      affiliatePayoutIban: "TR330006100519786457841326",
+    });
     transaction.mockImplementation(async (callback) => callback(tx));
     aggregateReferral.mockResolvedValue({ _sum: { commission: 500 } });
     aggregatePayment.mockResolvedValue({ _sum: { amount: 0 } });
@@ -159,6 +168,15 @@ describe("requestAffiliatePayout", () => {
       code: "BELOW_MINIMUM",
     });
 
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects payout when affiliate IBAN is missing", async () => {
+    findUniqueUser.mockResolvedValue({ affiliatePayoutIban: null });
+
+    await expect(requestAffiliatePayout("aff-1", 120)).rejects.toMatchObject({
+      code: "INVALID_AMOUNT",
+    });
     expect(transaction).not.toHaveBeenCalled();
   });
 
@@ -322,12 +340,18 @@ describe("rejectAffiliatePayout", () => {
 });
 
 describe("completeAffiliatePayout", () => {
+  const approvedPayment = {
+    ...pendingPayment,
+    processedBy: "admin-1",
+    notes: "Yönetici tarafından onaylandı",
+  };
+
   beforeEach(() => {
     findUniquePayment.mockReset();
     updatePayment.mockReset();
-    findUniquePayment.mockResolvedValue(pendingPayment);
+    findUniquePayment.mockResolvedValue(approvedPayment);
     updatePayment.mockImplementation(async ({ data }) => ({
-      ...pendingPayment,
+      ...approvedPayment,
       ...data,
     }));
   });
@@ -363,10 +387,19 @@ describe("completeAffiliatePayout", () => {
 
   it("rejects completion when payout is already paid", async () => {
     findUniquePayment.mockResolvedValue({
-      ...pendingPayment,
+      ...approvedPayment,
       status: "PAID",
       paidAt: new Date("2026-06-02T10:00:00.000Z"),
     });
+
+    await expect(completeAffiliatePayout("pay-1", "admin-1")).rejects.toMatchObject({
+      code: "INVALID_STATUS",
+    });
+    expect(updatePayment).not.toHaveBeenCalled();
+  });
+
+  it("rejects completion when payout is not approved", async () => {
+    findUniquePayment.mockResolvedValue(pendingPayment);
 
     await expect(completeAffiliatePayout("pay-1", "admin-1")).rejects.toMatchObject({
       code: "INVALID_STATUS",
