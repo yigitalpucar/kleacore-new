@@ -87,12 +87,12 @@ describe("module registry", () => {
     const contract = whm.create!(makeTestInstance(whm, { host: "whm.test", username: "u", apiToken: "t" }));
     expect(() => assertModuleContract(whm, contract)).not.toThrow();
     // Implementing an optional method without declaring its capability is an error…
-    expect(() => assertModuleContract(whm, { ...(contract as object), getSsoUrl: async () => ({ ok: true }) })).toThrow(
-      /getSsoUrl\(\) implemented but capability "sso" not declared/
+    expect(() => assertModuleContract(whm, { ...(contract as object), getConsoleUrl: async () => ({ ok: true }) })).toThrow(
+      /getConsoleUrl\(\) implemented but capability "console" not declared/
     );
     // …and so is declaring one without the method.
-    expect(() => assertModuleContract({ ...whm, capabilities: [...whm.capabilities, "usage"] }, contract)).toThrow(
-      /capability "usage" declared but getUsage\(\) missing/
+    expect(() => assertModuleContract({ ...whm, capabilities: [...whm.capabilities, "power"] }, contract)).toThrow(
+      /capability "power" declared but powerAction\(\) missing/
     );
   });
 });

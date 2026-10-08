@@ -56,11 +56,12 @@ export interface ServerAccountCreated {
   meta?: Record<string, unknown>;
 }
 
+/** Limits: undefined = unknown, null = unlimited. Bandwidth = current month. */
 export interface ServerUsage {
   diskUsedMB?: number;
-  diskLimitMB?: number;
+  diskLimitMB?: number | null;
   bandwidthUsedMB?: number;
-  bandwidthLimitMB?: number;
+  bandwidthLimitMB?: number | null;
   cpuPercent?: number;
   ramUsedMB?: number;
   ramLimitMB?: number;
@@ -68,6 +69,23 @@ export interface ServerUsage {
 }
 
 export type ServerPowerAction = "start" | "stop" | "restart" | "shutdown";
+
+/** Panel area a single sign-on URL may open directly (modules map it to their own app id). */
+export type ServerSsoApp = "fileManager" | "emailAccounts" | "phpMyAdmin";
+
+/** Usage of one account in a bulk read (`listUsage`). */
+export interface RemoteAccountUsage {
+  remoteId: string;
+  usage: ServerUsage;
+}
+
+/** A package/plan defined on the remote side (WHM package, …). */
+export interface RemotePackage {
+  /** Name to send to the panel (already prefixed for reseller-owned WHM packages). */
+  name: string;
+  diskLimitMB?: number | null;
+  bandwidthLimitMB?: number | null;
+}
 
 /** Account / VM found on the remote side (importers, 2.7). */
 export interface RemoteAccount {
@@ -94,11 +112,31 @@ export interface ServerModule<TOptions = Record<string, unknown>> {
   /** ctx.options are the *new* product's options. */
   changePackage(ctx: ServerAccountContext<TOptions>): Promise<OperationResult>;
   getUsage?(ctx: ServerAccountContext<TOptions>): Promise<IntegrationResult<ServerUsage>>;
-  /** One-time login URL. target "panel" (cPanel / Proxmox) or "webmail". */
+  /**
+   * Usage of every account on the instance in a few calls (daily sync).
+   * Limits: undefined = unknown, null = unlimited. Capability "bulkUsage".
+   */
+  listUsage?(): Promise<IntegrationResult<RemoteAccountUsage[]>>;
+  /**
+   * One-time login URL. target "panel" (cPanel / Proxmox) or "webmail";
+   * `app` opens a panel area directly. The URL is a credential: callers
+   * redirect to it and never log or store it.
+   */
   getSsoUrl?(
     ctx: ServerAccountContext<TOptions>,
-    target?: "panel" | "webmail"
+    target?: "panel" | "webmail",
+    options?: { app?: ServerSsoApp }
   ): Promise<IntegrationResult<{ url: string; expiresAt?: Date }>>;
+  /** Sets the account's panel password (capability "password"). Never log `password`. */
+  resetPassword?(ctx: ServerAccountContext<TOptions>, password: string): Promise<OperationResult>;
+  /** Packages available to this instance's credentials (capability "packages"; read-only). */
+  listPackages?(): Promise<IntegrationResult<RemotePackage[]>>;
+  /**
+   * Package name a product with these options provisions with (pure, no
+   * remote call; capability "packages"). Lets the admin form validate it
+   * against `listPackages`.
+   */
+  resolvePackageName?(options: TOptions, product: { sku: string }): string;
   getConsoleUrl?(
     ctx: ServerAccountContext<TOptions>
   ): Promise<IntegrationResult<{ url: string; expiresAt?: Date; type?: "novnc" | "xtermjs" | "spice" }>>;

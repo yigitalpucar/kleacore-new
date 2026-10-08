@@ -57,4 +57,16 @@ describe("createLogger", () => {
     expect(entry.amountKurus).toBe(123456789012);
     expect(entry.error.message).toBe("bad card [KART ****2544]");
   });
+
+  it("redacts cPanel single sign-on tokens", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const url = "https://whm.test:2083/cpsess4567890123/login/?session=ornekcom%3aAbCd%3acreate_user_session%2c0123abcd";
+    createLogger("panel").warn(`login ${url}`, { target: url, error: new Error(`failed ${url}`) });
+
+    const line = spy.mock.calls[0][0] as string;
+    expect(line).not.toMatch(/4567890123|AbCd|0123abcd/);
+    expect(line).toContain("/cpsess[REDACTED]");
+    expect(line).toContain("session=[REDACTED]");
+    spy.mockRestore();
+  });
 });

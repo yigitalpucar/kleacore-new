@@ -1,0 +1,8 @@
+{
+  "metadata": {
+    "command": "create_user_session",
+    "reason": "Access denied: You do not own the account “baskasi”.",
+    "result": 0,
+    "version": 1
+  }
+}

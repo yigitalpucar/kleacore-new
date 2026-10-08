@@ -1,0 +1,9 @@
+{
+  "data": {
+    "pkg": [
+      { "name": "kleacore_Starter", "QUOTA": "5120", "BWLIMIT": "10240", "MAXADDON": "0", "FEATURELIST": "default" },
+      { "name": "kleacore_Pro", "QUOTA": "unlimited", "BWLIMIT": "unlimited", "MAXADDON": "unlimited", "FEATURELIST": "default" }
+    ]
+  },
+  "metadata": { "command": "listpkgs", "reason": "OK", "result": 1, "version": 1 }
+}

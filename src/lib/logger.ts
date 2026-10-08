@@ -11,6 +11,10 @@ const REDACTED = "[REDACTED]";
 const SENSITIVE_KEY =
   /(card.?number|^pan$|cvv|cvc|cvv2|security.?code|card.?expire|expiry|password|passwd|secret|hashdata|authorization|^md$|^cookie$)/i;
 
+// cPanel/WHM single sign-on URLs: the cpsess token and the session parameter
+// are a live login (create_user_session); never let one reach the logs.
+const PANEL_SESSION = /(\/cpsess)\d+|([?&]session=)[^&\s"']+/gi;
+
 // 12-19 digits, optionally grouped by spaces/dashes: candidate card numbers.
 const CARD_CANDIDATE = /\b\d(?:[ -]?\d){11,18}\b/g;
 
@@ -29,9 +33,9 @@ function luhn(digits: string) {
   return sum % 10 === 0;
 }
 
-/** Masks anything that looks like a card number (Luhn-valid 12-19 digits). */
+/** Masks anything that looks like a card number (Luhn-valid 12-19 digits) or a panel session token. */
 export function redactText(value: string) {
-  return value.replace(CARD_CANDIDATE, (match) => {
+  return value.replace(PANEL_SESSION, (_match, cpsess, session) => `${cpsess ?? session}${REDACTED}`).replace(CARD_CANDIDATE, (match) => {
     const digits = match.replace(/\D/g, "");
     return digits.length >= 12 && luhn(digits) ? `[KART ****${digits.slice(-4)}]` : match;
   });

@@ -51,7 +51,10 @@ export interface CapabilitiesByKind {
     | "provision" // createAccount / suspend / unsuspend / terminate (required)
     | "changePackage" // required method, capability documents support
     | "usage" // getUsage
+    | "bulkUsage" // listUsage (daily usage sync)
     | "sso" // getSsoUrl
+    | "password" // resetPassword
+    | "packages" // listPackages + resolvePackageName
     | "console" // getConsoleUrl
     | "power" // powerAction
     | "reinstall" // reinstall

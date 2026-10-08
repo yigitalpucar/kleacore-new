@@ -1,0 +1,4 @@
+{
+  "data": { "app": [{ "app": "system" }, { "app": "ftp" }, { "app": "mail" }, { "app": "mySQL" }, { "app": "postgresql" }] },
+  "metadata": { "command": "passwd", "reason": "Password changed for user ornekcom", "result": 1, "version": 1 }
+}

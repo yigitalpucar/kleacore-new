@@ -1,8 +1,13 @@
 /**
  * cPanel/WHM server module (reseller or root WHM API token). Wraps the
  * existing WHM client (src/lib/integrations/provisioning/providers/
- * cpanel-whm-client.ts); behaviour matches the legacy Settings-backed
- * provider so a product moved onto an instance provisions identically.
+ * cpanel-whm-client.ts); provisioning matches the legacy Settings-backed
+ * provider, except that package names follow the instance's reseller
+ * prefix rule (`packagePrefix`).
+ *
+ * Extras (Faz 2.6): single sign-on (create_user_session), password reset
+ * (passwd), usage per account (accountsummary + showbw) and for the whole
+ * instance (listaccts + showbw), packages (listpkgs).
  */
 import { randomInt } from "node:crypto";
 import { z } from "zod";
@@ -14,9 +19,13 @@ import type { CpanelWhmConfig } from "@/lib/integrations/provisioning/types";
 import type { IntegrationResult } from "@/lib/integrations/settings";
 import type {
   OperationResult,
+  RemoteAccountUsage,
+  RemotePackage,
   ServerAccountContext,
   ServerAccountCreated,
   ServerModule,
+  ServerSsoApp,
+  ServerUsage,
 } from "../../contracts";
 import { defineModule, type ResolvedModuleInstance } from "../../types";
 
@@ -27,6 +36,12 @@ export const cpanelWhmConfigSchema = z.object({
   apiToken: z.string().min(1, "API token gerekli"),
   useSsl: z.boolean().default(true),
   defaultPlan: z.string().trim().default("default"),
+  /**
+   * WHM reseller (non-root) tokens only see packages they own, named
+   * "<reseller>_<Paket>". "auto": prefix package names with "<username>_"
+   * unless already prefixed or the user is root. "none": send as written.
+   */
+  packagePrefix: z.enum(["auto", "none"]).default("auto"),
 });
 
 export type CpanelWhmModuleConfig = z.infer<typeof cpanelWhmConfigSchema>;
@@ -40,8 +55,17 @@ export type CpanelWhmProductOptions = z.infer<typeof cpanelWhmProductOptionsSche
 
 const MODULE_ID = "cpanel-whm";
 
+/** Connection settings only (module-level options such as packagePrefix stay out). */
 export function toCpanelWhmClientConfig(config: CpanelWhmModuleConfig): CpanelWhmConfig {
-  return { enabled: true, ...config };
+  return {
+    enabled: true,
+    host: config.host,
+    port: config.port,
+    username: config.username,
+    apiToken: config.apiToken,
+    useSsl: config.useSsl,
+    defaultPlan: config.defaultPlan,
+  };
 }
 
 function errorResult<T = { reference?: string }>(error: unknown): IntegrationResult<T> {
@@ -73,11 +97,79 @@ function whmDomainFor(service: ServerAccountContext["service"]) {
   return host.includes(".") ? host.toLowerCase() : `${host}.kleacore.local`;
 }
 
+/** Applies the reseller prefix rule (see `packagePrefix`) to a package name. */
+export function prefixWhmPackage(name: string, config: Pick<CpanelWhmModuleConfig, "username" | "packagePrefix">) {
+  const trimmed = name.trim();
+  const owner = config.username.trim();
+  if (!trimmed || config.packagePrefix === "none" || !owner || owner === "root") return trimmed;
+  return trimmed.startsWith(`${owner}_`) ? trimmed : `${owner}_${trimmed}`;
+}
+
+/** Product package → product SKU → instance default, then the reseller prefix. */
+export function whmPackageName(
+  options: CpanelWhmProductOptions,
+  product: { sku: string },
+  config: CpanelWhmModuleConfig
+) {
+  return prefixWhmPackage(options.package?.trim() || product.sku?.trim() || config.defaultPlan, config);
+}
+
 export function whmPackageFor(
   ctx: ServerAccountContext<CpanelWhmProductOptions>,
   config: CpanelWhmModuleConfig
 ) {
-  return ctx.options.package?.trim() || ctx.service.product.sku?.trim() || config.defaultPlan;
+  return whmPackageName(ctx.options, ctx.service.product, config);
+}
+
+/** cPanel app ids for create_user_session `app`. */
+const SSO_APPS: Record<ServerSsoApp, string> = {
+  fileManager: "FileManager_Home",
+  emailAccounts: "Email_Accounts",
+  phpMyAdmin: "Database_phpMyAdmin",
+};
+
+/**
+ * WHM size strings → MB. "102M" / "1.5G" / "512K" / plain numbers (MB);
+ * "unlimited" / "none" → null (no limit); unparseable → undefined.
+ */
+export function parseWhmMegabytes(value: unknown): number | null | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  const text = String(value).trim().toLowerCase();
+  if (text === "unlimited" || text === "none") return null;
+  const match = /^(\d+(?:\.\d+)?)\s*([kmgt]?)b?$/.exec(text);
+  if (!match) return undefined;
+  const amount = Number(match[1]);
+  const factor = { "": 1, k: 1 / 1024, m: 1, g: 1024, t: 1024 * 1024 }[match[2] as "" | "k" | "m" | "g" | "t"];
+  return Math.round(amount * factor * 100) / 100;
+}
+
+/** Bytes (number or numeric string) → MB; 0 / "unlimited" limits → null. */
+function bytesToMegabytes(value: unknown, zeroIsUnlimited = false): number | null | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  if (typeof value === "string" && value.trim().toLowerCase() === "unlimited") return null;
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes)) return undefined;
+  if (zeroIsUnlimited && bytes <= 0) return null;
+  return Math.round((bytes / (1024 * 1024)) * 100) / 100;
+}
+
+function usageFrom(
+  account: { diskused?: unknown; disklimit?: unknown } | null,
+  bandwidth: { totalbytes?: unknown; limit?: unknown } | undefined,
+  collectedAt: Date
+): ServerUsage {
+  const usage: ServerUsage = { collectedAt };
+  const diskUsed = parseWhmMegabytes(account?.diskused);
+  const diskLimit = parseWhmMegabytes(account?.disklimit);
+  if (typeof diskUsed === "number") usage.diskUsedMB = diskUsed;
+  if (diskLimit !== undefined) usage.diskLimitMB = diskLimit;
+  if (bandwidth) {
+    usage.bandwidthUsedMB = bytesToMegabytes(bandwidth.totalbytes) ?? 0;
+    const bandwidthLimit = bytesToMegabytes(bandwidth.limit, true);
+    if (bandwidthLimit !== undefined) usage.bandwidthLimitMB = bandwidthLimit;
+  }
+  return usage;
 }
 
 /** Account the operation targets: remoteId, else the service username. */
@@ -132,6 +224,73 @@ export function createCpanelWhmModule(
     unsuspend: (ctx) => onAccount(ctx, (user) => client.unsuspendAccount(user)),
     terminate: (ctx) => onAccount(ctx, (user) => client.terminateAccount(user)),
     changePackage: (ctx) => onAccount(ctx, (user) => client.changePackage(user, whmPackageFor(ctx, config))),
+
+    async getSsoUrl(ctx, target = "panel", options) {
+      const user = accountOf(ctx);
+      if (!user) return { ok: false, provider: MODULE_ID, error: "CPANEL_USERNAME_MISSING" };
+      try {
+        const session = await client.createUserSession(
+          user,
+          target === "webmail" ? "webmaild" : "cpaneld",
+          target === "panel" && options?.app ? SSO_APPS[options.app] : undefined
+        );
+        return {
+          ok: true,
+          provider: MODULE_ID,
+          data: { url: session.url, ...(session.expires ? { expiresAt: new Date(session.expires * 1000) } : {}) },
+        };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+
+    resetPassword: (ctx, password) => onAccount(ctx, (user) => client.setPassword(user, password)),
+
+    async getUsage(ctx) {
+      const user = accountOf(ctx);
+      if (!user) return { ok: false, provider: MODULE_ID, error: "CPANEL_USERNAME_MISSING" };
+      try {
+        const [account, bandwidth] = await Promise.all([client.accountSummary(user), client.showBandwidth(user)]);
+        if (!account) return { ok: false, provider: MODULE_ID, error: "CPANEL_ACCOUNT_NOT_FOUND" };
+        return { ok: true, provider: MODULE_ID, data: usageFrom(account, bandwidth[0], new Date()) };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+
+    /** Two calls for the whole instance: listaccts (disk) + showbw (this month's traffic). */
+    async listUsage() {
+      try {
+        const [accounts, bandwidth] = await Promise.all([client.listAccounts(), client.showBandwidth()]);
+        const bandwidthByUser = new Map(bandwidth.map((row) => [row.user, row]));
+        const collectedAt = new Date();
+        const data: RemoteAccountUsage[] = accounts
+          .filter((account) => typeof account.user === "string" && account.user)
+          .map((account) => ({
+            remoteId: account.user,
+            usage: usageFrom(account, bandwidthByUser.get(account.user), collectedAt),
+          }));
+        return { ok: true, provider: MODULE_ID, data };
+      } catch (error) {
+        return errorResult<RemoteAccountUsage[]>(error);
+      }
+    },
+
+    async listPackages() {
+      try {
+        const rows = await client.listPackages();
+        const data: RemotePackage[] = rows.map((row) => ({
+          name: row.name,
+          diskLimitMB: parseWhmMegabytes(row.QUOTA),
+          bandwidthLimitMB: parseWhmMegabytes(row.BWLIMIT),
+        }));
+        return { ok: true, provider: MODULE_ID, data };
+      } catch (error) {
+        return errorResult<RemotePackage[]>(error);
+      }
+    },
+
+    resolvePackageName: (options, product) => whmPackageName(options, product, config),
   };
 }
 
@@ -149,12 +308,23 @@ export const cpanelWhmModule = defineModule({
     apiToken: { label: "API token" },
     useSsl: { label: "SSL ile bağlan" },
     defaultPlan: { label: "Varsayılan paket", hint: "Üründe paket ve SKU yoksa kullanılır." },
+    packagePrefix: {
+      label: "Paket adı ön eki",
+      hint: "Bayi (root olmayan) token'ları yalnızca kendi paketlerini görür; WHM bu paketleri “kullanıcıadı_Paket” olarak adlandırır.",
+      optionLabels: {
+        auto: "Otomatik: bayi kullanıcı adını ekle (ör. kleacore_Starter)",
+        none: "Yok: paket adını olduğu gibi gönder",
+      },
+    },
   },
-  capabilities: ["provision", "changePackage"],
+  capabilities: ["provision", "changePackage", "sso", "password", "usage", "bulkUsage", "packages"],
   productCategories: ["hosting", "email"],
   productOptionsSchema: cpanelWhmProductOptionsSchema,
   productOptionsFields: {
-    package: { label: "WHM paketi", hint: "Boş bırakılırsa ürün SKU'su, o da yoksa sunucunun varsayılan paketi kullanılır." },
+    package: {
+      label: "WHM paketi",
+      hint: "Boş bırakılırsa ürün SKU'su, o da yoksa sunucunun varsayılan paketi kullanılır. Bayi ön eki (kleacore_) örnek ayarına göre otomatik eklenir.",
+    },
   },
   async healthCheck(instance) {
     try {
