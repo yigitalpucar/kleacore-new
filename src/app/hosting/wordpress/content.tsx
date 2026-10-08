@@ -1,154 +1,163 @@
-"use client";
+import { Clock, Copy, Lock, MapPin, PanelsTopLeft, Rocket } from "lucide-react";
+import { FeatureGrid, type FeatureItem } from "@/components/site/feature-grid";
+import type { FaqItem } from "@/components/site/faq-section";
+import type { PlanCardData } from "@/components/site/plan-card";
+import { Section } from "@/components/site/section";
+import { SectionHeading } from "@/components/site/section-heading";
+import type { TrustBarItem } from "@/components/site/trust-bar";
+import type { HostingComparisonData, HostingSubType } from "@/components/site/hosting/data";
+import { HostingLanding } from "@/components/site/hosting/hosting-landing";
+import { WpStagingPanel } from "@/components/site/hosting/visuals";
 
-import { useState } from "react";
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { PricingCard, type HostingPlan } from "@/components/hosting/pricing-card";
-import { BillingToggle } from "@/components/hosting/billing-toggle";
-import { HostingFeatures } from "@/components/hosting/hosting-features";
-import { PageHero } from "@/components/sections/page-hero";
-import { TrustStrip } from "@/components/sections/trust-strip";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { LayoutTemplate } from "lucide-react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { getIcon } from "@/lib/utils/icon-map";
-import type { Product, PricingTier, ProductCategory } from "@prisma/client";
+const trustItems: TrustBarItem[] = [
+  { icon: Rocket, label: "LiteSpeed Cache", description: "Tüm WP paketlerinde" },
+  { icon: Copy, label: "WP Staging", description: "Test ortamı" },
+  { icon: Clock, label: "Günlük yedek", description: "Tüm WP paketlerinde" },
+  { icon: Lock, label: "Ücretsiz SSL", description: "Let's Encrypt / Wildcard" },
+  { icon: PanelsTopLeft, label: "cPanel", description: "Kontrol paneli" },
+  { icon: MapPin, label: "İstanbul", description: "Sunucu lokasyonu" },
+];
 
-type ProductWithPricing = Product & {
-  category: ProductCategory;
-  pricingTiers: PricingTier[];
-};
+const wpFeatures: FeatureItem[] = [
+  {
+    icon: "Rocket",
+    title: "LiteSpeed Cache",
+    description:
+      "WordPress için geliştirilmiş LiteSpeed Cache eklentisiyle sayfa önbellekleme, CSS/JS küçültme ve görsel optimizasyonu ayarlarını tek yerden yapın.",
+  },
+  {
+    icon: "CircleDot",
+    title: "WP Staging",
+    description:
+      "Canlı sitenizin bir kopyasında tema, eklenti ve içerik değişikliklerini deneyin; sorun yoksa canlıya aktarın.",
+  },
+  {
+    icon: "Download",
+    title: "Günlük otomatik yedek",
+    description:
+      "Tüm WordPress paketlerinde yedekler günlük alınır. Bir güncelleme ters giderse önceki güne dönebilirsiniz.",
+  },
+  {
+    icon: "Lock",
+    title: "Ücretsiz SSL",
+    description:
+      "Let's Encrypt SSL tüm paketlerde ücretsizdir; üst pakette alt alan adlarınızı da kapsayan Wildcard SSL dahildir.",
+  },
+];
 
-interface ContentProps {
-  products: ProductWithPricing[];
-}
+const faqs: FaqItem[] = [
+  {
+    question: "WordPress hosting ile Linux hosting arasındaki fark nedir?",
+    answer:
+      "İkisi de cPanel ile yönetilir. WordPress paketlerinde LiteSpeed Cache ve WP Staging hazır gelir, yedekler tüm paketlerde günlük alınır ve paketler WordPress sitelerinin ihtiyaç duyduğu disk ve RAM miktarlarına göre ayrılır.",
+  },
+  {
+    question: "WordPress'i nasıl kurarım?",
+    answer:
+      "Hizmetiniz açıldıktan sonra WordPress'i cPanel üzerinden kurabilir veya mevcut sitenizi taşıyabilirsiniz. Takıldığınız bir adım olursa destek ekibimize yazabilirsiniz.",
+  },
+  {
+    question: "WP Staging nedir?",
+    answer:
+      "WP Staging, canlı sitenizin bir kopyasını oluşturarak değişikliklerinizi test etmenizi sağlar. Tema, eklenti veya içerik değişikliklerini önce test ortamında dener, sorun yoksa canlıya alırsınız.",
+  },
+  {
+    question: "LiteSpeed Cache nedir?",
+    answer:
+      "LiteSpeed Cache, LiteSpeed web sunucusuyla birlikte çalışan bir WordPress önbellekleme eklentisidir. Sayfa önbellekleme, görsel optimizasyonu, CSS/JS küçültme ve veritabanı temizliği gibi ayarlar sunar.",
+  },
+  {
+    question: "WooCommerce mağazası için hangi paketi seçmeliyim?",
+    answer:
+      "Ürün sayısı, görsel boyutu ve ziyaretçi sayısı ihtiyacı belirler. Mağazalar için genellikle daha fazla CPU, RAM ve disk sunan üst paketler daha uygundur; karşılaştırma tablosundan kaynakları inceleyebilirsiniz.",
+  },
+  {
+    question: "Aylık mı, yıllık mı ödeme yapabilirim?",
+    answer:
+      "İkisi de mümkün. Yıllık ödemede aylık karşılık daha düşüktür; fark paket kartlarında gösterilir. Fiyatlara KDV dahil değildir, %20 KDV ödeme adımında eklenir.",
+  },
+  {
+    question: "Nasıl destek alırım?",
+    answer:
+      "Müşteri panelinden 7/24 destek talebi açabilir veya support@kleacore.com adresine e-posta gönderebilirsiniz.",
+  },
+];
 
-interface FaqItem {
-  question: string;
-  answer: string;
-}
-
-interface FeatureItem {
-  label: string;
-  value: string;
-  icon: string;
-  highlight?: boolean;
-}
-
-const mapProductToHostingPlan = (product: ProductWithPricing): HostingPlan => {
-  const monthlyTier = product.pricingTiers.find((t) => t.period === "monthly");
-  const yearlyTier = product.pricingTiers.find((t) => t.period === "yearly");
-  const resources = product.resourceLimits as Record<string, string>;
-  const features = product.features as unknown as FeatureItem[];
-
-  return {
-    sku: product.sku,
-    slug: product.slug,
-    name: product.name,
-    description: product.shortDescription,
-    price: monthlyTier?.price ?? product.basePrice,
-    yearlyPrice: yearlyTier?.discountedPrice ?? yearlyTier?.price,
-    period: "ay",
-    features: (product.includedFeatures as string[]) ?? [],
-    storage: resources?.storage ?? "",
-    bandwidth: resources?.bandwidth ?? "",
-    websites: resources?.websites ?? "",
-    emails: resources?.emails ?? "",
-    popular: product.isPopular,
-    badge: product.badge ?? undefined,
-    detailedFeatures: features?.map((f) => ({
-      icon: getIcon(f.icon),
-      label: f.label,
-      value: f.value,
-      highlight: f.highlight,
-    })),
-  };
-};
-
-export const Content = ({ products }: ContentProps) => {
-  const [isYearly, setIsYearly] = useState(false);
-
-  const plans = products.map(mapProductToHostingPlan);
-
-  const faqProduct = products.find(
-    (p) => Array.isArray(p.faq) && (p.faq as unknown as FaqItem[]).length > 0
-  );
-  const faqs = (faqProduct?.faq as unknown as FaqItem[]) ?? [];
-
+export function Content({
+  plans,
+  comparison,
+  startingPrices,
+}: {
+  plans: PlanCardData[];
+  comparison: HostingComparisonData;
+  startingPrices: Partial<Record<HostingSubType, number>>;
+}) {
   return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-      <main className="flex-1">
-        <PageHero
-          badge="WordPress Optimize"
-          badgeIcon={LayoutTemplate}
-          title="WordPress Hosting"
-          description="WordPress için özel optimize edilmiş sunucular. Otomatik güncellemeler, önbellekleme ve güvenlik dahil."
-          accent="sky"
-        >
-          <BillingToggle isYearly={isYearly} onToggle={setIsYearly} />
-        </PageHero>
-
-        <TrustStrip />
-
-        <section className="py-12 md:py-16">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
-                {plans.map((plan) => (
-                  <PricingCard key={plan.name} plan={plan} isYearly={isYearly} />
-                ))}
-              </div>
-            </BlurFade>
+    <HostingLanding
+      subType="wordpress"
+      hero={{
+        eyebrow: "LiteSpeed Cache · WP Staging",
+        title: "WordPress Hosting",
+        description:
+          "Blogunuz, kurumsal siteniz veya WooCommerce mağazanız için LiteSpeed Cache ve WP Staging hazır, yedekleri her gün alınan WordPress paketleri.",
+        breadcrumb: "WordPress Hosting",
+      }}
+      trustItems={trustItems}
+      plans={plans}
+      comparison={comparison}
+      plansHeading={{
+        eyebrow: "WordPress hosting",
+        title: "WordPress paketleri",
+        description:
+          "Tüm paketlerde LiteSpeed Cache, WP Staging, günlük yedek ve ücretsiz SSL var. Paketler site sayısı, disk ve kaynaklarla ayrılır.",
+      }}
+      steps={{
+        title: "WordPress sitenizi yayına alın",
+        items: [
+          {
+            title: "Paketinizi seçin",
+            description: "Site sayısına ve trafiğinize uyan WordPress paketini seçin.",
+          },
+          {
+            title: "Alan adını bağlayın",
+            description: "Yeni alan adı kaydedin veya mevcut alan adınızı kullanın.",
+          },
+          {
+            title: "WordPress'i kurun",
+            description: "cPanel üzerinden WordPress'i kurun veya mevcut sitenizi taşıyın.",
+          },
+          {
+            title: "Önbelleği açın",
+            description: "LiteSpeed Cache eklentisini etkinleştirin; değişiklikleri önce staging'de deneyin.",
+          },
+        ],
+      }}
+      startingPrices={startingPrices}
+      faqs={faqs}
+      faqDescription="WordPress hosting paketleri hakkında sık sorulan sorular."
+      cta={{
+        eyebrow: "WordPress",
+        title: "WordPress sitenizi güvenle büyütün",
+        description: "LiteSpeed Cache, WP Staging ve günlük yedekle başlayın; paketinizi ihtiyacınız arttıkça değiştirin.",
+        primary: { label: "Paketleri incele", href: "#paketler" },
+        secondary: { label: "Alan adı sorgula", href: "/domain/kayit" },
+      }}
+    >
+      <Section divider aria-labelledby="wp-heading">
+        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
+          <WpStagingPanel className="order-last lg:order-first" />
+          <div>
+            <SectionHeading
+              id="wp-heading"
+              eyebrow="WordPress'e özel"
+              title="Güncellemeden önce test edin, hızı ayarlayın"
+              description="WordPress paketleri, sitenizi bozmadan değişiklik yapmanız ve sayfalarınızı hızlı sunmanız için gereken araçlarla gelir."
+              className="mb-10"
+            />
+            <FeatureGrid items={wpFeatures} columns={2} variant="inline" />
           </div>
-        </section>
-
-        {/* Hosting Features */}
-        <HostingFeatures />
-
-        {/* FAQ */}
-        {faqs.length > 0 && (
-          <section className="py-16 md:py-24 bg-muted/30">
-            <div className="container">
-              <BlurFade delay={0.1} inView>
-                <div className="text-center mb-12">
-                  <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                    Sık Sorulan Sorular
-                  </h2>
-                  <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                    WordPress hosting hakkında merak edilenler
-                  </p>
-                </div>
-              </BlurFade>
-
-              <BlurFade delay={0.2} inView>
-                <div className="max-w-3xl mx-auto">
-                  <Accordion type="single" collapsible className="w-full">
-                    {faqs.map((faq, index) => (
-                      <AccordionItem key={index} value={`item-${index}`}>
-                        <AccordionTrigger className="text-left">
-                          {faq.question}
-                        </AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground">
-                          {faq.answer}
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                </div>
-              </BlurFade>
-            </div>
-          </section>
-        )}
-      </main>
-      <Footer />
-    </div>
+        </div>
+      </Section>
+    </HostingLanding>
   );
-};
+}

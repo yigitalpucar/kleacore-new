@@ -1,55 +1,32 @@
-"use client";
+import type { Metadata } from "next";
+import { Header } from "@/components/layout/header";
+import { Footer } from "@/components/layout/footer";
+import { Section } from "@/components/site/section";
+import { CheckoutHeader } from "@/components/site/hosting/checkout-header";
+import { IyzicoCheckoutFrame } from "./checkout-frame";
 
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  clearStoredIyzicoCheckoutHtml,
-  readStoredIyzicoCheckoutHtml,
-} from "@/lib/payments/checkout-redirect";
+export const metadata: Metadata = {
+  title: "Güvenli Ödeme (iyzico)",
+  description: "iyzico güvenli ödeme sayfası. Kart bilgileriniz ödeme kuruluşunun formunda girilir.",
+  alternates: { canonical: "/odeme/iyzico" },
+  robots: { index: false, follow: false },
+};
 
-export default function IyzicoOdemePage() {
-  const [checkoutHtml, setCheckoutHtml] = useState<string | null>(null);
-
-  useEffect(() => {
-    const html = readStoredIyzicoCheckoutHtml();
-    setCheckoutHtml(html);
-    if (html) {
-      clearStoredIyzicoCheckoutHtml();
-    }
-  }, []);
-
-  if (!checkoutHtml) {
-    return (
-      <div className="container py-10">
-        <Card className="max-w-3xl mx-auto">
-          <CardHeader>
-            <CardTitle>Ödeme bilgisi bulunamadı</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              iyzico ödeme formu bulunamadı. Lütfen fatura sayfasından tekrar deneyin.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
+export default function Page() {
   return (
-    <div className="container py-10">
-      <Card className="max-w-4xl mx-auto">
-        <CardHeader>
-          <CardTitle>Güvenli Ödeme</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <iframe
-            title="iyzico Ödeme"
-            srcDoc={checkoutHtml}
-            sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
-            className="w-full min-h-[600px] border-0"
-          />
-        </CardContent>
-      </Card>
+    <div className="flex min-h-screen flex-col">
+      <Header />
+      <main id="main" className="flex-1">
+        <CheckoutHeader
+          eyebrow="Ödeme · iyzico"
+          title="Güvenli ödeme"
+          description="Kart bilgilerinizi aşağıdaki iyzico ödeme formuna girin. Ödeme tamamlandığında faturanız otomatik olarak güncellenir."
+        />
+        <Section spacing="sm" container="narrow">
+          <IyzicoCheckoutFrame />
+        </Section>
+      </main>
+      <Footer />
     </div>
   );
 }

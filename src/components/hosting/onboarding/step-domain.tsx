@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Globe, ArrowRight, Search, Check, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Globe, ArrowRight, Search, Check, Loader2, Link2 } from "lucide-react";
+import { buttonClasses } from "@/components/site/button-classes";
+import { formatTRY } from "@/lib/format/price";
 import { cn } from "@/lib/utils";
+import { ChoiceTile, StepHeading, StepNav, fieldClass } from "./step-shell";
 import { searchDomainAvailability, type DomainAvailabilityResult } from "@/lib/actions/public/domains";
 import type { DomainChoice } from "@/app/hosting/satin-al/[slug]/content";
 
@@ -18,20 +18,20 @@ interface StepDomainProps {
 const OPTIONS = [
   {
     type: "new" as const,
-    title: "Yeni domain al",
-    description: "Yeni bir domain adı kaydet",
+    title: "Yeni alan adı kaydet",
+    description: "Uygun bir alan adı bulun ve siparişe ekleyin",
     icon: Globe,
   },
   {
     type: "existing" as const,
-    title: "Mevcut domainimi kullan",
-    description: "Sahip olduğum domaini bağla",
-    icon: Globe,
+    title: "Mevcut alan adımı kullan",
+    description: "Sahip olduğunuz alan adını bağlayın",
+    icon: Link2,
   },
   {
     type: "later" as const,
     title: "Sonra karar vereceğim",
-    description: "Domain seçimini atla",
+    description: "Alan adını sipariş sonrası belirleyin",
     icon: ArrowRight,
   },
 ];
@@ -67,111 +67,144 @@ export const StepDomain = ({ domainChoice, onDomainChoice, onNext }: StepDomainP
     (domainChoice.type === "existing" && existingDomain.trim());
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold mb-1">Domain Seçimi</h2>
-        <p className="text-sm text-muted-foreground">
-          Hosting paketiniz için domain belirleyin.
-        </p>
+    <div className="space-y-8">
+      <StepHeading
+        eyebrow="Adım · Alan adı"
+        title="Alan adınızı belirleyin"
+        description="Hosting paketinizi kullanacağınız alan adını seçin. Bu adımı sonraya da bırakabilirsiniz."
+      />
+
+      <div role="group" aria-label="Alan adı seçeneği" className="grid gap-3 sm:grid-cols-3">
+        {OPTIONS.map((opt) => {
+          const selected = domainChoice.type === opt.type;
+          return (
+            <ChoiceTile
+              key={opt.type}
+              selected={selected}
+              onClick={() => {
+                onDomainChoice({ type: opt.type });
+                setResults([]);
+              }}
+            >
+              <span className="flex items-start justify-between gap-3">
+                <span className="flex size-9 items-center justify-center rounded-md border bg-muted/40">
+                  <opt.icon aria-hidden className="size-4 text-foreground/80" />
+                </span>
+                <span
+                  aria-hidden
+                  className={cn(
+                    "flex size-4 items-center justify-center rounded-full border",
+                    selected && "border-foreground bg-foreground text-background"
+                  )}
+                >
+                  {selected ? <Check className="size-2.5 stroke-[3]" /> : null}
+                </span>
+              </span>
+              <span className="mt-4 block text-sm font-medium">{opt.title}</span>
+              <span className="mt-1 block text-xs text-muted-foreground">{opt.description}</span>
+            </ChoiceTile>
+          );
+        })}
       </div>
 
-      {/* Option Cards */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        {OPTIONS.map((opt) => (
-          <Card
-            key={opt.type}
-            className={cn(
-              "cursor-pointer transition-all hover:shadow-md",
-              domainChoice.type === opt.type && "ring-2 ring-primary"
-            )}
-            onClick={() => {
-              onDomainChoice({ type: opt.type });
-              setResults([]);
-            }}
-          >
-            <CardContent className="p-4 text-center">
-              <opt.icon className="h-6 w-6 mx-auto mb-2 text-primary" />
-              <p className="font-medium text-sm">{opt.title}</p>
-              <p className="text-xs text-muted-foreground mt-1">{opt.description}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* New Domain Search */}
       {domainChoice.type === "new" && (
         <div className="space-y-4">
-          <div className="flex gap-2">
-            <Input
+          <form
+            className="flex gap-2"
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSearch();
+            }}
+          >
+            <label htmlFor="hosting-domain-search" className="sr-only">
+              Alan adı ara
+            </label>
+            <input
+              id="hosting-domain-search"
+              className={fieldClass}
               placeholder="ornek.com"
+              autoComplete="off"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             />
-            <Button onClick={handleSearch} disabled={isPending}>
+            <button
+              type="submit"
+              disabled={isPending}
+              className={buttonClasses({ className: "shrink-0 px-4" })}
+            >
               {isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 aria-hidden className="size-4 animate-spin" />
               ) : (
-                <Search className="h-4 w-4" />
+                <Search aria-hidden className="size-4" />
               )}
-            </Button>
-          </div>
+              <span className="hidden sm:inline">Sorgula</span>
+              <span className="sr-only sm:hidden">Sorgula</span>
+            </button>
+          </form>
 
           {results.length > 0 && (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {results.map((r) => (
-                <div
-                  key={r.domain}
-                  className={cn(
-                    "flex items-center justify-between p-3 rounded-lg border text-sm transition-all",
-                    r.available
-                      ? "cursor-pointer hover:border-primary"
-                      : "opacity-50",
-                    domainChoice.domain === r.domain && "ring-2 ring-primary bg-primary/5"
-                  )}
-                  onClick={() => r.available && handleSelectDomain(r)}
-                >
-                  <div className="flex items-center gap-2">
-                    {domainChoice.domain === r.domain ? (
-                      <Check className="h-4 w-4 text-primary" />
-                    ) : (
-                      <Globe className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <span className="font-medium">{r.domain}</span>
-                  </div>
-                  <div className="text-right">
-                    {r.available ? (
-                      <span className="text-primary font-medium">₺{r.price}/yıl</span>
-                    ) : (
-                      <span className="text-muted-foreground">Kayıtlı</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ul className="max-h-72 space-y-2 overflow-y-auto" aria-label="Sorgu sonuçları">
+              {results.map((r) => {
+                const selected = domainChoice.domain === r.domain;
+                return (
+                  <li key={r.domain}>
+                    <ChoiceTile
+                      selected={selected}
+                      disabled={!r.available}
+                      onClick={() => r.available && handleSelectDomain(r)}
+                      className="flex min-h-11 items-center justify-between gap-3 px-4 py-3"
+                    >
+                      <span className="flex min-w-0 items-center gap-2 text-sm">
+                        {selected ? (
+                          <Check aria-hidden className="size-4 shrink-0" />
+                        ) : (
+                          <Globe aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                        )}
+                        <span className="truncate font-medium">{r.domain}</span>
+                      </span>
+                      <span className="shrink-0 text-right text-sm">
+                        {r.available ? (
+                          <span className="font-medium tabular-nums">
+                            {formatTRY(r.price)}
+                            <span className="font-normal text-muted-foreground">/yıl</span>
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Kayıtlı</span>
+                        )}
+                      </span>
+                    </ChoiceTile>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
       )}
 
-      {/* Existing Domain Input */}
       {domainChoice.type === "existing" && (
-        <Input
-          placeholder="mevcut-domain.com"
-          value={existingDomain}
-          onChange={(e) => {
-            setExistingDomain(e.target.value);
-            onDomainChoice({ type: "existing", domain: e.target.value });
-          }}
-        />
+        <div>
+          <label htmlFor="hosting-existing-domain" className="text-sm font-medium">
+            Mevcut alan adınız
+          </label>
+          <input
+            id="hosting-existing-domain"
+            className={cn(fieldClass, "mt-2")}
+            placeholder="mevcut-alanadi.com"
+            autoComplete="off"
+            value={existingDomain}
+            onChange={(e) => {
+              setExistingDomain(e.target.value);
+              onDomainChoice({ type: "existing", domain: e.target.value });
+            }}
+          />
+          <p className="mt-2 text-xs text-muted-foreground">
+            Sipariş sonrası alan adınızın DNS kayıtlarını hosting hesabınıza yönlendirmeniz gerekir.
+          </p>
+        </div>
       )}
 
-      {/* Next Button */}
-      <div className="flex justify-end pt-4">
-        <Button onClick={onNext} disabled={!canContinue}>
-          Devam Et
-          <ArrowRight className="h-4 w-4 ml-2" />
-        </Button>
-      </div>
+      <StepNav onNext={onNext} nextDisabled={!canContinue} />
     </div>
   );
 };
