@@ -4,6 +4,7 @@ import {
   Blocks,
   BookOpen,
   Box,
+  Download,
   FileCheck,
   FileText,
   Globe,
@@ -90,6 +91,7 @@ export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
         { title: "Ürünler", href: `${ADMIN_ROOT}/urunler`, icon: ShoppingBag },
         { title: "Sunucular", href: `${ADMIN_ROOT}/sunucular`, icon: Server },
         { title: "IP havuzları", href: `${ADMIN_ROOT}/ip-havuzlari`, icon: Network },
+        { title: "İçe aktarma", href: `${ADMIN_ROOT}/ice-aktar`, icon: Download },
       ],
     },
     {

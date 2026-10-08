@@ -197,3 +197,20 @@ return { ok: true, data: { remoteId: String(vmid), ipAddress: ip.address } };
 - **Cloudflare DNS** (`dns/cloudflare`): `DnsModule` + `describeDnsModuleBehaviour` (durum tutan fetch sahtesiyle). Hizmet/alan adı tarafında çağırmak için `listActiveInstances("dns")` + `createContract(instance, "dns")`.
 - **cPanel SSO / kullanım** (`server/cpanel-whm`): `getSsoUrl` (+ `sso`) ve `getUsage` (+ `usage`) ekleyin; manifest'in `capabilities` listesini güncellemezseniz sözleşme testi kırılır. Legacy hizmetler için önce hizmeti örneğe bağlamak gerekir (§4).
 - **İçe aktarma**: `listAccounts` (server) / `listDomains` (registrar) ekleyin; içe aktarılan hizmete `moduleInstanceId` + `remoteId` yazın.
+
+## 8. Mevcut altyapıyı içe aktarma (2.7)
+
+Kod: `src/lib/imports/**`, ekran `/yonetim/ice-aktar`, kuru çalıştırma `pnpm import:preview -- --source=whm|proxmox|registrar --instance=<id> [--json]`.
+
+1. **Listeleme** (`import.fetch` işi): kaynak, modül örneği üzerinden **yalnızca okuma** çağrılarıyla listelenir — WHM `listAccounts` (`listaccts`), registrar `listDomains` (+ eksik alanlar için `getDomainInfo`), Proxmox `listVirtualMachines` (aşağıya bakın). Her kayıt bir `ImportRow` olur; `data` = normalize kayıt, `proposal` = önerilen eşleme.
+2. **Eşleme kuralları** (`mapping.ts`, saf fonksiyonlar):
+   - Müşteri: e-posta birebir (büyük/küçük harf duyarsız) → bilinen alan adı (hizmetin `domain`'i, `Domain.name`; üst alan adı da) → hesabın e-postasıyla **yeni müşteri** (şifresiz, `account.invite` davet e-postası, 7 gün geçerli şifre belirleme bağlantısı) → yoksa yönetici seçer.
+   - Ürün: WHM paketi → `moduleOptions.package` (birebir, harf duyarsız, bayi öneki `owner_` olmadan; bu örneğe bağlı ürün önce) → ürün SKU'su. VM → `moduleOptions.cores` + `memoryMB` eşit ürün. Bulunamazsa yönetici seçer.
+   - Faturalama: dönem = ürünün varsayılan fiyat dönemi; sonraki vade = açılış tarihinin dönem adımlı yıldönümü, **bugünden önce olamaz** (geçmiş dönem faturalanmaz); tutar = `productPeriodPricing` (yönetici özel fiyat girebilir). Alan adında bitiş tarihi = registrar bitişi (geçmiş olabilir, durum EXPIRED).
+   - Durum: WHM askıda → `SUSPENDED`, sebep "İçe aktarma". Kapalı VM aktif açılır.
+   - Bu örnekte aynı `remoteId`'ye bağlı hizmet / aynı adlı alan adı varsa satır **atlanır**. Örneğe bağlı olmayan eski hizmetin `username`/`serverName`'i WHM kullanıcısıyla eşleşirse "mevcut hizmete bağla" önerilir (yeni hizmet açılmaz, yalnızca `moduleInstanceId`/`remoteId` yazılır).
+3. **İçe aktarma** (`import.apply` işi): seçili satırlar tek tek, her biri kendi transaction'ında işlenir; hatalı satır `FAILED` + mesajla kaydedilir, diğerleri devam eder. Uzak sisteme hiçbir çağrı yapılmaz, fatura/provisioning işi oluşturulmaz. `services(moduleInstanceId, remoteId)` benzersizdir (migration `20261011100000_imports`), yani aynı hesap iki kez aktarılamaz. Alan adları `Domain.moduleInstanceId` ile registrar örneğine bağlanır.
+4. **IPAM**: VM'in IP'leri bir havuzdaysa ve `FREE` ise hizmete `ASSIGNED` yapılır; `ASSIGNED`/`RESERVED` adres **asla** yeniden atanmaz (satıra uyarı). WHM hesap IP'leri sunucunun paylaşımlı IP'si olduğu için IPAM'e yazılmaz (yalnızca `Service.ipAddress`).
+5. **Denetim**: `ImportRun` (kim, ne zaman, kaynak, örnek, sayılar) + `ImportRow` (satır sonucu, hata, uyarı, oluşan hizmet/alan adı/müşteri id'leri) + `ActivityLog` (`IMPORT_RUN_CREATED`, `IMPORT_APPLY_STARTED`, `IMPORT_APPLIED`).
+
+**Proxmox entegrasyonu:** içe aktarma katmanı yalnızca `VirtualMachineLister { listVirtualMachines(): Promise<IntegrationResult<RemoteVirtualMachine[]>> }` arayüzüne bağlıdır (`src/lib/imports/sources/proxmox.ts`). Proxmox modülünün sözleşmesi bu metodu sağlarsa o kullanılır; sağlamazsa örnek ayarındaki `apiUrl`/`tokenId`/`tokenSecret`/`node?` ile salt-okuma HTTP adaptörü çalışır (`cluster/resources?type=vm`, `nodes/{node}/{qemu|lxc}/{vmid}/config`, çalışan VM'de `agent/network-get-interfaces`). Kendinden imzalı sertifika için modül kendi `fetch`'ini adaptöre verebilir. Proxmox `ModuleInstance` oluşturulabilmesi için manifest'in kayıtlı olması gerekir (paralel dal).
