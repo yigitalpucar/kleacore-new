@@ -707,6 +707,10 @@ model Service {
   moduleInstanceId String?
   moduleInstance   ModuleInstance? @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
   remoteId         String?
+  /// Module-owned state keyed by moduleId (Proxmox: VMID, node, resumable
+  /// provisioning step, last task UPID, encrypted initial password). Never
+  /// sent to the browser as-is; see src/lib/modules/service-state.ts.
+  moduleData       Json?
 
   // Resources
   diskUsed       Float?

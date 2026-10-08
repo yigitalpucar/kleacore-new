@@ -12,6 +12,7 @@ import { releaseIp } from "@/lib/ipam";
 import { createLogger } from "@/lib/logger";
 import type { OperationResult, ServerAccountContext, ServerModule } from "./contracts";
 import { parseProductOptions } from "./product-options";
+import { createServiceModuleState } from "./service-state";
 import type { AnyModuleManifest, ResolvedModuleInstance } from "./types";
 
 const log = createLogger("modules.server-bridge");
@@ -76,7 +77,7 @@ export function createModuleProvisioningProvider(binding: ServerBinding): Provis
   function contextFor(service: ServiceWithProduct): ServerAccountContext | IntegrationResult<never> {
     const parsed = parseProductOptions(manifest, service.product?.moduleOptions);
     if (!parsed.success) return { ok: false, provider: moduleId, error: parsed.error };
-    return buildServerContext(instance, service, parsed.data);
+    return { ...buildServerContext(instance, service, parsed.data), state: createServiceModuleState(service.id, moduleId) };
   }
 
   function isError(value: ServerAccountContext | IntegrationResult<never>): value is IntegrationResult<never> {

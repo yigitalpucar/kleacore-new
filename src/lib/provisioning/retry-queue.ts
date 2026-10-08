@@ -468,6 +468,27 @@ async function finalizeProvisioningRetryAttempt(
 
 const STALE_PROCESSING_MS = 15 * 60 * 1000;
 
+/**
+ * A PROVISION row just became FAILED (no more automatic retries): a
+ * module-bound service gives its reserved IPs back and the leftover remote
+ * resources are flagged for the admin (src/lib/modules/provisioning.ts).
+ */
+async function onProvisioningGivenUp(job: { kind: string; serviceId: string | null; order?: { serviceId: string | null } | null }) {
+  if (job.kind !== "PROVISION") return;
+  const serviceId = job.serviceId ?? job.order?.serviceId ?? null;
+  if (!serviceId) return;
+  try {
+    const { abandonModuleProvisioning } = await import("@/lib/modules/provisioning");
+    const result = await abandonModuleProvisioning(serviceId);
+    if (result?.error) throw new Error(result.error);
+  } catch (error) {
+    // Never let cleanup hide the provisioning failure itself.
+    console.error(
+      `[Provisioning] Hizmet ${serviceId} için yarım kalan kurulum temizlenemedi: ${error instanceof Error ? error.message : error}`
+    );
+  }
+}
+
 export async function recoverStaleProcessingJobs(
   staleAfterMs = STALE_PROCESSING_MS,
   client: DbClient = db
@@ -536,6 +557,7 @@ export async function manualRetryProvisioningJob(jobId: string) {
       where: { id: job.id },
       data: { status: "FAILED" },
     });
+    await onProvisioningGivenUp(job);
 
     return { ok: false as const, error: finalized.error ?? "PROVISIONING_RETRY_FAILED" };
   } catch (error) {
@@ -547,6 +569,7 @@ export async function manualRetryProvisioningJob(jobId: string) {
       where: { id: job.id },
       data: { status: "FAILED" },
     });
+    await onProvisioningGivenUp(job);
 
     return { ok: false as const, error: message };
   }
@@ -667,6 +690,7 @@ export async function runQueuedProvisioningJob(provisioningJobId: string, contex
       where: { id: job.id },
       data: { status: "FAILED", attempts: job.attempts + 1, lastError: error },
     });
+    await onProvisioningGivenUp(job);
     return { ok: false, orderId: job.orderId, needsAction: error };
   }
 
@@ -679,6 +703,7 @@ export async function runQueuedProvisioningJob(provisioningJobId: string, contex
       nextRetryAt: context.isFinalAttempt ? job.nextRetryAt : estimateQueueRetryAt(context.retryCount + 1),
     },
   });
+  if (context.isFinalAttempt) await onProvisioningGivenUp(job);
 
   throw new Error(error);
 }

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  createRemoteService: vi.fn(),
+  abandonModuleProvisioning: vi.fn(),
   unsuspendRemoteService: vi.fn(),
   changeRemoteServicePlan: vi.fn(),
   queueProvisioningAttempt: vi.fn(),
@@ -23,10 +25,11 @@ vi.mock("@/lib/provisioning/queue", () => ({
   dismissFailedQueueEntries: mocks.dismissFailedQueueEntries,
 }));
 vi.mock("@/lib/integrations/provisioning-provider", () => ({
-  createRemoteService: vi.fn(),
+  createRemoteService: mocks.createRemoteService,
   unsuspendRemoteService: mocks.unsuspendRemoteService,
   changeRemoteServicePlan: mocks.changeRemoteServicePlan,
 }));
+vi.mock("@/lib/modules/provisioning", () => ({ abandonModuleProvisioning: mocks.abandonModuleProvisioning }));
 vi.mock("@/lib/integrations/ssl", () => ({ mapProductSubTypeToSslType: vi.fn(), provisionSslCertificate: vi.fn() }));
 
 import {
@@ -205,5 +208,38 @@ describe("reconcileProvisioningQueue (retry-provisioning cron)", () => {
 
     expect(mocks.queueProvisioningAttempt).not.toHaveBeenCalled();
     expect(mocks.db.provisioningJob.update).toHaveBeenCalledWith({ where: { id: "pj-done" }, data: { status: "FAILED" } });
+  });
+});
+
+describe("runQueuedProvisioningJob — giving up a module-bound provisioning", () => {
+  const provisionJob = {
+    ...unsuspendJob,
+    id: "pj-2",
+    kind: "PROVISION",
+    lastError: null,
+    order: { id: "ord-1", serviceId: "svc-1", product: { category: { slug: "vds" } }, customer: {} },
+  };
+
+  beforeEach(() => {
+    Object.values(mocks.db.provisioningJob).forEach((fn) => fn.mockReset());
+    mocks.db.provisioningJob.findUnique.mockResolvedValue(provisionJob);
+    mocks.db.provisioningJob.updateMany.mockResolvedValue({ count: 1 });
+    mocks.db.provisioningJob.update.mockResolvedValue({});
+    mocks.db.service.findUnique.mockResolvedValue({ id: "svc-1", product: {}, customer: {} });
+    mocks.createRemoteService.mockReset().mockResolvedValue({ ok: false, error: "PROXMOX_START: KVM not available" });
+    mocks.abandonModuleProvisioning.mockReset().mockResolvedValue({ released: ["203.0.113.20"] });
+  });
+
+  it("keeps reservations while retries remain", async () => {
+    await expect(runQueuedProvisioningJob("pj-2", ctx(1))).rejects.toThrow("PROXMOX_START");
+    expect(mocks.abandonModuleProvisioning).not.toHaveBeenCalled();
+  });
+
+  it("releases the service's IP (module abandon hook) after the final attempt", async () => {
+    await expect(runQueuedProvisioningJob("pj-2", ctx(4))).rejects.toThrow("PROXMOX_START");
+    expect(mocks.db.provisioningJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "FAILED", lastError: "PROXMOX_START: KVM not available" }) })
+    );
+    expect(mocks.abandonModuleProvisioning).toHaveBeenCalledWith("svc-1");
   });
 });

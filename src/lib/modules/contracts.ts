@@ -25,6 +25,18 @@ import type { SmsProvider } from "@/lib/integrations/sms/types";
 // Server (hosting panels, hypervisors)
 // ---------------------------------------------------------------------------
 
+/**
+ * Per-service state a module may keep between calls (Service.moduleData,
+ * namespaced by moduleId): resumable provisioning progress, remote ids,
+ * encrypted initial credentials. Optional: when absent (contract tests,
+ * ad-hoc calls) modules must still work, they just can't resume.
+ */
+export interface ServerModuleState {
+  get(): Promise<Record<string, unknown>>;
+  /** Shallow-merges `patch` into the module's state; `undefined` values remove keys. */
+  patch(patch: Record<string, unknown>): Promise<void>;
+}
+
 /** What a server module gets for every account operation. */
 export interface ServerAccountContext<TOptions = Record<string, unknown>> {
   instance: { id: string; label: string; moduleId: string };
@@ -42,6 +54,8 @@ export interface ServerAccountContext<TOptions = Record<string, unknown>> {
   };
   /** Product.moduleOptions parsed by the manifest's productOptionsSchema. */
   options: TOptions;
+  /** Service.moduleData[moduleId] (provided by the server bridge). */
+  state?: ServerModuleState;
 }
 
 export interface ServerAccountCreated {
@@ -64,6 +78,8 @@ export interface ServerUsage {
   cpuPercent?: number;
   ramUsedMB?: number;
   ramLimitMB?: number;
+  /** Hypervisors: current power state of the VM. */
+  powerState?: "running" | "stopped" | "paused" | "unknown";
   collectedAt: Date;
 }
 
@@ -108,6 +124,12 @@ export interface ServerModule<TOptions = Record<string, unknown>> {
     input: { templateId?: string; password?: string; sshKeys?: string[] }
   ): Promise<OperationResult>;
   listAccounts?(): Promise<IntegrationResult<RemoteAccount[]>>;
+  /**
+   * Provisioning was given up (retries exhausted / admin gave up): undo
+   * reservations (IPs) and flag what is left for the admin. Must not delete
+   * remote resources. Without it the bridge just releases the service's IPs.
+   */
+  abandonProvisioning?(ctx: ServerAccountContext<TOptions>): Promise<OperationResult>;
 }
 
 // ---------------------------------------------------------------------------

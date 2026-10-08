@@ -29,6 +29,7 @@ import type {
   DnsModuleRecord,
   ModuleContracts,
   ServerAccountContext,
+  ServerModuleState,
 } from "./contracts";
 import { parseProductOptions, validateManifest } from "./registry";
 import { describeSchema, schemaShape } from "./schema-form";
@@ -84,6 +85,26 @@ export function makeServerContext<TOptions = Record<string, unknown>>(
     },
     options,
   };
+}
+
+/**
+ * In-memory ServerModuleState (Service.moduleData slice) for behaviour tests:
+ * `ctx.state = createMemoryModuleState()`; inspect `.data` afterwards.
+ */
+export function createMemoryModuleState(initial: Record<string, unknown> = {}) {
+  const data: Record<string, unknown> = { ...initial };
+  return {
+    data,
+    async get() {
+      return JSON.parse(JSON.stringify(data)) as Record<string, unknown>;
+    },
+    async patch(patch: Record<string, unknown>) {
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined) delete data[key];
+        else data[key] = JSON.parse(JSON.stringify(value));
+      }
+    },
+  } satisfies ServerModuleState & { data: Record<string, unknown> };
 }
 
 // ---------------------------------------------------------------------------

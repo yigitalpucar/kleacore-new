@@ -60,3 +60,40 @@ export async function planProductProvisioning(
     ? { mode: "module", instanceId: instance.id }
     : { mode: "manual", reason: "MODULE_INSTANCE_UNAVAILABLE" };
 }
+
+/**
+ * A PROVISION job for this service was given up (last retry failed, or the
+ * failure is permanent). For a module-bound service that never got a remote
+ * id: let the module undo its reservations (Proxmox: release IPs, flag the
+ * leftover VM for the admin — never delete it), else just release the IPs.
+ * Never throws; returns the released addresses.
+ */
+export async function abandonModuleProvisioning(serviceId: string): Promise<{ released: string[]; error?: string }> {
+  const { db } = await import("@/lib/db");
+  const { releaseIp } = await import("@/lib/ipam");
+  try {
+    const service = await db.service.findUnique({
+      where: { id: serviceId },
+      include: { product: { include: { category: true } }, customer: true },
+    });
+    if (!service?.moduleInstanceId || service.remoteId) return { released: [] };
+
+    const binding = await getServerBindingForService(service).catch(() => null);
+    if (binding?.module.abandonProvisioning) {
+      const { buildServerContext } = await import("./server-bridge");
+      const { parseProductOptions } = await import("./product-options");
+      const { createServiceModuleState } = await import("./service-state");
+      const parsed = parseProductOptions(binding.manifest, service.product?.moduleOptions);
+      const ctx = {
+        ...buildServerContext(binding.instance, service, parsed.success ? parsed.data : {}),
+        state: createServiceModuleState(service.id, binding.manifest.id),
+      };
+      const result = await binding.module.abandonProvisioning(ctx);
+      if (!result.ok) return { released: [], error: result.error };
+      return { released: result.reference ? result.reference.split(",") : [] };
+    }
+    return { released: await releaseIp(serviceId) };
+  } catch (error) {
+    return { released: [], error: error instanceof Error ? error.message : "ABANDON_FAILED" };
+  }
+}

@@ -6,6 +6,7 @@
 import type { AnyModuleManifest } from "./types";
 import { cpanelWhmModule } from "./server/cpanel-whm";
 import { virtualizorModule } from "./server/virtualizor";
+import { proxmoxModule } from "./server/proxmox";
 import { griModule } from "./registrar/gri";
 import { iyzicoModule, kuveytTurkModule, paytrModule, stripeModule } from "./payment";
 import { parasutModule, uyumsoftModule } from "./einvoice";
@@ -15,6 +16,7 @@ export const MODULE_MANIFESTS: readonly AnyModuleManifest[] = [
   // server
   cpanelWhmModule,
   virtualizorModule,
+  proxmoxModule,
   // registrar
   griModule,
   // dns
