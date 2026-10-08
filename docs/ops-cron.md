@@ -30,6 +30,11 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 | KLEACORE: Gecikmiş Faturalar | `0 5 * * *` | `/app/cron-run.sh overdue-invoices` |
 | KLEACORE: Hizmet Askıya Alma | `0 6 * * *` | `/app/cron-run.sh suspend-services` |
 | KLEACORE: Provisioning Retry | `*/15 * * * *` | `/app/cron-run.sh retry-provisioning` |
+| KLEACORE: İş Kuyruğu | `* * * * *` | `/app/cron-run.sh jobs-drain` |
+
+Aynı görev aynı anda iki kez çalışmaz (Postgres advisory lock); ikinci çağrı
+`{"status":"locked"}` döner. Çalıştırmalar `cron_runs` tablosuna yazılır ve
+/yonetim/isler'de görünür. Kuyruk ve işçi modeli: `docs/ops-jobs.md`.
 
 Hepsi: `scheduleType: "application"`, `shellType: "sh"`, `enabled: true`.
 

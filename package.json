@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build && node scripts/build-worker.mjs",
+    "build:worker": "node scripts/build-worker.mjs",
+    "jobs:worker": "tsx --env-file=.env scripts/worker.ts",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:content": "node scripts/seed-content.mjs",
@@ -20,7 +22,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:db": "RUN_DB_TESTS=1 vitest run src/lib/jobs/queue.integration.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -53,6 +56,7 @@
     "nodemailer": "^10.0.16",
     "otpauth": "^9.5.1",
     "pg": "^8.19.0",
+    "pg-boss": "12.37.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -77,6 +81,7 @@
     "@types/react-dom": "^19",
     "autoprefixer": "^10.0.1",
     "dotenv": "^17.3.1",
+    "esbuild": "0.27.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "postcss": "^8.5.29",

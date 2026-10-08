@@ -12,4 +12,5 @@ static-export
 wisecp
 .DS_Store
 npm-debug.log*
-pnpm-debug.log*
+pnpm-debug.log*.worker
+.scratch

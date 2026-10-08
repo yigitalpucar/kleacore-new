@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   unsuspendRemoteService: vi.fn(),
+  queueProvisioningAttempt: vi.fn(),
   db: {
     provisioningJob: {
       findMany: vi.fn(),
@@ -15,6 +16,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
+vi.mock("@/lib/provisioning/queue", () => ({
+  queueProvisioningAttempt: mocks.queueProvisioningAttempt,
+  dismissFailedQueueEntries: vi.fn(),
+}));
 vi.mock("@/lib/integrations/provisioning-provider", () => ({
   createRemoteService: vi.fn(),
   unsuspendRemoteService: mocks.unsuspendRemoteService,
@@ -44,7 +49,7 @@ function createTx(service: { id: string; status: string; suspendReason: string |
       updateMany: vi.fn().mockResolvedValue({ count: service ? 1 : 0 }),
     },
     provisioningJob: {
-      upsert: vi.fn(),
+      upsert: vi.fn().mockResolvedValue({ id: "job-1", attempts: 0, maxAttempts: 5 }),
     },
   };
 }
@@ -79,6 +84,12 @@ describe("unsuspendServiceIfNeeded", () => {
         create: expect.objectContaining({ kind: "UNSUSPEND", serviceId: "svc-1", status: "PENDING" }),
       })
     );
+    // The queue backstop is enqueued through the same transaction.
+    expect(mocks.queueProvisioningAttempt).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ id: "job-1" }),
+      { startAfter: 60 }
+    );
   });
 
   it("never auto-starts a server the customer stopped", async () => {
@@ -93,6 +104,7 @@ describe("unsuspendServiceIfNeeded", () => {
     expect(result).toEqual({ unsuspended: false });
     expect(tx.service.updateMany).not.toHaveBeenCalled();
     expect(tx.provisioningJob.upsert).not.toHaveBeenCalled();
+    expect(mocks.queueProvisioningAttempt).not.toHaveBeenCalled();
   });
 
   it("leaves admin suspensions to the admin", async () => {

@@ -22,6 +22,7 @@ const CRON_JOBS = [
   { id: "overdue-invoices", name: "Gecikmiş Faturalar", path: "/api/cron/overdue-invoices" },
   { id: "suspend-services", name: "Hizmet Askıya Alma", path: "/api/cron/suspend-services" },
   { id: "retry-provisioning", name: "Provisioning Retry", path: "/api/cron/retry-provisioning" },
+  { id: "jobs-drain", name: "İş Kuyruğu", path: "/api/cron/jobs-drain" },
 ];
 
 function parseArgs(argv) {
