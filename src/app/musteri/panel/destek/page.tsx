@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getTicketsByCustomer } from "@/lib/dal/tickets";
 import { DestekListContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Destek talepleri" };
 
 export default async function DestekPage() {
   const session = await auth();

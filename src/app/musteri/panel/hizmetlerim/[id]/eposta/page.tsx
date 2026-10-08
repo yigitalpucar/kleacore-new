@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getServiceById } from "@/lib/dal/services";
@@ -5,6 +6,8 @@ import { listEmailAccountsForService } from "@/lib/actions/customer/email-accoun
 import { ServiceEpostaContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "E-posta hesapları" };
 
 interface Props {
   params: Promise<{ id: string }>;

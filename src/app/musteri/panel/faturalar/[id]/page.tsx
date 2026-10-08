@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { getInvoiceById } from "@/lib/dal/invoices";
 import { FaturaDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Fatura detayı" };
 
 interface FaturaDetayPageProps {
   params: Promise<{ id: string }>;
@@ -10,9 +14,15 @@ interface FaturaDetayPageProps {
 
 export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
   const params = await props.params;
+  const session = await auth();
   const invoice = await getInvoiceById(params.id);
 
   if (!invoice) {
+    notFound();
+  }
+
+  // Only the invoice owner may see it (prevents IDOR via guessed ids).
+  if (invoice.customerId !== session?.user?.id) {
     notFound();
   }
 

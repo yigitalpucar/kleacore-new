@@ -3,12 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -25,33 +21,31 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Globe,
-  ArrowLeft,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
-  RefreshCcw,
-  Settings,
-  Shield,
-  Lock,
-  Calendar,
-  Server,
-  Plus,
-  Trash2,
-  Edit,
-  Copy,
-  ExternalLink,
   ArrowRightLeft,
-  Clock,
-  FileText,
-  Mail,
-  MapPin,
-  User,
-  Phone,
-  Info,
+  Edit,
+  ExternalLink,
+  Globe,
   Loader2,
+  Lock,
+  Plus,
+  RefreshCcw,
+  Server,
+  Settings,
+  Trash2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  AppBreadcrumbLabel,
+  CopyButton,
+  DetailList,
+  EmptyState,
+  IconTile,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+  UnavailableAction,
+  appButton,
+} from "@/components/app";
+import { formatDate, daysUntil } from "@/lib/format/date";
 import {
   addDnsRecord,
   deleteDnsRecord,
@@ -60,48 +54,6 @@ import {
 } from "@/lib/actions/customer/domains";
 import { toast } from "@/lib/toast";
 import type { DnsRecordType } from "@prisma/client";
-
-const statusConfig: Record<string, {
-  label: string;
-  color: string;
-  bgColor: string;
-  icon: typeof CheckCircle2;
-}> = {
-  ACTIVE: {
-    label: "Aktif",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-    icon: CheckCircle2,
-  },
-  EXPIRED: {
-    label: "Süresi Doldu",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
-    icon: XCircle,
-  },
-  TRANSFERRING: {
-    label: "Transfer Ediliyor",
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
-    icon: ArrowRightLeft,
-  },
-  PENDING: {
-    label: "Beklemede",
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
-    icon: Clock,
-  },
-};
-
-const dnsTypeColors: Record<string, string> = {
-  A: "bg-blue-500",
-  AAAA: "bg-purple-500",
-  CNAME: "bg-green-500",
-  MX: "bg-orange-500",
-  TXT: "bg-gray-500",
-  NS: "bg-pink-500",
-  SRV: "bg-yellow-500",
-};
 
 const allowedDnsTypes: DnsRecordType[] = [
   "A",
@@ -157,7 +109,6 @@ const emptyDnsForm = {
 
 export function DomainDetayContent({ domain }: DomainDetayContentProps) {
   const router = useRouter();
-  const [copied, setCopied] = useState(false);
   const [dnsRecords, setDnsRecords] = useState<DnsRecord[]>(domain.dnsRecords);
   const [nameservers, setNameservers] = useState<string[]>(domain.nameservers);
 
@@ -170,12 +121,6 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
   const [isNsDialogOpen, setIsNsDialogOpen] = useState(false);
   const [nsForm, setNsForm] = useState<string[]>(["", ""]);
   const [isNsSubmitting, setIsNsSubmitting] = useState(false);
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const openAddDnsDialog = () => {
     setEditingRecordId(null);
@@ -289,442 +234,243 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
     setNameservers(domain.nameservers);
   }, [domain.dnsRecords, domain.nameservers]);
 
-  const status = statusConfig[domain.status] || statusConfig.ACTIVE;
-  const StatusIcon = status.icon;
+  const daysLeft = daysUntil(domain.expiresAt);
+  const whoisHref = `/domain/whois?domain=${encodeURIComponent(domain.name)}`;
+  const hasWhois = Boolean(domain.whoisName || domain.whoisEmail || domain.whoisPhone || domain.whoisAddress);
 
   return (
-    <div className="space-y-6">
-      {/* Back Button & Header */}
-      <BlurFade delay={0.1} inView>
-        <div className="flex flex-col gap-4">
-          <Link
-            href="/musteri/panel/domainler"
-            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
+    <>
+      <AppBreadcrumbLabel segment={domain.id} label={domain.name} />
+
+      <PageHeader
+        back={{ href: "/musteri/panel/domainler", label: "Alan adlarım" }}
+        eyebrow="Alan adı"
+        title={
+          <span className="flex items-center gap-3">
+            <IconTile size="lg" className="hidden sm:flex">
+              <Globe />
+            </IconTile>
+            <span className="break-all">{domain.name}</span>
+          </span>
+        }
+        meta={
+          <>
+            <StatusBadge kind="domain" status={domain.status} size="md" />
+            <span>
+              Bitiş {formatDate(domain.expiresAt)}
+              {daysLeft !== null && daysLeft >= 0 && daysLeft <= 60 ? ` · ${daysLeft} gün kaldı` : ""}
+            </span>
+            <span>{domain.registrar}</span>
+            {domain.privacyEnabled ? <StatusBadge tone="neutral" label="Gizlilik koruması" /> : null}
+            {domain.autoRenew ? <StatusBadge tone="neutral" label="Otomatik yenileme" /> : null}
+          </>
+        }
+        actions={
+          <>
+            <UnavailableAction label="Yenile" icon={<RefreshCcw aria-hidden />} />
+            <UnavailableAction label="Yönet" icon={<Settings aria-hidden />} />
+          </>
+        }
+      />
+
+      <SectionCard title="Hızlı işlemler">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <a
+            href="#dns-kayitlari"
+            className="flex min-h-[60px] items-center gap-3 rounded-md border bg-background px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Domainlere Dön
+            <Settings aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">DNS yönetimi</span>
+              <span className="block text-xs text-muted-foreground">Kayıtları düzenle</span>
+            </span>
+          </a>
+          <button
+            type="button"
+            onClick={openNsDialog}
+            className="flex min-h-[60px] items-center gap-3 rounded-md border bg-background px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Server aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">Nameserver</span>
+              <span className="block text-xs text-muted-foreground">NS değiştir</span>
+            </span>
+          </button>
+          <UnavailableAction layout="tile" label="Transfer" description="EPP kodu al" icon={<ArrowRightLeft aria-hidden />} />
+          <Link
+            href={whoisHref}
+            className="flex min-h-[60px] items-center gap-3 rounded-md border bg-background px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ExternalLink aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">WHOIS</span>
+              <span className="block text-xs text-muted-foreground">Herkese açık kaydı sorgula</span>
+            </span>
           </Link>
-
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <div className={cn("p-4 rounded-xl", status.bgColor)}>
-                <Globe className={cn("h-8 w-8", status.color)} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-2xl font-bold tracking-tight">{domain.name}</h1>
-                  <span className={cn(
-                    "flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
-                    status.bgColor, status.color
-                  )}>
-                    <StatusIcon className="h-3 w-3" />
-                    {status.label}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    Bitiş: {new Date(domain.expiresAt).toLocaleDateString("tr-TR")}
-                  </span>
-                  <span>•</span>
-                  <span>{domain.registrar}</span>
-                </div>
-                <div className="flex items-center gap-2 mt-2">
-                  {domain.privacyEnabled && (
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-500">
-                      <Lock className="h-3 w-3" />
-                      Gizlilik
-                    </span>
-                  )}
-                  {domain.autoRenew && (
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-purple-500/10 text-purple-500">
-                      <RefreshCcw className="h-3 w-3" />
-                      Oto. Yenileme
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="outline">
-                <RefreshCcw className="mr-2 h-4 w-4" />
-                Yenile
-              </Button>
-              <Button>
-                <Settings className="mr-2 h-4 w-4" />
-                Yönet
-              </Button>
-            </div>
-          </div>
         </div>
-      </BlurFade>
+      </SectionCard>
 
-      {/* Quick Actions */}
-      <BlurFade delay={0.15} inView>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Hızlı İşlemler</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-              <Button variant="outline" className="justify-start h-auto py-3">
-                <Settings className="mr-2 h-4 w-4 text-primary" />
-                <div className="text-left">
-                  <p className="font-medium">DNS Yönetimi</p>
-                  <p className="text-xs text-muted-foreground">Kayıtları düzenle</p>
-                </div>
-              </Button>
-              <Button variant="outline" className="justify-start h-auto py-3">
-                <Server className="mr-2 h-4 w-4 text-primary" />
-                <div className="text-left">
-                  <p className="font-medium">Nameserver</p>
-                  <p className="text-xs text-muted-foreground">NS değiştir</p>
-                </div>
-              </Button>
-              <Button variant="outline" className="justify-start h-auto py-3">
-                <ArrowRightLeft className="mr-2 h-4 w-4 text-primary" />
-                <div className="text-left">
-                  <p className="font-medium">Transfer</p>
-                  <p className="text-xs text-muted-foreground">EPP kodu al</p>
-                </div>
-              </Button>
-              <Button variant="outline" className="justify-start h-auto py-3">
-                <ExternalLink className="mr-2 h-4 w-4 text-primary" />
-                <div className="text-left">
-                  <p className="font-medium">WHOIS</p>
-                  <p className="text-xs text-muted-foreground">Bilgileri görüntüle</p>
-                </div>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* DNS Records */}
-          <BlurFade delay={0.2} inView>
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Settings className="h-5 w-5 text-primary" />
-                      DNS Kayıtları
-                    </CardTitle>
-                    <CardDescription>
-                      Domain için tanımlı DNS kayıtları
-                    </CardDescription>
-                  </div>
-                  <Button size="sm" onClick={openAddDnsDialog}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Kayıt Ekle
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {dnsRecords.map((record) => (
-                    <div
-                      key={record.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border hover:shadow-sm transition-shadow"
-                    >
-                      <span className={cn(
-                        "px-2 py-1 rounded text-xs font-bold text-white min-w-[50px] text-center",
-                        dnsTypeColors[record.type] || "bg-gray-500"
-                      )}>
-                        {record.type}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-mono text-sm font-medium">{record.name}</p>
-                        <p className="font-mono text-xs text-muted-foreground truncate">
-                          {record.value}
-                        </p>
-                      </div>
-                      {record.priority !== null && (
-                        <span className="text-xs text-muted-foreground">
-                          Öncelik: {record.priority}
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        TTL: {record.ttl}
-                      </span>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openEditDnsDialog(record)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-red-500 hover:text-red-600"
-                          onClick={() => void handleDeleteDnsRecord(record.id)}
-                          disabled={deletingRecordId === record.id}
-                        >
-                          {deletingRecordId === record.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {dnsRecords.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      Henüz DNS kaydı bulunmuyor.
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
-
-          {/* Nameservers */}
-          <BlurFade delay={0.25} inView>
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Server className="h-5 w-5 text-primary" />
-                      Nameservers
-                    </CardTitle>
-                    <CardDescription>
-                      Domain için tanımlı isim sunucuları
-                    </CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={openNsDialog}>
-                    <Edit className="mr-2 h-4 w-4" />
-                    Değiştir
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {nameservers.map((ns, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          NS{index + 1}
-                        </span>
-                        <code className="font-mono text-sm">{ns}</code>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => handleCopy(ns)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-
-                  {nameservers.length === 0 && (
-                    <div className="text-center py-4 text-muted-foreground">
-                      Nameserver tanımlı değil.
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
-
-          {/* WHOIS Info */}
-          <BlurFade delay={0.3} inView>
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-primary" />
-                      WHOIS Bilgileri
-                    </CardTitle>
-                    <CardDescription>
-                      {domain.privacyEnabled ? "Gizlilik koruması aktif - bilgiler gizli" : "Kayıt sahibi bilgileri"}
-                    </CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    <Edit className="mr-2 h-4 w-4" />
-                    Düzenle
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {domain.privacyEnabled ? (
-                  <div className="flex items-center gap-3 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                    <Lock className="h-5 w-5 text-blue-500" />
-                    <div>
-                      <p className="font-medium text-blue-500">Gizlilik Koruması Aktif</p>
-                      <p className="text-sm text-muted-foreground">
-                        WHOIS bilgileriniz herkese açık sorgulamalarda gizlenir.
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
+          <SectionCard
+            id="dns-kayitlari"
+            title="DNS kayıtları"
+            description="Alan adı için tanımlı DNS kayıtları"
+            actions={
+              <button type="button" onClick={openAddDnsDialog} className={appButton({ size: "sm" })}>
+                <Plus aria-hidden />
+                Kayıt ekle
+              </button>
+            }
+            flush
+            className="scroll-mt-20"
+          >
+            {dnsRecords.length === 0 ? (
+              <EmptyState compact className="m-4" title="Henüz DNS kaydı yok" description="İlk kaydınızı ekleyerek başlayın." />
+            ) : (
+              <ul className="divide-y">
+                {dnsRecords.map((record) => (
+                  <li key={record.id} className="flex items-start gap-3 px-4 py-3 md:items-center md:px-5">
+                    <span className="mt-0.5 inline-flex h-6 min-w-[52px] shrink-0 items-center justify-center rounded border bg-muted/50 font-mono text-[11px] font-semibold md:mt-0">
+                      {record.type}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[13px] font-medium">{record.name}</p>
+                      <p className="break-all font-mono text-xs text-muted-foreground">{record.value}</p>
+                      <p className="mt-1 text-xs text-muted-foreground md:hidden">
+                        TTL {record.ttl}
+                        {record.priority !== null ? ` · Öncelik ${record.priority}` : ""}
                       </p>
                     </div>
-                  </div>
-                ) : (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {domain.whoisName && (
-                      <div className="flex items-start gap-3">
-                        <User className="h-4 w-4 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Kayıt Sahibi</p>
-                          <p className="font-medium">{domain.whoisName}</p>
-                        </div>
-                      </div>
-                    )}
-                    {domain.whoisEmail && (
-                      <div className="flex items-start gap-3">
-                        <Mail className="h-4 w-4 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">E-posta</p>
-                          <p className="font-medium">{domain.whoisEmail}</p>
-                        </div>
-                      </div>
-                    )}
-                    {domain.whoisPhone && (
-                      <div className="flex items-start gap-3">
-                        <Phone className="h-4 w-4 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Telefon</p>
-                          <p className="font-medium">{domain.whoisPhone}</p>
-                        </div>
-                      </div>
-                    )}
-                    {domain.whoisAddress && (
-                      <div className="flex items-start gap-3">
-                        <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Adres</p>
-                          <p className="font-medium">{domain.whoisAddress}</p>
-                        </div>
-                      </div>
-                    )}
-                    {!domain.whoisName && !domain.whoisEmail && !domain.whoisPhone && !domain.whoisAddress && (
-                      <div className="col-span-2 text-center py-4 text-muted-foreground">
-                        WHOIS bilgisi girilmemiş.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </BlurFade>
+                    <div className="hidden shrink-0 text-right font-mono text-[11px] text-muted-foreground md:block">
+                      {record.priority !== null ? <p>Öncelik {record.priority}</p> : null}
+                      <p>TTL {record.ttl}</p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        aria-label={`${record.type} ${record.name} kaydını düzenle`}
+                        className={appButton({ variant: "ghost", size: "icon-sm" })}
+                        onClick={() => openEditDnsDialog(record)}
+                      >
+                        <Edit aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`${record.type} ${record.name} kaydını sil`}
+                        className={appButton({ variant: "ghost", size: "icon-sm", className: "text-red-600 dark:text-red-400" })}
+                        onClick={() => void handleDeleteDnsRecord(record.id)}
+                        disabled={deletingRecordId === record.id}
+                      >
+                        {deletingRecordId === record.id ? <Loader2 aria-hidden className="animate-spin" /> : <Trash2 aria-hidden />}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            title="Nameserver"
+            description="Alan adı için tanımlı isim sunucuları"
+            actions={
+              <button type="button" onClick={openNsDialog} className={appButton({ variant: "outline", size: "sm" })}>
+                <Edit aria-hidden />
+                Değiştir
+              </button>
+            }
+          >
+            {nameservers.length ? (
+              <ul className="space-y-2">
+                {nameservers.map((ns, index) => (
+                  <li key={index} className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 py-1 pl-3 pr-1">
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="font-mono text-[11px] text-muted-foreground">NS{index + 1}</span>
+                      <code className="truncate font-mono text-[13px]">{ns}</code>
+                    </span>
+                    <CopyButton value={ns} label={`NS${index + 1} kopyala`} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nameserver tanımlı değil.</p>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            title="WHOIS bilgileri"
+            description={domain.privacyEnabled ? "Gizlilik koruması açık; bilgiler herkese açık sorgularda gizlenir." : "Kayıt sahibi bilgileri"}
+            actions={<UnavailableAction label="Düzenle" size="sm" icon={<Edit aria-hidden />} />}
+          >
+            {domain.privacyEnabled ? (
+              <div className="flex items-start gap-3 rounded-md border border-dashed p-4 text-sm">
+                <Lock aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">Gizlilik koruması açık</p>
+                  <p className="text-muted-foreground">WHOIS bilgileriniz herkese açık sorgulamalarda gizlenir.</p>
+                </div>
+              </div>
+            ) : hasWhois ? (
+              <DetailList
+                layout="grid"
+                items={[
+                  { label: "Kayıt sahibi", value: domain.whoisName },
+                  { label: "E-posta", value: domain.whoisEmail },
+                  { label: "Telefon", value: domain.whoisPhone },
+                  { label: "Adres", value: domain.whoisAddress },
+                ]}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">WHOIS bilgisi girilmemiş.</p>
+            )}
+          </SectionCard>
         </div>
 
-        {/* Sidebar */}
         <div className="space-y-6">
-          {/* Domain Settings */}
-          <BlurFade delay={0.35} inView>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Domain Ayarları</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <RefreshCcw className="h-4 w-4 text-muted-foreground" />
-                    <Label htmlFor="auto-renew">Otomatik Yenileme</Label>
-                  </div>
-                  <Switch id="auto-renew" defaultChecked={domain.autoRenew} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Lock className="h-4 w-4 text-muted-foreground" />
-                    <Label htmlFor="privacy">Gizlilik Koruması</Label>
-                  </div>
-                  <Switch id="privacy" defaultChecked={domain.privacyEnabled} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-muted-foreground" />
-                    <Label htmlFor="transfer-lock">Transfer Kilidi</Label>
-                  </div>
-                  <Switch id="transfer-lock" defaultChecked={true} />
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
+          <SectionCard title="Alan adı bilgileri">
+            <DetailList
+              items={[
+                { label: "Kayıt tarihi", value: formatDate(domain.registeredAt) },
+                { label: "Bitiş tarihi", value: formatDate(domain.expiresAt) },
+                { label: "Kayıt firması", value: domain.registrar },
+                {
+                  label: "Otomatik yenileme",
+                  value: <StatusBadge tone={domain.autoRenew ? "success" : "muted"} label={domain.autoRenew ? "Açık" : "Kapalı"} />,
+                },
+                {
+                  label: "Gizlilik koruması",
+                  value: <StatusBadge tone={domain.privacyEnabled ? "success" : "muted"} label={domain.privacyEnabled ? "Açık" : "Kapalı"} />,
+                },
+              ]}
+            />
+            <p className="mt-3 text-xs text-muted-foreground">
+              Bu ayarları değiştirmek için destek talebi açabilirsiniz; panelden değiştirme yakında eklenecek.
+            </p>
+            <div className="mt-4 border-t pt-4">
+              <UnavailableAction label="Alan adını yenile" icon={<RefreshCcw aria-hidden />} className="w-full" />
+            </div>
+          </SectionCard>
 
-          {/* Domain Info */}
-          <BlurFade delay={0.4} inView>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Domain Bilgileri</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Kayıt Tarihi</span>
-                  <span className="font-medium">
-                    {new Date(domain.registeredAt).toLocaleDateString("tr-TR")}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Bitiş Tarihi</span>
-                  <span className="font-medium">
-                    {new Date(domain.expiresAt).toLocaleDateString("tr-TR")}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Registrar</span>
-                  <span className="font-medium">{domain.registrar}</span>
-                </div>
-
-                <div className="pt-4 border-t space-y-2">
-                  <Button className="w-full" variant="outline">
-                    <RefreshCcw className="mr-2 h-4 w-4" />
-                    Domaini Yenile
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
-
-          {/* Info Note */}
-          <BlurFade delay={0.45} inView>
-            <Card className="border-dashed">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-muted">
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground mb-1">DNS Değişiklikleri</p>
-                    <p>
-                      DNS değişikliklerinin yayılması 24-48 saat sürebilir.
-                      Değişikliklerinizi yaptıktan sonra sabırlı olun.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
+          <div className="rounded-lg border border-dashed p-4 text-sm">
+            <p className="font-medium">DNS değişiklikleri</p>
+            <p className="mt-1 text-muted-foreground">
+              DNS değişikliklerinin internete yayılması 24–48 saat sürebilir.
+            </p>
+          </div>
         </div>
       </div>
 
       <Dialog open={isDnsDialogOpen} onOpenChange={setIsDnsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {editingRecordId ? "DNS Kaydını Düzenle" : "DNS Kaydı Ekle"}
-            </DialogTitle>
-            <DialogDescription>
-              DNS kayıt tipini DnsRecordType enum değerlerine göre seçin.
-            </DialogDescription>
+            <DialogTitle>{editingRecordId ? "DNS kaydını düzenle" : "DNS kaydı ekle"}</DialogTitle>
+            <DialogDescription>Kayıt tipini, adını ve değerini girin.</DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Kayıt Tipi</Label>
+              <Label htmlFor="dns-type">Kayıt tipi</Label>
               <Select
                 value={dnsForm.type}
                 onValueChange={(value) =>
@@ -734,7 +480,7 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
                   }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger id="dns-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -746,28 +492,27 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="dns-name">Kayıt Adı</Label>
+              <Label htmlFor="dns-name">Kayıt adı</Label>
               <Input
                 id="dns-name"
                 placeholder="@, www, mail"
                 value={dnsForm.name}
-                onChange={(e) =>
-                  setDnsForm((prev) => ({ ...prev, name: e.target.value }))
-                }
+                onChange={(e) => setDnsForm((prev) => ({ ...prev, name: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="dns-value">Kayıt Değeri</Label>
+              <Label htmlFor="dns-value">Kayıt değeri</Label>
               <Input
                 id="dns-value"
                 placeholder="192.0.2.1 veya hedef adres"
                 value={dnsForm.value}
-                onChange={(e) =>
-                  setDnsForm((prev) => ({ ...prev, value: e.target.value }))
-                }
+                onChange={(e) => setDnsForm((prev) => ({ ...prev, value: e.target.value }))}
               />
             </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="dns-ttl">TTL (saniye)</Label>
@@ -776,12 +521,10 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
                   type="number"
                   min={60}
                   value={dnsForm.ttl}
-                  onChange={(e) =>
-                    setDnsForm((prev) => ({ ...prev, ttl: e.target.value }))
-                  }
+                  onChange={(e) => setDnsForm((prev) => ({ ...prev, ttl: e.target.value }))}
                 />
               </div>
-              {showPriorityField && (
+              {showPriorityField ? (
                 <div className="space-y-2">
                   <Label htmlFor="dns-priority">Öncelik</Label>
                   <Input
@@ -797,34 +540,28 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
                     }
                   />
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
+
+          <DialogFooter className="gap-2">
+            <button
+              type="button"
+              className={appButton({ variant: "outline" })}
               onClick={() => setIsDnsDialogOpen(false)}
               disabled={isDnsSubmitting}
             >
-              İptal
-            </Button>
-            <Button
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              className={appButton()}
               onClick={() => void handleDnsSubmit()}
-              disabled={
-                isDnsSubmitting ||
-                !dnsForm.name.trim() ||
-                !dnsForm.value.trim()
-              }
+              disabled={isDnsSubmitting || !dnsForm.name.trim() || !dnsForm.value.trim()}
             >
-              {isDnsSubmitting && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              {isDnsSubmitting
-                ? "Kaydediliyor..."
-                : editingRecordId
-                ? "Güncelle"
-                : "Ekle"}
-            </Button>
+              {isDnsSubmitting ? <Loader2 aria-hidden className="animate-spin" /> : null}
+              {isDnsSubmitting ? "Kaydediliyor…" : editingRecordId ? "Güncelle" : "Ekle"}
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -832,11 +569,12 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
       <Dialog open={isNsDialogOpen} onOpenChange={setIsNsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nameserver Değiştir</DialogTitle>
+            <DialogTitle>Nameserver değiştir</DialogTitle>
             <DialogDescription>
-              En az iki nameserver girilmelidir. Değişiklikler registrar&apos;a senkronize edilir.
+              En az iki nameserver girilmelidir. Değişiklikler kayıt firmasına iletilir.
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-3 py-2">
             {nsForm.map((ns, index) => (
               <div key={index} className="space-y-2">
@@ -856,29 +594,28 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
               </div>
             ))}
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
+
+          <DialogFooter className="gap-2">
+            <button
+              type="button"
+              className={appButton({ variant: "outline" })}
               onClick={() => setIsNsDialogOpen(false)}
               disabled={isNsSubmitting}
             >
-              İptal
-            </Button>
-            <Button
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              className={appButton()}
               onClick={() => void handleNsSubmit()}
-              disabled={
-                isNsSubmitting ||
-                nsForm.filter((ns) => ns.trim()).length < 2
-              }
+              disabled={isNsSubmitting || nsForm.filter((ns) => ns.trim()).length < 2}
             >
-              {isNsSubmitting && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              {isNsSubmitting ? "Kaydediliyor..." : "Kaydet"}
-            </Button>
+              {isNsSubmitting ? <Loader2 aria-hidden className="animate-spin" /> : null}
+              {isNsSubmitting ? "Kaydediliyor…" : "Kaydet"}
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

@@ -1,27 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  ArrowLeft,
-  RefreshCcw,
-  Calendar,
-  CreditCard,
-  CheckCircle2,
-  Gift,
-  Shield,
-  Percent,
-  Building2,
-} from "lucide-react";
+import { Building2, Check, CreditCard, Loader2, RefreshCcw } from "lucide-react";
+import { AppBreadcrumbLabel, DetailList, PageHeader, SectionCard, appButton } from "@/components/app";
 import type { CustomerPaymentMethod } from "@/lib/payments/methods";
 import { cn } from "@/lib/utils";
 import { renewService } from "@/lib/actions/customer/services";
 import { handleCreditCardCheckoutRedirect } from "@/lib/payments/checkout-redirect";
 import { toast } from "@/lib/toast";
+import { formatTRY } from "@/lib/format/price";
+import { formatDateLong } from "@/lib/format/date";
 
 interface ServiceData {
   id: string;
@@ -43,31 +32,33 @@ interface ServiceData {
 
 interface ServiceRenewalContentProps {
   service: ServiceData;
-
 }
 
-const billingPeriodLabels: Record<string, string> = {
-  monthly: "Aylık",
-  quarterly: "3 Aylık",
-  semiannual: "6 Aylık",
-  yearly: "Yıllık",
-  biennial: "2 Yıllık",
-  triennial: "3 Yıllık",
-};
+const money = (n: number) => formatTRY(n, { keepDecimals: true });
 
-const currencyFormatter = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
-
+// Must match renewalDiscountByMonths in src/lib/actions/customer/services.ts
 const renewalOptions = [
-  { period: "1 Ay", months: 1, discount: 0, popular: false },
-  { period: "3 Ay", months: 3, discount: 5, popular: false },
-  { period: "6 Ay", months: 6, discount: 10, popular: false },
-  { period: "1 Yıl", months: 12, discount: 15, popular: true },
-  { period: "2 Yıl", months: 24, discount: 20, popular: false },
-  { period: "3 Yıl", months: 36, discount: 25, popular: false },
+  { period: "1 ay", months: 1, discount: 0 },
+  { period: "3 ay", months: 3, discount: 5 },
+  { period: "6 ay", months: 6, discount: 10 },
+  { period: "1 yıl", months: 12, discount: 15 },
+  { period: "2 yıl", months: 24, discount: 20 },
+  { period: "3 yıl", months: 36, discount: 25 },
 ];
+
+const paymentMethods = [
+  { id: "credit-card", name: "Kredi kartı", description: "Güvenli ödeme sayfasında anında ödeme", icon: CreditCard },
+  { id: "bank-transfer", name: "Banka havalesi", description: "Havale/EFT sonrası manuel onay", icon: Building2 },
+];
+
+const periodMonths: Record<string, number> = {
+  monthly: 1,
+  quarterly: 3,
+  semiannual: 6,
+  yearly: 12,
+  biennial: 24,
+  triennial: 36,
+};
 
 export function ServiceRenewalContent({ service }: ServiceRenewalContentProps) {
   const router = useRouter();
@@ -77,26 +68,12 @@ export function ServiceRenewalContent({ service }: ServiceRenewalContentProps) {
 
   const selectedOption = renewalOptions.find((opt) => opt.months === selectedPeriod)!;
 
-  // Calculate monthly price from the service amount and billing period
-  const periodMonths: Record<string, number> = {
-    monthly: 1,
-    quarterly: 3,
-    semiannual: 6,
-    yearly: 12,
-    biennial: 24,
-    triennial: 36,
-  };
   const currentPeriodMonths = periodMonths[service.billingPeriod] || 1;
   const monthlyPrice = service.amount / currentPeriodMonths;
 
   const totalPrice = monthlyPrice * selectedPeriod;
   const discountAmount = (totalPrice * selectedOption.discount) / 100;
   const finalPrice = totalPrice - discountAmount;
-
-  const paymentMethods = [
-    { id: "credit-card", name: "Kredi Kartı", icon: CreditCard },
-    { id: "bank-transfer", name: "Banka Havalesi", icon: Building2 },
-  ];
 
   const handleRenewal = async () => {
     setIsProcessing(true);
@@ -135,275 +112,160 @@ export function ServiceRenewalContent({ service }: ServiceRenewalContentProps) {
     router.refresh();
   };
 
+  const currentExpiry = service.nextDueDate || service.expiresAt;
+
+  // Same base the server uses: the later of today and the current expiry.
   const calculateNewExpiry = () => {
-    const base = service.nextDueDate || service.expiresAt;
-    const startDate = base ? new Date(base) : new Date();
-    startDate.setMonth(startDate.getMonth() + selectedPeriod);
-    return startDate.toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+    const now = new Date();
+    const current = currentExpiry ? new Date(currentExpiry) : now;
+    const base = current.getTime() > now.getTime() ? current : now;
+    const next = new Date(base);
+    next.setMonth(next.getMonth() + selectedPeriod);
+    return formatDateLong(next);
   };
 
-  const currentExpiryDisplay = () => {
-    const date = service.nextDueDate || service.expiresAt;
-    if (!date) return "-";
-    return new Date(date).toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  };
+  const subtitle = `${service.product.name} · ${service.domain || service.label || "—"}`;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <BlurFade delay={0.1} inView>
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href={`/musteri/panel/hizmetlerim/${service.id}`}>
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Hizmeti Yenile</h1>
-            <p className="text-muted-foreground">
-              {service.product.name} - {service.domain || service.label || "-"}
-            </p>
+    <>
+      <AppBreadcrumbLabel segment={service.id} label={service.product.name} />
+
+      <PageHeader
+        back={{ href: `/musteri/panel/hizmetlerim/${service.id}`, label: service.product.name }}
+        title="Hizmeti yenile"
+        description={subtitle}
+      />
+
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
+          <SectionCard title="Yenileme süresi" description="Uzun dönemlerde yenileme indirimi uygulanır.">
+            <div role="radiogroup" aria-label="Yenileme süresi" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {renewalOptions.map((option) => {
+                const optionPrice = monthlyPrice * option.months;
+                const optionFinal = optionPrice - (optionPrice * option.discount) / 100;
+                const selected = selectedPeriod === option.months;
+                return (
+                  <button
+                    key={option.months}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setSelectedPeriod(option.months)}
+                    className={cn(
+                      "relative rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:p-4",
+                      selected ? "border-foreground bg-muted/50 ring-1 ring-foreground" : "hover:bg-muted/40"
+                    )}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold">{option.period}</span>
+                      {option.discount > 0 ? (
+                        <span className="rounded border px-1.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+                          %{option.discount}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-2 block text-lg font-semibold tabular-nums tracking-tight">{money(optionFinal)}</span>
+                    <span className="block text-xs text-muted-foreground tabular-nums">
+                      {money(optionFinal / option.months)} / ay
+                    </span>
+                    {selected ? (
+                      <Check aria-hidden className="absolute bottom-3 right-3 size-4" />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Ödeme yöntemi">
+            <div role="radiogroup" aria-label="Ödeme yöntemi" className="grid gap-2 sm:grid-cols-2">
+              {paymentMethods.map((method) => {
+                const selected = selectedPayment === method.id;
+                return (
+                  <button
+                    key={method.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setSelectedPayment(method.id)}
+                    className={cn(
+                      "flex min-h-[56px] items-center gap-3 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      selected ? "border-foreground bg-muted/50 ring-1 ring-foreground" : "hover:bg-muted/40"
+                    )}
+                  >
+                    <method.icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{method.name}</span>
+                      <span className="block text-xs text-muted-foreground">{method.description}</span>
+                    </span>
+                    {selected ? <Check aria-hidden className="size-4 shrink-0" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </SectionCard>
+
+          <div className="rounded-lg border border-dashed p-4 text-sm">
+            <p className="font-medium">Yenileme hakkında</p>
+            <ul className="mt-2 space-y-1.5 text-muted-foreground">
+              <li className="flex gap-2">
+                <Check aria-hidden className="mt-0.5 size-4 shrink-0" />
+                Süre, mevcut bitiş tarihinin üzerine eklenir; hizmetiniz kesintiye uğramaz.
+              </li>
+              <li className="flex gap-2">
+                <Check aria-hidden className="mt-0.5 size-4 shrink-0" />
+                Mevcut ayarlarınız ve verileriniz korunur.
+              </li>
+              <li className="flex gap-2">
+                <Check aria-hidden className="mt-0.5 size-4 shrink-0" />
+                Havale ile ödemede yenileme, ödemeniz onaylandıktan sonra işlenir.
+              </li>
+            </ul>
           </div>
         </div>
-      </BlurFade>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Renewal Options */}
-        <div className="lg:col-span-2 space-y-6">
-          <BlurFade delay={0.15} inView>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-primary" />
-                  Yenileme Süresi Seçin
-                </CardTitle>
-                <CardDescription>
-                  Daha uzun süre seçerek daha fazla tasarruf edin
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {renewalOptions.map((option) => {
-                    const optionPrice = monthlyPrice * option.months;
-                    const optionDiscount = (optionPrice * option.discount) / 100;
-                    const optionFinal = optionPrice - optionDiscount;
+        <SectionCard title="Özet" className="lg:sticky lg:top-20">
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-sm font-medium">{service.product.name}</p>
+            <p className="truncate text-xs text-muted-foreground">{service.domain || service.label || "—"}</p>
+          </div>
+          <DetailList
+            className="mt-4"
+            items={[
+              { label: "Mevcut bitiş", value: formatDateLong(currentExpiry) },
+              { label: "Yeni bitiş", value: calculateNewExpiry() },
+              { label: "Yenileme süresi", value: selectedOption.period },
+            ]}
+          />
+          <dl className="mt-4 space-y-2 border-t pt-4 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">Ara toplam</dt>
+              <dd className="tabular-nums">{money(totalPrice)}</dd>
+            </div>
+            {selectedOption.discount > 0 ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Yenileme indirimi (%{selectedOption.discount})</dt>
+                <dd className="tabular-nums">−{money(discountAmount)}</dd>
+              </div>
+            ) : null}
+            <div className="flex items-baseline justify-between gap-3 border-t border-dashed pt-2">
+              <dt className="font-medium">Toplam</dt>
+              <dd className="text-xl font-semibold tabular-nums tracking-tight">{money(finalPrice)}</dd>
+            </div>
+          </dl>
+          <p className="mt-1 text-right text-xs text-muted-foreground">KDV hariçtir; ödeme adımında eklenir.</p>
 
-                    return (
-                      <div
-                        key={option.months}
-                        onClick={() => setSelectedPeriod(option.months)}
-                        className={cn(
-                          "relative p-4 rounded-lg border-2 cursor-pointer transition-all",
-                          selectedPeriod === option.months
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/50"
-                        )}
-                      >
-                        {option.popular && (
-                          <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
-                            <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">
-                              Popüler
-                            </span>
-                          </div>
-                        )}
-                        {option.discount > 0 && (
-                          <div className="absolute -top-2.5 right-2">
-                            <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
-                              %{option.discount} İndirim
-                            </span>
-                          </div>
-                        )}
-                        <div className="text-center pt-2">
-                          <p className="font-semibold text-lg">{option.period}</p>
-                          <p className="text-2xl font-bold text-primary mt-1">
-                            {currencyFormatter.format(optionFinal)}
-                          </p>
-                          {option.discount > 0 && (
-                            <p className="text-sm text-muted-foreground line-through">
-                              {currencyFormatter.format(optionPrice)}
-                            </p>
-                          )}
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {currencyFormatter.format(optionFinal / option.months)}/ay
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
-
-          {/* Payment Method */}
-          <BlurFade delay={0.2} inView>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5 text-primary" />
-                  Ödeme Yöntemi
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {paymentMethods.map((method) => (
-                    <div
-                      key={method.id}
-                      onClick={() => setSelectedPayment(method.id)}
-                      className={cn(
-                        "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all",
-                        selectedPayment === method.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      )}
-                    >
-                      <method.icon className={cn(
-                        "h-5 w-5",
-                        selectedPayment === method.id ? "text-primary" : "text-muted-foreground"
-                      )} />
-                      <span className="font-medium">{method.name}</span>
-                      {selectedPayment === method.id && (
-                        <CheckCircle2 className="h-5 w-5 text-primary ml-auto" />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
-
-          {/* Benefits */}
-          <BlurFade delay={0.25} inView>
-            <Card className="bg-green-500/5 border-green-500/20">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <Gift className="h-5 w-5 text-green-500 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-green-700 dark:text-green-400">
-                      Yenileme Avantajları
-                    </p>
-                    <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                      <li className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        Hizmet kesintisi olmadan süre uzatma
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        Mevcut ayarlarınız korunur
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        Anında aktivasyon
-                      </li>
-                      {selectedOption.discount > 0 && (
-                        <li className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          %{selectedOption.discount} indirim avantajı
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
-        </div>
-
-        {/* Order Summary */}
-        <div className="lg:col-span-1">
-          <BlurFade delay={0.3} inView>
-            <Card className="sticky top-6">
-              <CardHeader>
-                <CardTitle>Sipariş Özeti</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Service Info */}
-                <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="font-medium">{service.product.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {service.domain || service.label || "-"}
-                  </p>
-                </div>
-
-                {/* Current Expiry */}
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Mevcut Bitiş:</span>
-                  <span>{currentExpiryDisplay()}</span>
-                </div>
-
-                {/* New Expiry */}
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Yeni Bitiş:</span>
-                  <span className="text-green-600 font-medium">{calculateNewExpiry()}</span>
-                </div>
-
-                {/* Period */}
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Yenileme Süresi:</span>
-                  <span>{selectedOption.period}</span>
-                </div>
-
-                <div className="border-t pt-4 space-y-2">
-                  {/* Subtotal */}
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Ara Toplam:</span>
-                    <span>{currencyFormatter.format(totalPrice)}</span>
-                  </div>
-
-                  {/* Discount */}
-                  {selectedOption.discount > 0 && (
-                    <div className="flex items-center justify-between text-sm text-green-600">
-                      <span className="flex items-center gap-1">
-                        <Percent className="h-3 w-3" />
-                        İndirim (%{selectedOption.discount}):
-                      </span>
-                      <span>-{currencyFormatter.format(discountAmount)}</span>
-                    </div>
-                  )}
-
-                  {/* Total */}
-                  <div className="flex items-center justify-between font-semibold text-lg pt-2 border-t">
-                    <span>Toplam:</span>
-                    <span className="text-primary">{currencyFormatter.format(finalPrice)}</span>
-                  </div>
-                </div>
-
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={handleRenewal}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? (
-                    <>
-                      <RefreshCcw className="mr-2 h-4 w-4 animate-spin" />
-                      İşleniyor...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCcw className="mr-2 h-4 w-4" />
-                      Yenilemeyi Tamamla
-                    </>
-                  )}
-                </Button>
-
-                <p className="text-xs text-center text-muted-foreground">
-                  <Shield className="inline h-3 w-3 mr-1" />
-                  256-bit SSL ile güvenli ödeme
-                </p>
-              </CardContent>
-            </Card>
-          </BlurFade>
-        </div>
+          <button
+            type="button"
+            onClick={handleRenewal}
+            disabled={isProcessing}
+            className={appButton({ className: "mt-4 w-full md:h-10" })}
+          >
+            {isProcessing ? <Loader2 aria-hidden className="animate-spin" /> : <RefreshCcw aria-hidden />}
+            {isProcessing ? "İşleniyor…" : "Yenilemeyi tamamla"}
+          </button>
+        </SectionCard>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,75 +1,24 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { CreditCard, Download, Eye, FileText } from "lucide-react";
 import {
-  FileText,
-  Search,
-  Download,
-  CreditCard,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
-  Clock,
-  Calendar,
-  ChevronRight,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import {
-  getCustomerEInvoiceBadgeClass,
-  getCustomerEInvoiceLabel,
-} from "@/lib/efatura/customer-status";
+  DataTable,
+  EmptyState,
+  ListRow,
+  PageHeader,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  appButton,
+  getStatusMeta,
+  getStatusOptions,
+  type ColumnDef,
+} from "@/components/app";
+import { getCustomerEInvoiceLabel } from "@/lib/efatura/customer-status";
+import { formatTRY } from "@/lib/format/price";
+import { formatDate } from "@/lib/format/date";
 import type { EInvoiceStatus } from "@prisma/client";
-import { cn } from "@/lib/utils";
-
-const statusConfig = {
-  PAID: {
-    label: "Ödendi",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-    icon: CheckCircle2,
-  },
-  PENDING: {
-    label: "Bekliyor",
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
-    icon: Clock,
-  },
-  OVERDUE: {
-    label: "Gecikmiş",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
-    icon: AlertCircle,
-  },
-  CANCELLED: {
-    label: "İptal",
-    color: "text-gray-500",
-    bgColor: "bg-gray-500/10",
-    icon: XCircle,
-  },
-  DRAFT: {
-    label: "Taslak",
-    color: "text-gray-400",
-    bgColor: "bg-gray-400/10",
-    icon: FileText,
-  },
-};
-
-const filterOptions = [
-  { value: "all", label: "Tümü" },
-  { value: "PENDING", label: "Bekleyen" },
-  { value: "PAID", label: "Ödenen" },
-  { value: "OVERDUE", label: "Gecikmiş" },
-];
-
-const currencyFormatter = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 interface SerializedInvoice {
   id: string;
@@ -103,212 +52,170 @@ interface FaturalarContentProps {
   };
 }
 
+const money = (n: number) => formatTRY(n, { keepDecimals: true });
+const detailHref = (id: string) => `/musteri/panel/faturalar/${id}`;
+const pdfHref = (id: string) => `/api/faturalar/${id}/pdf`;
+const canPay = (status: string) => status === "PENDING" || status === "OVERDUE";
+
+function EInvoiceBadge({ eInvoice }: { eInvoice: SerializedInvoice["eInvoice"] }) {
+  if (!eInvoice) return null;
+  return (
+    <StatusBadge
+      tone={getStatusMeta("eInvoice", eInvoice.status).tone}
+      label={getCustomerEInvoiceLabel(eInvoice.status as EInvoiceStatus, eInvoice.type as "e-fatura" | "e-arsiv")}
+    />
+  );
+}
+
+const columns: ColumnDef<SerializedInvoice>[] = [
+  {
+    accessorKey: "invoiceNumber",
+    header: "Fatura",
+    cell: ({ row }) => {
+      const inv = row.original;
+      return (
+        <div className="min-w-0 max-w-[340px]">
+          <Link href={detailHref(inv.id)} className="font-mono text-[13px] font-medium hover:underline">
+            {inv.invoiceNumber}
+          </Link>
+          <p className="truncate text-xs text-muted-foreground">{inv.items[0]?.description ?? "—"}</p>
+        </div>
+      );
+    },
+  },
+  {
+    id: "createdAt",
+    accessorFn: (r) => r.createdAt,
+    header: "Tarih",
+    cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{formatDate(row.original.createdAt)}</span>,
+  },
+  {
+    id: "dueDate",
+    accessorFn: (r) => r.dueDate,
+    header: "Son ödeme",
+    cell: ({ row }) => {
+      const inv = row.original;
+      return inv.status === "PAID" && inv.paidAt ? (
+        <span className="text-muted-foreground">
+          <span className="tabular-nums">{formatDate(inv.paidAt)}</span>
+          <span className="block text-xs">ödendi</span>
+        </span>
+      ) : (
+        <span className="tabular-nums">{formatDate(inv.dueDate)}</span>
+      );
+    },
+  },
+  {
+    accessorKey: "totalAmount",
+    header: "Tutar",
+    meta: { align: "right" },
+    cell: ({ row }) => <span className="whitespace-nowrap font-medium tabular-nums">{money(row.original.totalAmount)}</span>,
+  },
+  {
+    accessorKey: "status",
+    header: "Durum",
+    enableSorting: false,
+    cell: ({ row }) => (
+      <div className="flex flex-wrap gap-1.5">
+        <StatusBadge kind="invoice" status={row.original.status} />
+        {row.original.status === "PAID" ? <EInvoiceBadge eInvoice={row.original.eInvoice} /> : null}
+      </div>
+    ),
+  },
+  {
+    id: "pay",
+    header: () => <span className="sr-only">Ödeme</span>,
+    enableSorting: false,
+    meta: { align: "right", className: "w-px" },
+    cell: ({ row }) =>
+      canPay(row.original.status) ? (
+        <Link href={detailHref(row.original.id)} className={appButton({ size: "sm" })}>
+          <CreditCard aria-hidden />
+          Öde
+        </Link>
+      ) : null,
+  },
+];
+
 export function FaturalarContent({ invoices, stats }: FaturalarContentProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState("all");
-
-  const filteredInvoices = invoices.filter((invoice) => {
-    const description = invoice.items[0]?.description ?? "";
-    const matchesSearch =
-      invoice.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filter === "all" || invoice.status === filter;
-    return matchesSearch && matchesFilter;
-  });
-
-  const hasInvoices = invoices.length > 0;
-  const isFilteredEmpty = hasInvoices && filteredInvoices.length === 0;
+  const unpaidCount = invoices.filter((i) => canPay(i.status)).length;
+  const overdueCount = invoices.filter((i) => i.status === "OVERDUE").length;
 
   return (
-    <div className="space-y-6">
-      <BlurFade delay={0.1} inView>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Faturalarım</h1>
-            <p className="text-muted-foreground">
-              Faturalarınızı görüntüleyin ve ödemelerinizi yönetin.
-            </p>
-          </div>
-        </div>
-      </BlurFade>
+    <>
+      <PageHeader
+        title="Faturalarım"
+        description="Faturalarınızı görüntüleyin, PDF olarak indirin ve ödemelerinizi yapın."
+      />
 
-      <BlurFade delay={0.15} inView>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <FileText className="h-5 w-5 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Ödenmemiş Toplam</p>
-                  <p className="text-2xl font-bold">{currencyFormatter.format(stats.outstanding)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-500/10">
-                  <Clock className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Bekleyen</p>
-                  <p className="text-2xl font-bold">{currencyFormatter.format(stats.pending)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-red-500/10">
-                  <AlertCircle className="h-5 w-5 text-red-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Gecikmiş</p>
-                  <p className="text-2xl font-bold">{currencyFormatter.format(stats.overdue)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </BlurFade>
+      <StatGrid columns={3} className="grid-cols-1 sm:grid-cols-3">
+        <StatCard
+          label="Ödenmemiş toplam"
+          value={money(stats.outstanding)}
+          hint={unpaidCount ? `${unpaidCount} fatura` : "Ödenmemiş fatura yok"}
+          tone={unpaidCount ? "warning" : undefined}
+        />
+        <StatCard label="Bekleyen" value={money(stats.pending)} hint="Vadesi gelmemiş faturalar" />
+        <StatCard
+          label="Gecikmiş"
+          value={money(stats.overdue)}
+          hint={overdueCount ? `${overdueCount} faturanın vadesi geçti` : "Gecikmiş fatura yok"}
+          tone={overdueCount ? "danger" : undefined}
+        />
+      </StatGrid>
 
-      <BlurFade delay={0.2} inView>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex flex-wrap gap-2">
-                {filterOptions.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={filter === option.value ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilter(option.value)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Fatura no veya açıklama ara..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-
-      <BlurFade delay={0.25} inView>
-        <Card>
-          <CardHeader>
-            <CardTitle>Faturalar ({filteredInvoices.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {filteredInvoices.map((invoice) => {
-                const status = statusConfig[invoice.status as keyof typeof statusConfig] ?? statusConfig.DRAFT;
-                const StatusIcon = status.icon;
-                const canPay = invoice.status === "PENDING" || invoice.status === "OVERDUE";
-                const description = invoice.items[0]?.description ?? invoice.invoiceNumber;
-                const detailHref = `/musteri/panel/faturalar/${invoice.id}`;
-                const pdfHref = `/api/faturalar/${invoice.id}/pdf`;
-
-                return (
-                  <div
-                    key={invoice.id}
-                    className="flex items-center gap-4 p-4 rounded-lg border hover:shadow-sm transition-shadow group"
-                  >
-                    <Link href={detailHref} className="flex items-center gap-4 flex-1 min-w-0">
-                      <div className={cn("p-3 rounded-lg shrink-0", status.bgColor)}>
-                        <FileText className={cn("h-6 w-6", status.color)} />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold">{invoice.invoiceNumber}</p>
-                        <div
-                          className={cn(
-                            "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
-                            status.bgColor,
-                            status.color
-                          )}
-                        >
-                          <StatusIcon className="h-3 w-3" />
-                          {status.label}
-                        </div>
-                        {invoice.status === "PAID" && invoice.eInvoice && (
-                          <Badge
-                            variant="outline"
-                            className={getCustomerEInvoiceBadgeClass(
-                              invoice.eInvoice.status as EInvoiceStatus
-                            )}
-                          >
-                            {getCustomerEInvoiceLabel(
-                              invoice.eInvoice.status as EInvoiceStatus,
-                              invoice.eInvoice.type as "e-fatura" | "e-arsiv"
-                            )}
-                          </Badge>
-                        )}
-                      </div>
-                        <p className="text-sm text-muted-foreground truncate">{description}</p>
-                      </div>
-
-                      <div className="hidden md:block text-right shrink-0">
-                        <p className="text-lg font-bold">{currencyFormatter.format(invoice.totalAmount)}</p>
-                        <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {invoice.status === "PAID" && invoice.paidAt
-                            ? `Ödeme: ${new Date(invoice.paidAt).toLocaleDateString("tr-TR")}`
-                            : `Son: ${new Date(invoice.dueDate).toLocaleDateString("tr-TR")}`}
-                        </p>
-                      </div>
-
-                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
-                    </Link>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {canPay && (
-                        <Button size="sm" asChild>
-                          <Link href={detailHref}>
-                            <CreditCard className="mr-2 h-4 w-4" />
-                            Öde
-                          </Link>
-                        </Button>
-                      )}
-                      <Button variant="outline" size="icon" asChild>
-                        <a href={pdfHref} target="_blank" rel="noopener noreferrer">
-                          <Download className="h-4 w-4" />
-                        </a>
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {!hasInvoices && (
-                <div className="text-center py-10">
-                  <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                  <p className="text-muted-foreground">Henüz faturanız bulunmuyor.</p>
-                </div>
-              )}
-
-              {isFilteredEmpty && (
-                <div className="text-center py-8 text-muted-foreground">
-                  Aramanızla eşleşen fatura bulunamadı.
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+      <DataTable
+        caption="Faturalar"
+        columns={columns}
+        data={invoices}
+        initialSort={[{ id: "createdAt", desc: true }]}
+        searchFn={(inv, q) =>
+          inv.invoiceNumber.toLocaleLowerCase("tr-TR").includes(q) ||
+          (inv.items[0]?.description ?? "").toLocaleLowerCase("tr-TR").includes(q)
+        }
+        searchPlaceholder="Fatura no veya açıklama ara…"
+        filters={[
+          {
+            id: "status",
+            label: "Durum",
+            options: getStatusOptions("invoice").filter((o) => o.value !== "DRAFT"),
+            getValue: (inv) => inv.status,
+          },
+        ]}
+        rowHref={(inv) => detailHref(inv.id)}
+        rowActions={(inv) => [
+          { label: "Görüntüle", href: detailHref(inv.id), icon: <Eye aria-hidden /> },
+          ...(canPay(inv.status) ? [{ label: "Öde", href: detailHref(inv.id), icon: <CreditCard aria-hidden /> }] : []),
+          {
+            label: "PDF indir",
+            icon: <Download aria-hidden />,
+            onSelect: () => window.open(pdfHref(inv.id), "_blank", "noopener,noreferrer"),
+          },
+        ]}
+        mobileCard={(inv) => (
+          <ListRow
+            title={<span className="font-mono text-[13px]">{inv.invoiceNumber}</span>}
+            subtitle={inv.items[0]?.description}
+            trailing={money(inv.totalAmount)}
+            meta={
+              <>
+                <StatusBadge kind="invoice" status={inv.status} />
+                <span>
+                  {inv.status === "PAID" && inv.paidAt ? `Ödendi ${formatDate(inv.paidAt)}` : `Son ödeme ${formatDate(inv.dueDate)}`}
+                </span>
+              </>
+            }
+          />
+        )}
+        emptyState={
+          <EmptyState
+            icon={FileText}
+            title="Henüz faturanız yok"
+            description="Satın aldığınız hizmetlerin faturaları burada listelenir."
+          />
+        }
+        noResultsText="Aramanızla eşleşen fatura bulunamadı."
+      />
+    </>
   );
 }

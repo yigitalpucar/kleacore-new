@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getPlanChangeOptionsForService } from "@/lib/services/plan-change";
 import { ServicePlanChangeContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Paket değiştir" };
 
 interface Props {
   params: Promise<{ id: string }>;

@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getServicesByCustomer } from "@/lib/dal/services";
 import { HizmetlerimContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Hizmetlerim" };
 
 export default async function HizmetlerimPage() {
   const session = await auth();

@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getTicketWithMessages } from "@/lib/dal/tickets";
 import { DestekDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Destek talebi" };
 
 interface DestekDetayPageProps {
   params: Promise<{ id: string }>;

@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getInvoicesByCustomer } from "@/lib/dal/invoices";
 import { FaturalarContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Faturalarım" };
 
 export default async function FaturalarPage() {
   const session = await auth();
