@@ -6,6 +6,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
+import { sum as sumMoney, toNumber } from "@/lib/money";
 import { fulfillGatewayReference, verifyGatewayAmount } from "@/lib/payments/gateway-fulfillment";
 import type { ValidatedCard } from "@/lib/payments/card-validation";
 import type { PaymentContext } from "@/lib/payments/context";
@@ -90,7 +91,8 @@ export async function loadKuveytTurkSession(merchantOrderId: string) {
 
   if (payments.length === 0 || !meta || meta.provider !== "kuveytturk") return null;
 
-  const amount = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+  // Decimal sum (not float) so the amount sent to the bank is exact to the kuruş.
+  const amount = toNumber(sumMoney(payments.map((payment) => payment.amount)));
 
   return {
     merchantOrderId,
