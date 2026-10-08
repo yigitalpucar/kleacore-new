@@ -74,7 +74,7 @@ export const memoryDnsModule = defineModule({
 - `secretFields`: şifreli saklanır, yönetim ekranında `********` gösterilir; boş/maske bırakılırsa mevcut değer korunur. Gizli alanı log'a, `ActivityLog`'a, hata mesajına yazmayın.
 - `configFields` / `productOptionsFields`: Türkçe etiket, ipucu, `placeholder`, `optionLabels` (z.enum), `multiline` (SSH anahtarı gibi). Form bunlardan **otomatik** üretilir (`schema-form.ts` → `components/admin/modules/schema-fields.tsx`). Desteklenen tipler: string (url/email), number (int/min/max), boolean, enum, `z.array(z.string())` (satır/virgül listesi).
 - `capabilities`: isteğe bağlı her metot için yetenek bildirilmeli, bildirilen her yeteneğin metodu olmalı (sözleşme testi kontrol eder):
-  - server: `usage→getUsage`, `sso→getSsoUrl`, `console→getConsoleUrl`, `power→powerAction`, `reinstall→reinstall`, `listAccounts→listAccounts`; `provision`, `changePackage`, `ipam` bilgi amaçlı.
+  - server: `usage→getUsage`, `bulkUsage→listUsage`, `sso→getSsoUrl`, `password→resetPassword`, `packages→listPackages + resolvePackageName`, `console→getConsoleUrl`, `power→powerAction`, `reinstall→reinstall`, `listAccounts→listAccounts`; `provision`, `changePackage`, `ipam` bilgi amaçlı.
   - registrar: `bulkAvailability→checkDomainsAvailability`, `tldPricing→fetchTldPricing`, `listDomains`, `eppCode→getEppCode`, `lock→setLock`.
 - `healthCheck(instance)`: "Bağlantıyı test et". Hata → `{ ok: false, message }`; 15 sn zaman aşımı kayıt katmanında. Sonuç `lastHealthAt/lastHealthStatus/lastHealthError` olarak saklanır.
 - `hidden: true`: dondurulmuş modül (Virtualizor, Stripe) — yeni örnek açılamaz, mevcut örnekler çalışır.
@@ -93,7 +93,12 @@ Genel: uzak çağrılar **asla throw etmez**, `IntegrationResult` döner (`{ ok,
 | `suspend(ctx, reason?)`, `unsuspend(ctx)` | `ctx.service.remoteId` üzerinden. |
 | `terminate(ctx)` | Geri alınamaz. Başarıdan sonra köprü hizmetin IP'lerini `releaseIp` ile havuza bırakır. |
 | `changePackage(ctx)` | `ctx.options` **yeni** ürünün seçenekleri. Farklı modül tipine geçiş köprüde reddedilir (`MODULE_MISMATCH`). |
-| `getUsage?`, `getSsoUrl?(ctx, "panel"\|"webmail")`, `getConsoleUrl?`, `powerAction?(ctx, "start"\|"stop"\|"restart"\|"shutdown")`, `reinstall?(ctx, { templateId?, password?, sshKeys? })`, `listAccounts?()` | Yetenek bildirerek. |
+| `getUsage?`, `getSsoUrl?(ctx, "panel"\|"webmail", { app? })`, `getConsoleUrl?`, `powerAction?(ctx, "start"\|"stop"\|"restart"\|"shutdown")`, `reinstall?(ctx, { templateId?, password?, sshKeys? })`, `listAccounts?()` | Yetenek bildirerek. |
+| `listUsage?()` | Örnekteki tüm hesapların kullanımı (günlük senkron). `ServerUsage` MB; limit `undefined` = bilinmiyor, `null` = sınırsız. |
+| `resetPassword?(ctx, password)` | Panel şifresi. Şifreyi log'a/hata mesajına yazmayın. |
+| `listPackages?()`, `resolvePackageName?(options, { sku })` | Salt okunur paket listesi + ürünün kurulumda kullanacağı paket adı (ürün Otomasyon formu doğrular). |
+
+`createAccount` bir `password` döndürürse `createRemoteService` onu hizmete **şifreli** yazar (`Service.panelPassword`, `enc:v1:`), sonuçtan çıkarır; "hizmet aktif" bildiriminde bir kez gösterilir (kuyrukta şifreli, gelen kutusu kopyasında gizli) ve müşteri panelinde onayla açılır. `getSsoUrl`'in döndürdüğü URL bir kimlik bilgisidir: hemen yönlendirilir, saklanmaz, log'a yazılmaz (logger `cpsess`/`session=` değerlerini ayrıca maskeler).
 
 **RegistrarModule** = mevcut `RegistrarProvider` + zorunlu `getDomainInfo` + `listDomains?`, `getEppCode?`, `setLock?`.
 
@@ -195,5 +200,5 @@ return { ok: true, data: { remoteId: String(vmid), ipAddress: ip.address } };
 
 - **Proxmox** (`server/proxmox`): `productCategories: ["vds","vps","server","cloud"]`, `productOptionsSchema` (templateVmid, cores, memoryMB, diskGB, storage, bridge, ipPoolId?), yetenekler `power`, `console`, `reinstall`, `usage`, `ipam`, `listAccounts`. IP için §6. Gerçek PVE'de hiçbir şey oluşturmayın; fixture kullanın.
 - **Cloudflare DNS** (`dns/cloudflare`): `DnsModule` + `describeDnsModuleBehaviour` (durum tutan fetch sahtesiyle). Hizmet/alan adı tarafında çağırmak için `listActiveInstances("dns")` + `createContract(instance, "dns")`.
-- **cPanel SSO / kullanım** (`server/cpanel-whm`): `getSsoUrl` (+ `sso`) ve `getUsage` (+ `usage`) ekleyin; manifest'in `capabilities` listesini güncellemezseniz sözleşme testi kırılır. Legacy hizmetler için önce hizmeti örneğe bağlamak gerekir (§4).
+- **cPanel SSO / kullanım** (`server/cpanel-whm`, Faz 2.6 — yapıldı): yetenekler `sso` (WHM `create_user_session`, `cpaneld`/`webmaild`, `app` = `FileManager_Home` / `Email_Accounts` / `Database_phpMyAdmin`), `password` (`passwd`, POST gövdesinde), `usage` (`accountsummary` + `showbw`), `bulkUsage` (`listaccts` + `showbw`, örnek başına 2 çağrı), `packages` (`listpkgs`). Bayi ön eki: `packagePrefix` = `auto` (varsayılan; root olmayan kullanıcıda paket adına `<kullanıcı>_` eklenir, zaten varsa eklenmez) | `none`. Ekranlar: müşteri hizmet detayı → **cPanel erişimi** (giriş, Webmail, Dosya Yöneticisi, E-posta hesapları, phpMyAdmin, şifre göster/sıfırla); yönetim hizmet detayı → **cPanel'e giriş (müşteri olarak)** (aktivite kaydı `SERVICE_PANEL_LOGIN_AS_CUSTOMER`); `/yonetim/hizmetler/kota`. Legacy (bağsız) hizmetlerde SSO/sıfırlama yoktur — önce hizmeti örneğe bağlayın (§4); şifre gösterme her hizmette çalışır.
 - **İçe aktarma**: `listAccounts` (server) / `listDomains` (registrar) ekleyin; içe aktarılan hizmete `moduleInstanceId` + `remoteId` yazın.
