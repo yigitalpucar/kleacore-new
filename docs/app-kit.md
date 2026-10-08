@@ -55,7 +55,7 @@ const nav: AppNavGroup[] = [
 ```
 
 The shell has these parts:
-- **Desktop sidebar:** grouped nav with a mono group label, an active item marked by `bg-muted` plus a 2px rail, and badges for counts (hidden at 0). The bottom button collapses it to a 64px icon rail with tooltips, and the state persists in `localStorage` (`kc-app-sidebar-collapsed`).
+- **Desktop sidebar:** grouped nav with a mono group label, an active item marked by `bg-muted` plus a 2px rail, and badges for counts (hidden at 0). The bottom button (or ⌘B / Ctrl+B) collapses it to a 64px icon rail with tooltips, and the state persists in `localStorage` (`kc-app-sidebar-collapsed`).
 - **Mobile drawer:** a left Radix dialog that closes on navigation.
 - **Top bar:** the breadcrumb is derived from the path under `breadcrumbRoot`. A crumb uses the nav title when the href matches a nav item, then `segmentLabels`, then "Detay" for id-like segments, and finally the humanised segment. On phones only the last crumb shows. Override a crumb from a page with `<AppBreadcrumbLabel segment={invoice.id} label={invoice.invoiceNumber} />`.
 - **Slots:** `search`, `notifications`, `themeToggle`, `userMenu` and `sidebarFooter`. All are optional.
@@ -173,6 +173,11 @@ export default function Loading() { return <PageSkeleton variant="list" />; }
 Detail page: `PageHeader back={{ href, label }} eyebrow="Fatura" meta={<StatusBadge …/>}`, then `grid items-start gap-6 lg:grid-cols-3` with main content in `lg:col-span-2` (SectionCards) and a sidebar column (summary `DetailList`, actions). Put a page's primary action in `PageHeader.actions` and repeat it in the sidebar only when the page is long.
 
 Forms (settings): `<form>` → stacked `FormSection`s separated by `space-y-8`, each with its own submit in `footer` if they save independently.
+
+## Notes
+
+- In `next dev`, nested panel routes may log a Radix `id`/`aria-controls` hydration warning for the top bar triggers. It does not happen in `next build && next start` (verified); it comes from dev-only tree wrappers, not from the kit.
+- shadcnblocks reference: the shell follows `application-shell2` (grouped collapsible sidebar, icon rail, ⌘B, breadcrumbs) and the table follows `data-table13` (status tabs with counts + search + pagination), rebuilt on our tokens without the shadcn `sidebar` primitive.
 
 ## Do / Don't
 

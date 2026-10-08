@@ -186,6 +186,7 @@ export function AppCommandSearch({
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
   const [active, setActive] = React.useState(0);
+  const inputRef = React.useRef<HTMLInputElement>(null);
 
   const all = React.useMemo<AppSearchItem[]>(
     () => [
@@ -245,13 +246,18 @@ export function AppCommandSearch({
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in-0" />
-        <DialogPrimitive.Content className="fixed left-1/2 top-[12vh] z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-2xl data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95">
+        <DialogPrimitive.Content
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            inputRef.current?.focus();
+          }}
+          className="fixed left-1/2 top-[12vh] z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-2xl data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95">
           <DialogPrimitive.Title className="sr-only">Sayfa ara</DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">Gitmek istediğiniz sayfanın adını yazın.</DialogPrimitive.Description>
           <div className="flex items-center gap-2 border-b px-3">
             <Search aria-hidden className="size-4 text-muted-foreground" />
             <input
-              autoFocus
+              ref={inputRef}
               value={q}
               onChange={(e) => {
                 setQ(e.target.value);

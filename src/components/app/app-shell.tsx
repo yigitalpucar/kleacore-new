@@ -127,7 +127,7 @@ export function AppShell({
     setMobileOpen(false);
   }, [pathname]);
 
-  const toggleCollapsed = () => {
+  const toggleCollapsed = React.useCallback(() => {
     setCollapsed((c) => {
       const next = !c;
       try {
@@ -137,7 +137,19 @@ export function AppShell({
       }
       return next;
     });
-  };
+  }, []);
+
+  // ⌘B / Ctrl+B toggles the desktop sidebar (same shortcut as shadcn's sidebar).
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b" && window.matchMedia("(min-width: 1024px)").matches) {
+        e.preventDefault();
+        toggleCollapsed();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleCollapsed]);
 
   const crumbCtx = React.useMemo(
     () => ({
@@ -356,7 +368,7 @@ function SidebarBody({
             type="button"
             onClick={onToggle}
             aria-label={collapsed ? "Menüyü genişlet" : "Menüyü daralt"}
-            title={collapsed ? "Menüyü genişlet" : "Menüyü daralt"}
+            title={collapsed ? "Menüyü genişlet (⌘B)" : "Menüyü daralt (⌘B)"}
             className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {collapsed ? <PanelLeftOpen aria-hidden className="size-4" /> : <PanelLeftClose aria-hidden className="size-4" />}
