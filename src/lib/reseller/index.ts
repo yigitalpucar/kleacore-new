@@ -1,26 +1,19 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { compare, max, min, money, percent, toNumber, type MoneyInput } from "@/lib/money";
 
 type DbClient = Prisma.TransactionClient | typeof db;
 
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
-}
+/** Reseller discount for a line, rounded half-up to kuruş (0 when not applicable). */
+export function applyResellerDiscount(basePrice: MoneyInput, discountPercent: MoneyInput) {
+  const price = money(basePrice);
+  const rate = money(discountPercent);
 
-export function applyResellerDiscount(basePrice: number, discountPercent: number) {
-  const price = Number(basePrice);
-  const percent = Number(discountPercent);
-
-  if (!Number.isFinite(price) || price <= 0) {
-    return 0;
+  if (compare(price, 0) <= 0 || compare(rate, 0) <= 0) {
+    return money(0);
   }
 
-  if (!Number.isFinite(percent) || percent <= 0) {
-    return 0;
-  }
-
-  const normalizedPercent = Math.min(100, Math.max(0, percent));
-  return roundMoney(price * (normalizedPercent / 100));
+  return percent(price, min(100, max(0, rate)));
 }
 
 export async function isResellerUser(userId: string, client: DbClient = db) {
@@ -63,7 +56,7 @@ export async function getResellerStats(resellerId: string, client: DbClient = db
   return {
     customerCount,
     activeServices,
-    monthlyRevenue: roundMoney(Number(monthlyRevenue._sum.totalAmount ?? 0)),
+    monthlyRevenue: toNumber(monthlyRevenue._sum.totalAmount),
   };
 }
 
@@ -116,14 +109,14 @@ export async function getResellerDiscountForCustomer(
   if (
     !reseller?.isReseller ||
     reseller.status !== "ACTIVE" ||
-    reseller.resellerDiscountPercent <= 0
+    compare(reseller.resellerDiscountPercent, 0) <= 0
   ) {
     return null;
   }
 
   return {
     resellerId: reseller.id,
-    discountPercent: reseller.resellerDiscountPercent,
+    discountPercent: toNumber(reseller.resellerDiscountPercent),
     resellerName: `${reseller.name} ${reseller.surname}`.trim(),
   };
 }

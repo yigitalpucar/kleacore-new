@@ -8,6 +8,7 @@ import {
   isResellerUser,
 } from "@/lib/reseller";
 import { BayilikContent } from "./content";
+import { toNumber } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,7 @@ export default async function BayilikPage() {
 
   return (
     <BayilikContent
-      discountPercent={reseller?.resellerDiscountPercent ?? 0}
+      discountPercent={toNumber(reseller?.resellerDiscountPercent)}
       customers={serializedCustomers}
       stats={{
         customerCount: stats.customerCount,

@@ -25,6 +25,7 @@ import { TrustBar } from "@/components/site/trust-bar";
 import { getProductsBySubType } from "@/lib/dal/products";
 import { getDomainTlds } from "@/lib/dal/domain-tlds";
 import { productToPlanCard, productToServerRow } from "@/lib/products/map-product";
+import { toNumber } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -157,7 +158,10 @@ export default async function Home() {
   if (domainFrom) {
     startingPrices.push({ label: "Alan adı", href: "/domain/kayit", amount: domainFrom, period: "yıl" });
   }
-  const sslFrom = minBy(sslProducts, (p) => p.pricingTiers.find((t) => t.period === "yearly")?.price);
+  const sslFrom = minBy(sslProducts, (p) => {
+    const price = p.pricingTiers.find((t) => t.period === "yearly")?.price;
+    return price === undefined ? undefined : toNumber(price);
+  });
   if (sslFrom) {
     startingPrices.push({ label: "SSL sertifikası", href: "/ssl/standart", amount: sslFrom, period: "yıl" });
   }

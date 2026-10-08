@@ -4,6 +4,7 @@ import {
   paginationMeta,
 } from "@/lib/utils/pagination";
 import type { CustomerType, UserStatus } from "@prisma/client";
+import { toNumber } from "@/lib/money";
 
 interface GetCustomersParams extends PaginationParams {
   status?: UserStatus;
@@ -118,6 +119,6 @@ export async function getCustomerStats() {
     suspended,
     corporate,
     individual,
-    totalBalance: totalBalance._sum.balance ?? 0,
+    totalBalance: toNumber(totalBalance._sum.balance),
   };
 }

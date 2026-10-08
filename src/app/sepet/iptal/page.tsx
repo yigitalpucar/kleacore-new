@@ -10,6 +10,7 @@ import { StatusDot } from "@/components/site/status-pill";
 import { CheckoutHeader } from "@/components/site/hosting/checkout-header";
 import { formatTRY } from "@/lib/format/price";
 import { db } from "@/lib/db";
+import { sum, toNumber } from "@/lib/money";
 
 const formatPrice = (price: number | string | { toString(): string }) =>
   formatTRY(Number(price), { keepDecimals: true });
@@ -54,7 +55,7 @@ async function getCancelledCheckoutSummary(invoiceIds: string[]) {
     return null;
   }
 
-  const totalAmount = invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0);
+  const totalAmount = toNumber(sum(invoices.map((invoice) => invoice.totalAmount)));
 
   return {
     invoices,

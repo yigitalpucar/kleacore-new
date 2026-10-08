@@ -15,6 +15,7 @@ export {
   getAccountingLedger,
   getMonthlyTaxBreakdown,
 } from "@/lib/reports/accounting";
+import { toNumber } from "@/lib/money";
 
 export async function getRevenueReport(dateRange: DateRange) {
   const { from, to } = dateRange;
@@ -69,9 +70,9 @@ export async function getRevenueReport(dateRange: DateRange) {
 
   return {
     paidInvoices,
-    totalRevenue: totalRevenue._sum.paidAmount ?? 0,
+    totalRevenue: toNumber(totalRevenue._sum.paidAmount),
     invoiceCount,
-    avgInvoiceAmount: avgInvoiceAmount._avg.paidAmount ?? 0,
+    avgInvoiceAmount: toNumber(avgInvoiceAmount._avg.paidAmount),
     topProducts,
   };
 }
@@ -182,7 +183,7 @@ export async function getServiceReport(dateRange?: DateRange) {
     servicesByStatus,
     servicesByCategory,
     expiringServices,
-    monthlyRecurring: monthlyRecurring._sum.amount ?? 0,
+    monthlyRecurring: toNumber(monthlyRecurring._sum.amount),
   };
 }
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getProductById } from "@/lib/dal/products";
 import { PackageDetailContent } from "./content";
+import { serializeMoney } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -17,5 +18,5 @@ export default async function ProductDetailPage({
 
   if (!product) return notFound();
 
-  return <PackageDetailContent product={product} />;
+  return <PackageDetailContent product={serializeMoney(product)} />;
 }

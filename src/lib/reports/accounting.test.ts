@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
   calculateAccountingSummary,
@@ -126,5 +127,37 @@ describe("groupMonthlyTaxBreakdown", () => {
     ]);
 
     expect(rows).toEqual([]);
+  });
+});
+describe("accounting with Decimal amounts", () => {
+  it("sums Prisma.Decimal rows exactly (no float drift)", () => {
+    const d = (value: string) => new Prisma.Decimal(value);
+    const tenths = Array.from({ length: 1000 }, () => ({
+      subtotal: d("0.10"),
+      taxAmount: d("0.02"),
+      totalAmount: d("0.12"),
+    }));
+
+    const summary = calculateAccountingSummary(
+      tenths,
+      [
+        { method: "CREDIT_CARD", amount: d("0.1") },
+        { method: "CREDIT_CARD", amount: d("0.2") },
+      ],
+      [],
+      []
+    );
+
+    expect(summary.netRevenue).toBe(100);
+    expect(summary.totalTax).toBe(20);
+    expect(summary.grossRevenue).toBe(120);
+    expect(summary.collectedByMethod.CREDIT_CARD).toBe(0.3);
+
+    const months = groupMonthlyTaxBreakdown(
+      tenths.map((row) => ({ ...row, paidAt: new Date("2026-03-15T10:00:00Z") }))
+    );
+    expect(months).toEqual([
+      expect.objectContaining({ month: "2026-03", subtotal: 100, tax: 20, total: 120 }),
+    ]);
   });
 });

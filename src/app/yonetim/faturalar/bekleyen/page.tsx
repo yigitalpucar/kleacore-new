@@ -6,6 +6,7 @@ import { formatTRY } from "@/lib/format/price";
 import { parsePagination } from "@/lib/utils/pagination";
 import { InvoiceTable } from "../_components/invoice-table";
 import { toAdminInvoiceRow, withListPageSize } from "../_components/invoice-rows";
+import { sum as sumMoney, toNumber } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function PendingInvoicesPage({
   const result = await getInvoices({ ...params, perPage: withListPageSize(sp, params), status: "PENDING" });
   const now = new Date();
   const rows = result.data.map((inv) => toAdminInvoiceRow(inv, now));
-  const sum = rows.reduce((s, r) => s + r.totalAmount, 0);
+  const sum = toNumber(sumMoney(rows.map((r) => r.totalAmount)));
 
   return (
     <>

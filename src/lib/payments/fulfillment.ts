@@ -16,6 +16,7 @@ import { applyServiceRenewalFromOrder } from "@/lib/payments/renewal-fulfillment
 import { applyPlanChangeFromOrder } from "@/lib/services/plan-change";
 import { unsuspendServiceIfNeeded } from "@/lib/payments/service-lifecycle";
 import { provisionCompletedOrder } from "@/lib/provisioning/internal";
+import { toNumber, type MoneyInput } from "@/lib/money";
 
 interface FulfillInvoicePaymentInput {
   invoiceId: string;
@@ -55,12 +56,12 @@ function buildFulfillmentEvents(
     id: string;
     invoiceNumber: string;
     customerId: string;
-    totalAmount: number;
+    totalAmount: MoneyInput;
     orderId: string | null;
     order: {
       id: string;
       orderNumber: string;
-      totalAmount: number;
+      totalAmount: MoneyInput;
       items: Array<{ configuration: unknown }>;
     } | null;
   },
@@ -83,7 +84,7 @@ function buildFulfillmentEvents(
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       customerId: invoice.customerId,
-      amount: invoice.totalAmount,
+      amount: toNumber(invoice.totalAmount),
       paymentReference: input.paymentReference,
       context,
     },
@@ -109,7 +110,7 @@ function buildFulfillmentEvents(
         orderId: invoice.orderId,
         orderNumber: invoice.order.orderNumber,
         customerId: invoice.customerId,
-        totalAmount: invoice.order.totalAmount,
+        totalAmount: toNumber(invoice.order.totalAmount),
       },
     });
   }

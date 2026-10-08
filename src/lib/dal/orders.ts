@@ -4,6 +4,7 @@ import {
   paginationMeta,
 } from "@/lib/utils/pagination";
 import type { OrderStatus } from "@prisma/client";
+import { toNumber } from "@/lib/money";
 
 interface GetOrdersParams extends PaginationParams {
   status?: OrderStatus;
@@ -112,7 +113,7 @@ export async function getOrderStats() {
     processing,
     completed,
     cancelled,
-    totalRevenue: revenue._sum.totalAmount ?? 0,
+    totalRevenue: toNumber(revenue._sum.totalAmount),
   };
 }
 

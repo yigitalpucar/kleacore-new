@@ -1,5 +1,5 @@
 import { getAppBaseUrl } from "@/lib/stripe";
-import { roundMoney } from "@/lib/payments/orchestrator";
+import { toFixed2, toNumber } from "@/lib/money";
 import { buildIyzicoAuthorization, createIyzicoRandomKey } from "../iyzico-auth";
 import { persistGatewayCheckout } from "../persist";
 import type { PaymentGatewayConfig } from "../config";
@@ -35,7 +35,7 @@ function getIyzicoBaseUrl(testMode: boolean) {
 }
 
 function formatIyzicoAmount(amount: number) {
-  return roundMoney(amount).toFixed(2);
+  return toFixed2(amount);
 }
 
 function resolveCheckoutHtml(content?: string) {
@@ -137,7 +137,7 @@ export function createIyzicoPaymentGatewayProvider(
         throw new Error("INVOICE_IDS_REQUIRED");
       }
 
-      const normalizedAmount = roundMoney(input.totalAmount);
+      const normalizedAmount = toNumber(input.totalAmount);
       const amountText = formatIyzicoAmount(normalizedAmount);
       const conversationId = `kleacore-${input.invoiceIds[0]}-${Date.now()}`;
       const callbackUrl = `${getAppBaseUrl()}/api/payments/iyzico/callback`;

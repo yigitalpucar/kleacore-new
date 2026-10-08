@@ -1,8 +1,10 @@
 import { db } from "@/lib/db";
 import type { EInvoiceStatus } from "@prisma/client";
+import { serializeMoney } from "@/lib/money";
 
+/** Admin list rows; invoice amounts are plain numbers (passed to a client component). */
 export async function getEInvoiceRecordsForAdmin(status?: EInvoiceStatus | "all") {
-  return db.eInvoiceRecord.findMany({
+  const records = await db.eInvoiceRecord.findMany({
     where: status && status !== "all" ? { status } : undefined,
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -22,6 +24,7 @@ export async function getEInvoiceRecordsForAdmin(status?: EInvoiceStatus | "all"
       },
     },
   });
+  return serializeMoney(records);
 }
 
 export async function getEInvoiceStats() {

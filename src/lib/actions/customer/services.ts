@@ -14,6 +14,7 @@ import {
 } from "@/lib/payments/methods";
 import { initiateCreditCardPayment, isStripePaymentMethod } from "@/lib/payments/orchestrator";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
+import { div, mul, percent, roundHalfUp, sub } from "@/lib/money";
 
 interface RenewServiceInput {
   serviceId: string;
@@ -91,12 +92,10 @@ export async function renewService(input: RenewServiceInput) {
     }
 
     const currentPeriodMonths = billingMonths[service.billingPeriod] ?? 1;
-    const monthlyPrice = Number(service.amount) / currentPeriodMonths;
-    const subtotal = Number((monthlyPrice * input.months).toFixed(2));
-    const discountAmount = Number(
-      (subtotal * (discountPercent / 100)).toFixed(2)
-    );
-    const preTaxTotal = Number((subtotal - discountAmount).toFixed(2));
+    // service.amount is the full period charge; scale it to the renewal length.
+    const subtotal = roundHalfUp(div(mul(service.amount, input.months), currentPeriodMonths));
+    const discountAmount = percent(subtotal, discountPercent);
+    const preTaxTotal = sub(subtotal, discountAmount);
     const taxRate = await getTaxRate();
     const taxed = calculateTax(preTaxTotal, taxRate);
     const totalAmount = taxed.totalAmount;

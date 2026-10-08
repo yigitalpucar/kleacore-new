@@ -9,6 +9,7 @@ import { Section } from "@/components/site/section";
 import { CheckoutHeader } from "@/components/site/hosting/checkout-header";
 import { formatTRY } from "@/lib/format/price";
 import { db } from "@/lib/db";
+import { sum, toNumber } from "@/lib/money";
 
 const formatPrice = (price: number | string | { toString(): string }) =>
   formatTRY(Number(price), { keepDecimals: true });
@@ -54,7 +55,7 @@ async function getCheckoutSummary(sessionId?: string) {
   const orders = invoices
     .map((invoice) => invoice.order)
     .filter((order): order is NonNullable<typeof order> => Boolean(order));
-  const totalAmount = invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0);
+  const totalAmount = toNumber(sum(invoices.map((invoice) => invoice.totalAmount)));
 
   return {
     sessionId,

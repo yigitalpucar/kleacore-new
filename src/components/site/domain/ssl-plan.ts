@@ -1,4 +1,5 @@
 import type { ProductWithPricing } from "@/lib/products/map-product";
+import { toNumber } from "@/lib/money";
 
 /** Serializable SSL product shape for `SslPlanGrid`. */
 export interface SslPlan {
@@ -29,7 +30,7 @@ export function productToSslPlan(product: ProductWithPricing): SslPlan {
     sku: product.sku,
     name: product.name,
     description: product.shortDescription || undefined,
-    price: quoteOnly ? product.basePrice : yearlyTier?.price ?? product.basePrice,
+    price: toNumber(quoteOnly ? product.basePrice : yearlyTier?.price ?? product.basePrice),
     quoteOnly,
     featured: product.isPopular,
     validationType: resources.validationType || undefined,

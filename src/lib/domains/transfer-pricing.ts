@@ -1,13 +1,10 @@
 import { calculateTax } from "@/lib/billing/tax";
+import { toNumber, type MoneyInput } from "@/lib/money";
 
 export interface DomainTldPricingRecord {
   ext: string;
-  transferPrice: number;
-  renewPrice?: number;
-}
-
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
+  transferPrice: MoneyInput;
+  renewPrice?: MoneyInput;
 }
 
 export function matchDomainTld(domain: string, tlds: DomainTldPricingRecord[]) {
@@ -18,8 +15,8 @@ export function matchDomainTld(domain: string, tlds: DomainTldPricingRecord[]) {
   return sorted.find((tld) => normalized.endsWith(tld.ext.toLowerCase())) ?? null;
 }
 
-export function calculateDomainTransferPricing(transferPrice: number, taxRate: number) {
-  const subtotal = roundMoney(transferPrice);
+export function calculateDomainTransferPricing(transferPrice: MoneyInput, taxRate: MoneyInput) {
+  const subtotal = toNumber(transferPrice);
   const taxed = calculateTax(subtotal, taxRate);
 
   return {

@@ -8,18 +8,19 @@ import {
 } from "@/lib/reseller";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
+import { max, min, roundHalfUp, serializeMoney, toNumber } from "@/lib/money";
 
 function normalizeDiscountPercent(value: number) {
   if (!Number.isFinite(value)) {
     return 0;
   }
 
-  return Math.min(100, Math.max(0, Number(value.toFixed(2))));
+  return toNumber(min(100, max(0, roundHalfUp(value))));
 }
 
 export async function getAdminResellers() {
   await requireAdmin();
-  return listResellers();
+  return serializeMoney(await listResellers());
 }
 
 export async function enableReseller(userId: string, enabled: boolean) {
@@ -90,7 +91,7 @@ export async function enableReseller(userId: string, enabled: boolean) {
     revalidatePath("/yonetim/aktivite");
     revalidatePath("/musteri/panel/bayilik");
 
-    return { success: true, data: updated };
+    return { success: true, data: serializeMoney(updated) };
   } catch {
     return { success: false, error: "Bayi durumu güncellenirken bir hata oluştu" };
   }
@@ -134,7 +135,7 @@ export async function updateResellerDiscount(userId: string, discountPercent: nu
     revalidatePath("/yonetim/bayiler");
     revalidatePath("/musteri/panel/bayilik");
 
-    return { success: true, data: updated };
+    return { success: true, data: serializeMoney(updated) };
   } catch {
     return { success: false, error: "Bayi indirim oranı güncellenirken bir hata oluştu" };
   }

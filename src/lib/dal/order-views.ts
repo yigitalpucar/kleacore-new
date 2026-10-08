@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import * as money from "@/lib/money";
 import {
   type PaginationParams,
   paginationMeta,
@@ -153,7 +154,7 @@ export async function getSuspendedOrders(params: GetSuspendedOrdersParams) {
     serviceId: order.serviceId,
     orderNumber: order.orderNumber,
     status: order.status,
-    totalAmount: order.totalAmount,
+    totalAmount: money.toNumber(order.totalAmount),
     createdAt: order.createdAt,
     customer: order.customer,
     product: order.product,
@@ -251,7 +252,7 @@ export async function getUpgradeDowngradeOperations() {
     type: change.type === "DOWNGRADE" ? ("downgrade" as const) : ("upgrade" as const),
     fromProduct: change.fromProduct.name,
     toProduct: change.toProduct.name,
-    priceDiff: Number(change.proratedAmount),
+    priceDiff: money.toNumber(change.proratedAmount),
     status: mapPlanChangeStatus(change.status),
     date: change.requestedAt.toISOString(),
     planChangeId: change.id,
@@ -448,7 +449,7 @@ export async function getCancellationRequests() {
       resolvedAt: request.resolvedAt?.toISOString() ?? null,
       status: statusMap[request.status] ?? request.status.toLowerCase(),
       adminNotes: request.adminNotes,
-      refundAmount: request.order?.refundAmount ?? 0,
+      refundAmount: money.toNumber(request.order?.refundAmount),
     };
   });
 }

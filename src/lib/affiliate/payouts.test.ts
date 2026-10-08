@@ -52,6 +52,7 @@ import {
   rejectAffiliatePayout,
   requestAffiliatePayout,
 } from "./payouts";
+import { moneyEq } from "@/test-utils/money";
 
 const pendingPayment = {
   id: "pay-1",
@@ -199,7 +200,7 @@ describe("requestAffiliatePayout", () => {
     expect(createPayment).toHaveBeenCalledWith({
       data: {
         affiliateId: "aff-1",
-        amount: 120,
+        amount: moneyEq(120),
         status: "PENDING",
         referralIds: ["ref-1", "ref-2"],
       },

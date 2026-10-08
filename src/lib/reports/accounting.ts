@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { roundMoney } from "@/lib/payments/orchestrator";
-import type { PaymentMethod } from "@prisma/client";
+import type { PaymentMethod, Prisma } from "@prisma/client";
+import { add, money, sum, toNumber, type MoneyInput } from "@/lib/money";
 
 export { roundMoney };
 
@@ -85,34 +86,26 @@ export function emptyCollectedByMethod(): CollectedByMethod {
 
 export function calculateAccountingSummary(
   paidInvoices: Array<{
-    subtotal: number;
-    taxAmount: number;
-    totalAmount: number;
+    subtotal: MoneyInput;
+    taxAmount: MoneyInput;
+    totalAmount: MoneyInput;
   }>,
-  completedPayments: Array<{ method: PaymentMethod; amount: number }>,
-  outstandingInvoices: Array<{ status: string; totalAmount: number }>,
-  cancelledInvoices: Array<{ totalAmount: number }>
+  completedPayments: Array<{ method: PaymentMethod; amount: MoneyInput }>,
+  outstandingInvoices: Array<{ status: string; totalAmount: MoneyInput }>,
+  cancelledInvoices: Array<{ totalAmount: MoneyInput }>
 ): AccountingSummary {
-  const grossRevenue = roundMoney(
-    paidInvoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0)
-  );
-  const netRevenue = roundMoney(
-    paidInvoices.reduce((sum, invoice) => sum + Number(invoice.subtotal), 0)
-  );
-  const totalTax = roundMoney(
-    paidInvoices.reduce((sum, invoice) => sum + Number(invoice.taxAmount), 0)
-  );
+  const grossRevenue = toNumber(sum(paidInvoices.map((invoice) => invoice.totalAmount)));
+  const netRevenue = toNumber(sum(paidInvoices.map((invoice) => invoice.subtotal)));
+  const totalTax = toNumber(sum(paidInvoices.map((invoice) => invoice.taxAmount)));
 
   const collectedByMethod = emptyCollectedByMethod();
-  for (const payment of completedPayments) {
-    collectedByMethod[payment.method] = roundMoney(
-      collectedByMethod[payment.method] + Number(payment.amount)
+  for (const method of Object.keys(collectedByMethod) as PaymentMethod[]) {
+    collectedByMethod[method] = toNumber(
+      sum(completedPayments.filter((payment) => payment.method === method).map((payment) => payment.amount))
     );
   }
 
-  const outstanding = roundMoney(
-    outstandingInvoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0)
-  );
+  const outstanding = toNumber(sum(outstandingInvoices.map((invoice) => invoice.totalAmount)));
   const overdueCount = outstandingInvoices.filter(
     (invoice) => invoice.status === "OVERDUE"
   ).length;
@@ -122,9 +115,7 @@ export function calculateAccountingSummary(
 
   const refunds = {
     count: cancelledInvoices.length,
-    sum: roundMoney(
-      cancelledInvoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0)
-    ),
+    sum: toNumber(sum(cancelledInvoices.map((invoice) => invoice.totalAmount))),
   };
 
   return {
@@ -142,21 +133,24 @@ export function calculateAccountingSummary(
 export function groupMonthlyTaxBreakdown(
   invoices: Array<{
     paidAt: Date | null;
-    subtotal: number;
-    taxAmount: number;
-    totalAmount: number;
+    subtotal: MoneyInput;
+    taxAmount: MoneyInput;
+    totalAmount: MoneyInput;
   }>
 ): MonthlyTaxRow[] {
-  const byMonth = new Map<string, { subtotal: number; tax: number; total: number }>();
+  const byMonth = new Map<
+    string,
+    { subtotal: Prisma.Decimal; tax: Prisma.Decimal; total: Prisma.Decimal }
+  >();
 
   for (const invoice of invoices) {
     if (!invoice.paidAt) continue;
     const key = monthKey(new Date(invoice.paidAt));
-    const current = byMonth.get(key) ?? { subtotal: 0, tax: 0, total: 0 };
+    const current = byMonth.get(key) ?? { subtotal: money(0), tax: money(0), total: money(0) };
     byMonth.set(key, {
-      subtotal: roundMoney(current.subtotal + Number(invoice.subtotal)),
-      tax: roundMoney(current.tax + Number(invoice.taxAmount)),
-      total: roundMoney(current.total + Number(invoice.totalAmount)),
+      subtotal: add(current.subtotal, invoice.subtotal),
+      tax: add(current.tax, invoice.taxAmount),
+      total: add(current.total, invoice.totalAmount),
     });
   }
 
@@ -165,9 +159,9 @@ export function groupMonthlyTaxBreakdown(
     .map(([month, values]) => ({
       month,
       label: formatMonthLabel(month),
-      subtotal: values.subtotal,
-      tax: values.tax,
-      total: values.total,
+      subtotal: toNumber(values.subtotal),
+      tax: toNumber(values.tax),
+      total: toNumber(values.total),
     }));
 }
 
@@ -175,9 +169,9 @@ export function buildLedgerEntries(
   invoices: Array<{
     paidAt: Date | null;
     invoiceNumber: string;
-    subtotal: number;
-    taxAmount: number;
-    totalAmount: number;
+    subtotal: MoneyInput;
+    taxAmount: MoneyInput;
+    totalAmount: MoneyInput;
     customer: { name: string; surname: string; email: string };
     payments: Array<{ method: PaymentMethod; status: string }>;
   }>
@@ -196,9 +190,9 @@ export function buildLedgerEntries(
         date: new Date(invoice.paidAt!),
         invoiceNumber: invoice.invoiceNumber,
         customerName,
-        subtotal: Number(invoice.subtotal),
-        taxAmount: Number(invoice.taxAmount),
-        totalAmount: Number(invoice.totalAmount),
+        subtotal: toNumber(invoice.subtotal),
+        taxAmount: toNumber(invoice.taxAmount),
+        totalAmount: toNumber(invoice.totalAmount),
         paymentMethod: completedPayment?.method ?? null,
       };
     });

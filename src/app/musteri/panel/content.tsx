@@ -18,6 +18,7 @@ import {
 } from "@/components/app";
 import { formatTRY } from "@/lib/format/price";
 import { billingPeriodUnit, daysUntil, formatDate, formatDateTime } from "@/lib/format/date";
+import { max, sub, sum, toNumber } from "@/lib/money";
 
 interface DashboardService {
   id: string;
@@ -123,7 +124,7 @@ export function DashboardContent({ userName, stats, services, domains, invoices,
   const derived = useMemo(() => {
     const unpaid = invoices.filter((i) => i.status === "PENDING" || i.status === "OVERDUE");
     const overdue = unpaid.filter((i) => i.status === "OVERDUE");
-    const unpaidTotal = unpaid.reduce((sum, i) => sum + Math.max(i.totalAmount - i.paidAmount, 0), 0);
+    const unpaidTotal = toNumber(sum(unpaid.map((i) => max(0, sub(i.totalAmount, i.paidAmount)))));
     const activeDomains = domains.filter((d) => d.status === "ACTIVE");
     const within = (date: string | null, days: number) => {
       const d = daysUntil(date);

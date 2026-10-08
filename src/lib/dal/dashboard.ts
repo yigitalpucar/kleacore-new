@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { toNumber } from "@/lib/money";
 
 export async function getAdminDashboardStats() {
   const now = new Date();
@@ -74,12 +75,12 @@ export async function getAdminDashboardStats() {
   return {
     totalCustomers,
     totalOrders,
-    totalRevenue: totalRevenue._sum.paidAmount ?? 0,
+    totalRevenue: toNumber(totalRevenue._sum.paidAmount),
     activeServices,
     pendingTickets,
     recentOrders,
     upcomingInvoices,
-    monthlyRevenue: monthlyRevenue._sum.paidAmount ?? 0,
+    monthlyRevenue: toNumber(monthlyRevenue._sum.paidAmount),
     newCustomersThisMonth,
   };
 }

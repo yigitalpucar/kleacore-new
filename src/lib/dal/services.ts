@@ -4,6 +4,7 @@ import {
   paginationMeta,
 } from "@/lib/utils/pagination";
 import type { ProductCategorySlug, ServiceStatus } from "@prisma/client";
+import { toNumber } from "@/lib/money";
 
 interface GetServicesParams extends PaginationParams {
   status?: ServiceStatus;
@@ -122,7 +123,7 @@ export async function getServiceStats() {
     suspended,
     cancelled,
     expired,
-    monthlyRevenue: monthlyRevenue._sum.amount ?? 0,
+    monthlyRevenue: toNumber(monthlyRevenue._sum.amount),
   };
 }
 

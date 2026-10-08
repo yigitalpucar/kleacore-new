@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { PaymentContext } from "@/lib/payments/context";
+import { max, sub } from "@/lib/money";
 import { buildGatewayNotes } from "./gateway-meta";
 import type { GatewayMeta, PaymentGatewayId } from "./types";
 
@@ -10,10 +11,6 @@ interface PersistGatewayCheckoutInput {
   customerId: string;
   context: PaymentContext;
   notesPrefix: string;
-}
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
 }
 
 /**
@@ -75,9 +72,7 @@ export async function persistGatewayCheckout(input: PersistGatewayCheckoutInput)
         create: {
           invoiceId,
           customerId: invoice.customerId,
-          amount: roundMoney(
-            Math.max(0, Number(invoice.totalAmount) - Number(invoice.paidAmount))
-          ),
+          amount: max(0, sub(invoice.totalAmount, invoice.paidAmount)),
           method: "CREDIT_CARD",
           status: "PENDING",
           transactionId: input.gatewaySessionId,

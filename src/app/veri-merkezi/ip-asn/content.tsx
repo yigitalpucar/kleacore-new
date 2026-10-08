@@ -8,6 +8,7 @@ import { CartPlanTable, type CartPlanRow } from "@/components/site/sunucu/cart-p
 import { DcLanding } from "@/components/site/sunucu/dc-landing";
 import { dcFaqs, productToDcCard } from "@/components/site/sunucu/dc-catalog";
 import { isUnverifiedClaim } from "@/components/site/sunucu/server-catalog";
+import { toNumber } from "@/lib/money";
 
 type Res = Record<string, string | undefined>;
 const res = (p: ProductWithPricing) => (p.resourceLimits as unknown as Res | null) ?? {};
@@ -26,7 +27,7 @@ function toIpRow(p: ProductWithPricing): CartPlanRow {
       ips: res(p).ips ?? "",
       extras: extras.length ? extras.join(", ") : "—",
     },
-    monthlyPrice: monthly?.discountedPrice ?? monthly?.price ?? p.basePrice,
+    monthlyPrice: toNumber(monthly?.discountedPrice ?? monthly?.price ?? p.basePrice),
     yearlyMonthlyPrice: null,
   };
 }

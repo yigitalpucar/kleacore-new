@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getInvoicesByCustomer } from "@/lib/dal/invoices";
+import { max, sub, sum, toNumber } from "@/lib/money";
 import { FaturalarContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -40,19 +41,19 @@ export default async function FaturalarPage() {
       : null,
   }));
 
-  const outstandingAmount = (inv: (typeof serializedInvoices)[number]) =>
-    Math.max(0, inv.totalAmount - inv.paidAmount);
+  const outstandingTotal = (statuses: string[]) =>
+    toNumber(
+      sum(
+        invoices
+          .filter((inv) => statuses.includes(inv.status))
+          .map((inv) => max(0, sub(inv.totalAmount, inv.paidAmount)))
+      )
+    );
 
   const stats = {
-    outstanding: serializedInvoices
-      .filter((i) => i.status === "PENDING" || i.status === "OVERDUE")
-      .reduce((sum, inv) => sum + outstandingAmount(inv), 0),
-    pending: serializedInvoices
-      .filter((i) => i.status === "PENDING")
-      .reduce((sum, inv) => sum + outstandingAmount(inv), 0),
-    overdue: serializedInvoices
-      .filter((i) => i.status === "OVERDUE")
-      .reduce((sum, inv) => sum + outstandingAmount(inv), 0),
+    outstanding: outstandingTotal(["PENDING", "OVERDUE"]),
+    pending: outstandingTotal(["PENDING"]),
+    overdue: outstandingTotal(["OVERDUE"]),
   };
 
   return <FaturalarContent invoices={serializedInvoices} stats={stats} />;

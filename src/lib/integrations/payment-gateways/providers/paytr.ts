@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { getAppBaseUrl } from "@/lib/stripe";
-import { roundMoney } from "@/lib/payments/orchestrator";
+import { toFixed2, toKurus, toNumber } from "@/lib/money";
 import { buildPaytrToken } from "../paytr-hash";
 import { persistGatewayCheckout } from "../persist";
 import type { PaymentGatewayConfig } from "../config";
@@ -19,7 +19,7 @@ function createMerchantOid() {
 }
 
 function buildUserBasket(description: string, amount: number) {
-  const basket = [[description.slice(0, 120), amount.toFixed(2), 1]];
+  const basket = [[description.slice(0, 120), toFixed2(amount), 1]];
   return Buffer.from(JSON.stringify(basket), "utf8").toString("base64");
 }
 
@@ -33,8 +33,8 @@ export function createPaytrPaymentGatewayProvider(
         throw new Error("INVOICE_IDS_REQUIRED");
       }
 
-      const normalizedAmount = roundMoney(input.totalAmount);
-      const paymentAmount = Math.round(normalizedAmount * 100);
+      const normalizedAmount = toNumber(input.totalAmount);
+      const paymentAmount = toKurus(normalizedAmount);
       const merchantOid = createMerchantOid();
       const userIp = input.customer.ip?.trim() || "127.0.0.1";
       const userBasket = buildUserBasket(input.description, normalizedAmount);

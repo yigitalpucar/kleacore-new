@@ -35,6 +35,7 @@ import { billingPeriodLabel, formatDate, formatDateTime } from "@/lib/format/dat
 import { formatTRY } from "@/lib/format/price";
 import { useCustomerActions } from "../use-customer-actions";
 import { EditCustomerDialog } from "./edit-customer-dialog";
+import { sum, toNumber } from "@/lib/money";
 
 type ServiceRow = {
   id: string;
@@ -370,7 +371,7 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
         <StatCard
           label="Ödenmemiş fatura"
           value={unpaid.length.toLocaleString("tr-TR")}
-          hint={unpaid.length ? money(unpaid.reduce((s, i) => s + i.totalAmount, 0)) : "Son 10 faturada ödenmemiş yok"}
+          hint={unpaid.length ? money(toNumber(sum(unpaid.map((i) => i.totalAmount)))) : "Son 10 faturada ödenmemiş yok"}
           tone={unpaid.some((i) => i.status === "OVERDUE") ? "danger" : unpaid.length ? "warning" : undefined}
         />
         <StatCard

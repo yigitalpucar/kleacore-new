@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getPromotions } from "@/lib/dal/promotions";
 import { PromotionsContent } from "./content";
+import { toNumber, toNumberOrNull } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export default async function PromotionsPage() {
     name: promo.name,
     description: promo.description,
     discountType: promo.discountType.toLowerCase() as "percentage" | "fixed",
-    discountValue: promo.discountValue,
+    discountValue: toNumber(promo.discountValue),
     applicableCategories: promo.applicableCategories as string[],
     applicableProducts: promo.applicableProducts as string[],
     applicablePeriods: promo.applicablePeriods as string[],
@@ -24,7 +25,7 @@ export default async function PromotionsPage() {
     currentUses: promo.currentUses,
     validFrom: promo.validFrom.toISOString(),
     validUntil: promo.validUntil.toISOString(),
-    minOrderAmount: promo.minOrderAmount,
+    minOrderAmount: toNumberOrNull(promo.minOrderAmount),
     isFirstOrderOnly: promo.isFirstOrderOnly,
     isNewCustomerOnly: promo.isNewCustomerOnly,
     status: promo.status.toLowerCase() as "active" | "inactive" | "expired",

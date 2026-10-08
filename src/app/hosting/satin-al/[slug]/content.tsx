@@ -22,11 +22,17 @@ import type {
   ProductConfigOptionView,
 } from "@/lib/products/configurator-types";
 import type { Product, PricingTier, ProductCategory, ProductAddon } from "@prisma/client";
+import type { Serialized } from "@/lib/money";
 
-type ProductWithPricing = Product & {
-  category: ProductCategory;
-  pricingTiers: PricingTier[];
-};
+/** Product as received from the server page: Decimal prices are numbers here. */
+type ProductWithPricing = Serialized<
+  Product & {
+    category: ProductCategory;
+    pricingTiers: PricingTier[];
+  }
+>;
+
+export type AddonView = Serialized<ProductAddon>;
 
 export interface DomainChoice {
   type: "new" | "existing" | "later";
@@ -44,7 +50,7 @@ export interface SelectedAddon {
 
 interface ContentProps {
   product: ProductWithPricing;
-  addons: ProductAddon[];
+  addons: AddonView[];
   configOptions: ProductConfigOptionView[];
 }
 

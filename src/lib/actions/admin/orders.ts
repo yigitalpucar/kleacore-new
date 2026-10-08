@@ -7,6 +7,7 @@ import { provisionCompletedOrder } from "@/lib/provisioning/internal";
 import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import { createLogger } from "@/lib/logger";
+import { sub } from "@/lib/money";
 
 const log = createLogger("admin.orders");
 
@@ -31,7 +32,7 @@ export async function approveOrder(id: string) {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 7);
 
-    const subtotal = order.totalAmount - order.taxAmount;
+    const subtotal = sub(order.totalAmount, order.taxAmount);
 
     const [updatedOrder, invoice] = await db.$transaction([
       db.order.update({

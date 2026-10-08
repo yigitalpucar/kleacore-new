@@ -12,11 +12,10 @@ import { formatTRY } from "@/lib/format/price";
 import { cn } from "@/lib/utils";
 import { getIcon } from "@/lib/utils/icon-map";
 import { ChoiceTile, StepHeading, StepNav } from "./step-shell";
-import type { ProductAddon } from "@prisma/client";
-import type { SelectedAddon } from "@/app/hosting/satin-al/[slug]/content";
+import type { AddonView, SelectedAddon } from "@/app/hosting/satin-al/[slug]/content";
 
 interface StepAddonsProps {
-  addons: ProductAddon[];
+  addons: AddonView[];
   selectedAddons: SelectedAddon[];
   onSelectedAddons: (addons: SelectedAddon[]) => void;
   onNext: () => void;
@@ -32,7 +31,7 @@ export const StepAddons = ({
 }: StepAddonsProps) => {
   const isSelected = (sku: string) => selectedAddons.some((a) => a.sku === sku);
 
-  const toggleAddon = (addon: ProductAddon) => {
+  const toggleAddon = (addon: AddonView) => {
     if (addon.isRequired) return;
 
     if (isSelected(addon.sku)) {

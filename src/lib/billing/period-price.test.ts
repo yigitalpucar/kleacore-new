@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
   addonPeriodTotal,
@@ -129,5 +130,29 @@ describe("productPeriodPricing", () => {
 
   it("falls back to basePrice when a product has no tiers", () => {
     expect(tierPriceForPeriod({ basePrice: 75, categorySlug: "vps", pricingTiers: [] }, "yearly")).toBe(75);
+  });
+});
+
+describe("Decimal tier prices", () => {
+  const d = (value: string) => new Prisma.Decimal(value);
+
+  it("multiplies Decimal monthly equivalents exactly", () => {
+    // 83.99 × 12 = 1007.88 (float: 1007.8799999999999)
+    expect(periodTotal(d("83.99"), "yearly", "monthly-equivalent")).toBe(1007.88);
+    expect(monthlyEquivalent(d("100"), "quarterly")).toBe(33.33);
+    expect(addonPeriodTotal({ monthlyPrice: d("29"), yearlyPrice: d("24.10") }, "yearly")).toBe(289.2);
+  });
+
+  it("accepts Prisma product rows with Decimal prices", () => {
+    const product = {
+      basePrice: d("49"),
+      categorySlug: "hosting",
+      pricingTiers: [
+        { period: "monthly", price: d("49"), isDefault: true },
+        { period: "yearly", price: d("39"), isDefault: false },
+      ],
+    };
+    expect(tierPriceForPeriod(product, "yearly")).toBe(39);
+    expect(productPeriodPricing(product, "yearly")).toEqual({ base: 588, discount: 120, total: 468 });
   });
 });

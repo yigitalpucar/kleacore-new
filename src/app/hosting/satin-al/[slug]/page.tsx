@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getProductBySlug, getAddonsByCategory } from "@/lib/dal/products";
 import { getProductConfigOptions } from "@/lib/products/configurator";
+import { serializeMoney } from "@/lib/money";
 import { Content } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +40,13 @@ const Page = async ({ params }: PageProps) => {
     getProductConfigOptions(product.id),
   ]);
 
-  return <Content product={product} addons={addons} configOptions={configOptions} />;
+  return (
+    <Content
+      product={serializeMoney(product)}
+      addons={serializeMoney(addons)}
+      configOptions={configOptions}
+    />
+  );
 };
 
 export default Page;

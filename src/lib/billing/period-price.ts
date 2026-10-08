@@ -18,7 +18,12 @@
  *   are used as-is.
  *
  * All amounts are VAT-exclusive; KDV is added by `calculateTax`.
+ *
+ * Inputs may be Prisma Decimals or numbers; the maths runs in Decimal
+ * (src/lib/money.ts) and results are returned as kuruş-exact numbers because
+ * these helpers also run in client components (cart, onboarding summary).
  */
+import { div, max, money, mul, sub, toNumber, type MoneyInput } from "@/lib/money";
 
 export type PeriodKey =
   | "monthly"
@@ -57,10 +62,6 @@ const MONTHLY_EQUIVALENT_CATEGORIES = new Set([
 /** Cart item types (src/store/cart-store.ts) priced per month. */
 const MONTHLY_EQUIVALENT_ITEM_TYPES = new Set(["hosting", "server", "datacenter"]);
 
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
 /**
  * Pricing basis of a product category slug. Unknown categories default to
  * `period-total` so a new category can never be silently charged 12×.
@@ -87,16 +88,15 @@ export function periodMonths(period: string | null | undefined): number {
  *   periodTotal(49, "monthly", "monthly-equivalent") -> 49
  *   periodTotal(99, "yearly", "period-total")       -> 99   (SSL / domain)
  */
-export function periodTotal(tierPrice: number, period: string | null | undefined, basis: PriceBasis): number {
-  const price = Number(tierPrice);
-  if (!Number.isFinite(price)) return 0;
-  if (basis === "period-total") return roundMoney(price);
-  return roundMoney(price * periodMonths(period));
+export function periodTotal(tierPrice: MoneyInput, period: string | null | undefined, basis: PriceBasis): number {
+  const price = money(tierPrice);
+  if (basis === "period-total") return toNumber(price);
+  return toNumber(mul(price, periodMonths(period)));
 }
 
 /** Per-month equivalent of a period total (for "aylık X ₺ karşılığı" copy). */
-export function monthlyEquivalent(total: number, period: string | null | undefined): number {
-  return roundMoney(Number(total) / periodMonths(period));
+export function monthlyEquivalent(total: MoneyInput, period: string | null | undefined): number {
+  return toNumber(div(total, periodMonths(period)));
 }
 
 /**
@@ -104,29 +104,29 @@ export function monthlyEquivalent(total: number, period: string | null | undefin
  * monthly equivalent, so a yearly addon is 12 × yearlyPrice.
  */
 export function addonPeriodTotal(
-  addon: { monthlyPrice: number | string | { toString(): string }; yearlyPrice: number | string | { toString(): string } },
+  addon: { monthlyPrice: MoneyInput; yearlyPrice: MoneyInput },
   period: string | null | undefined
 ): number {
   const isYearly = period === "yearly";
-  const perMonth = Number(isYearly ? addon.yearlyPrice : addon.monthlyPrice);
+  const perMonth = isYearly ? addon.yearlyPrice : addon.monthlyPrice;
   return periodTotal(perMonth, isYearly ? "yearly" : "monthly", "monthly-equivalent");
 }
 
 export interface TieredProduct {
-  basePrice: number;
+  basePrice: MoneyInput;
   categorySlug: string | null | undefined;
-  pricingTiers: Array<{ period: string; price: number; isDefault: boolean }>;
+  pricingTiers: Array<{ period: string; price: MoneyInput; isDefault: boolean }>;
 }
 
 /** Stored tier price for a period: exact tier, else the default tier, else basePrice. */
 export function tierPriceForPeriod(product: TieredProduct, period: string): number {
   const exact = product.pricingTiers.find((tier) => tier.period === period);
-  if (exact) return Number(exact.price);
+  if (exact) return toNumber(exact.price);
 
   const defaultTier = product.pricingTiers.find((tier) => tier.isDefault);
-  if (defaultTier) return Number(defaultTier.price);
+  if (defaultTier) return toNumber(defaultTier.price);
 
-  return Number(product.basePrice);
+  return toNumber(product.basePrice);
 }
 
 /**
@@ -148,5 +148,5 @@ export function productPeriodPricing(
   }
 
   const base = periodTotal(tierPriceForPeriod(product, "monthly"), period, basis);
-  return { base, discount: roundMoney(Math.max(0, base - total)), total };
+  return { base, discount: toNumber(max(0, sub(base, total))), total };
 }

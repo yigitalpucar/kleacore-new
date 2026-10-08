@@ -1,14 +1,11 @@
 import type { Prisma } from "@prisma/client";
-
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
-}
+import { add, roundHalfUp, toFixed2, toNumber, type MoneyInput } from "@/lib/money";
 
 export async function fulfillBalanceTopUp(
   tx: Prisma.TransactionClient,
   input: {
     customerId: string;
-    amount: number;
+    amount: MoneyInput;
     paymentReference: string;
   }
 ) {
@@ -34,9 +31,9 @@ export async function fulfillBalanceTopUp(
     throw new Error("CUSTOMER_NOT_FOUND");
   }
 
-  const amount = roundMoney(input.amount);
-  const balanceBefore = Number(customer.balance);
-  const balanceAfter = roundMoney(balanceBefore + amount);
+  const amount = roundHalfUp(input.amount);
+  const balanceBefore = customer.balance;
+  const balanceAfter = add(balanceBefore, amount);
 
   await tx.user.update({
     where: { id: input.customerId },
@@ -50,7 +47,7 @@ export async function fulfillBalanceTopUp(
       amount,
       balanceBefore,
       balanceAfter,
-      description: `Stripe bakiye yükleme: ${amount.toFixed(2)} TL`,
+      description: `Stripe bakiye yükleme: ${toFixed2(amount)} TL`,
       referenceId: input.paymentReference,
     },
   });
@@ -58,7 +55,7 @@ export async function fulfillBalanceTopUp(
   return {
     credited: true,
     skipped: false as const,
-    balanceAfter,
-    amount,
+    balanceAfter: toNumber(balanceAfter),
+    amount: toNumber(amount),
   };
 }

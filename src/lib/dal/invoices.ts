@@ -4,6 +4,7 @@ import {
   paginationMeta,
 } from "@/lib/utils/pagination";
 import type { InvoiceStatus } from "@prisma/client";
+import { sub, toNumber } from "@/lib/money";
 
 interface GetInvoicesParams extends PaginationParams {
   status?: InvoiceStatus;
@@ -120,10 +121,9 @@ export async function getInvoiceStats() {
     pending,
     paid,
     overdue,
-    totalAmount: totalAmount._sum.totalAmount ?? 0,
-    paidAmount: paidAmount._sum.paidAmount ?? 0,
-    unpaidAmount:
-      (totalAmount._sum.totalAmount ?? 0) - (paidAmount._sum.paidAmount ?? 0),
+    totalAmount: toNumber(totalAmount._sum.totalAmount),
+    paidAmount: toNumber(paidAmount._sum.paidAmount),
+    unpaidAmount: toNumber(sub(totalAmount._sum.totalAmount, paidAmount._sum.paidAmount)),
   };
 }
 

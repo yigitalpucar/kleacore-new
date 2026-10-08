@@ -7,6 +7,7 @@ import type {
   ConfigurationSelections,
   ProductConfigOptionView,
 } from "./configurator-types";
+import { mul, sum, toNumber, type MoneyInput } from "@/lib/money";
 
 export type {
   ConfigOptionChoice,
@@ -16,10 +17,6 @@ export type {
   ConfigurationSelections,
   ProductConfigOptionView,
 };
-
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
-}
 
 export function parseChoices(value: unknown): ConfigOptionChoice[] {
   if (!Array.isArray(value)) {
@@ -43,8 +40,8 @@ export function parseChoices(value: unknown): ConfigOptionChoice[] {
       return {
         value: choiceValue,
         label: choiceLabel,
-        priceMonthly: Number(record.priceMonthly ?? 0),
-        priceYearly: Number(record.priceYearly ?? 0),
+        priceMonthly: toNumber(record.priceMonthly as MoneyInput),
+        priceYearly: toNumber(record.priceYearly as MoneyInput),
       };
     })
     .filter((choice): choice is ConfigOptionChoice => choice !== null);
@@ -63,8 +60,8 @@ export function mapConfigOption(option: {
   choices: unknown;
   minValue: number | null;
   maxValue: number | null;
-  unitPrice: number;
-  unitPriceYearly: number;
+  unitPrice: MoneyInput;
+  unitPriceYearly: MoneyInput;
   isRequired: boolean;
   displayOrder: number;
   isActive: boolean;
@@ -78,8 +75,8 @@ export function mapConfigOption(option: {
     choices: parseChoices(option.choices),
     minValue: option.minValue,
     maxValue: option.maxValue,
-    unitPrice: Number(option.unitPrice),
-    unitPriceYearly: Number(option.unitPriceYearly),
+    unitPrice: toNumber(option.unitPrice),
+    unitPriceYearly: toNumber(option.unitPriceYearly),
     isRequired: option.isRequired,
     displayOrder: option.displayOrder,
     isActive: option.isActive,
@@ -113,7 +110,7 @@ export function calculateConfigurationPrice(
         optionType: option.optionType,
         value,
         label: choice.label,
-        price: roundMoney(price),
+        price: toNumber(price),
       });
       continue;
     }
@@ -130,11 +127,11 @@ export function calculateConfigurationPrice(
       optionType: option.optionType,
       value: quantity,
       label: `${quantity} adet`,
-      price: roundMoney(unitPrice * quantity),
+      price: toNumber(mul(unitPrice, quantity)),
     });
   }
 
-  const total = roundMoney(lines.reduce((sum, line) => sum + line.price, 0));
+  const total = toNumber(sum(lines.map((line) => line.price)));
 
   return { total, lines };
 }

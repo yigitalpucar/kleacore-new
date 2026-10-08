@@ -1,6 +1,7 @@
 import { getProductsBySubType } from "@/lib/dal/products";
 import type { ProductWithPricing } from "@/lib/products/map-product";
 import type { CartPlanRow } from "./cart-plan-table";
+import { toNumber } from "@/lib/money";
 
 export type ServerFamilyKey = "vps" | "vds" | "bulut" | "fiziksel";
 
@@ -43,11 +44,11 @@ const included = (p: ProductWithPricing) => (p.includedFeatures as unknown as st
 
 function monthlyOf(p: ProductWithPricing) {
   const m = p.pricingTiers.find((t) => t.period === "monthly");
-  return m?.discountedPrice ?? m?.price ?? p.basePrice;
+  return toNumber(m?.discountedPrice ?? m?.price ?? p.basePrice);
 }
 function yearlyMonthlyOf(p: ProductWithPricing) {
   const y = p.pricingTiers.find((t) => t.period === "yearly");
-  return y ? (y.discountedPrice ?? y.price) : null;
+  return y ? toNumber(y.discountedPrice ?? y.price) : null;
 }
 
 /** Uptime / SLA percentages are not shown on the site (no verifiable SLA). */

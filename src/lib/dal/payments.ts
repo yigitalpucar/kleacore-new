@@ -4,6 +4,7 @@ import {
   paginationMeta,
 } from "@/lib/utils/pagination";
 import type { PaymentMethod, PaymentStatus } from "@prisma/client";
+import { toNumber } from "@/lib/money";
 
 interface GetPaymentsParams extends PaginationParams {
   status?: PaymentStatus;
@@ -117,8 +118,8 @@ export async function getPaymentStats(customerId?: string) {
     pending,
     failed,
     refunded,
-    totalAmount: totalAmount._sum.amount ?? 0,
-    completedAmount: completedAmount._sum.amount ?? 0,
+    totalAmount: toNumber(totalAmount._sum.amount),
+    completedAmount: toNumber(completedAmount._sum.amount),
   };
 }
 

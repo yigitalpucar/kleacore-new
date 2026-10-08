@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getAdminResellers } from "@/lib/actions/admin/resellers";
 import { db } from "@/lib/db";
 import { BayilerContent } from "./content";
+import { toNumber } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export default async function BayilerPage() {
     name: `${reseller.name} ${reseller.surname}`.trim(),
     email: reseller.email,
     status: reseller.status,
-    discountPercent: reseller.resellerDiscountPercent,
+    discountPercent: toNumber(reseller.resellerDiscountPercent),
     customerCount: reseller._count.resellerCustomers,
     createdAt: reseller.createdAt.toISOString(),
   }));

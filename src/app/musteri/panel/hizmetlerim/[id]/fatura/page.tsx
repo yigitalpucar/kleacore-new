@@ -17,6 +17,7 @@ import {
 } from "@/components/app";
 import { formatTRY } from "@/lib/format/price";
 import { formatDate } from "@/lib/format/date";
+import { sub, sum, toNumber } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -43,13 +44,17 @@ export default async function ServiceInvoicesPage(props: Props) {
   // so we fetch all and show them in context of this service
   const invoices = await getInvoicesByCustomer(userId);
 
-  const totalPaid = invoices
-    .filter((inv) => inv.status === "PAID")
-    .reduce((sum, inv) => sum + Number(inv.paidAmount), 0);
+  const totalPaid = toNumber(
+    sum(invoices.filter((inv) => inv.status === "PAID").map((inv) => inv.paidAmount))
+  );
 
-  const pendingAmount = invoices
-    .filter((inv) => inv.status === "PENDING" || inv.status === "OVERDUE")
-    .reduce((sum, inv) => sum + Number(inv.totalAmount) - Number(inv.paidAmount), 0);
+  const pendingAmount = toNumber(
+    sum(
+      invoices
+        .filter((inv) => inv.status === "PENDING" || inv.status === "OVERDUE")
+        .map((inv) => sub(inv.totalAmount, inv.paidAmount))
+    )
+  );
 
   return (
     <>

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { toNumber } from "@/lib/money";
 
 export async function getReferrals(userId: string) {
   return db.affiliateReferral.findMany({
@@ -47,8 +48,8 @@ export async function getAffiliateStats(userId: string) {
 
   return {
     totalReferrals,
-    totalEarnings: totalEarnings._sum.commission ?? 0,
-    pendingPayments: pendingPayments._sum.amount ?? 0,
-    paidPayments: paidPayments._sum.amount ?? 0,
+    totalEarnings: toNumber(totalEarnings._sum.commission),
+    pendingPayments: toNumber(pendingPayments._sum.amount),
+    paidPayments: toNumber(paidPayments._sum.amount),
   };
 }

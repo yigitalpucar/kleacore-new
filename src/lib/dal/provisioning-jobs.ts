@@ -1,10 +1,12 @@
 import { db } from "@/lib/db";
 import type { ProvisioningJobStatus } from "@prisma/client";
+import { serializeMoney } from "@/lib/money";
 
 const defaultStatuses: ProvisioningJobStatus[] = ["FAILED", "PENDING", "PROCESSING"];
 
+/** Admin list rows; order/product amounts are plain numbers (passed to a client component). */
 export async function getProvisioningJobsForAdmin(statuses = defaultStatuses) {
-  return db.provisioningJob.findMany({
+  const jobs = await db.provisioningJob.findMany({
     where: {
       status: { in: statuses },
     },
@@ -39,6 +41,7 @@ export async function getProvisioningJobsForAdmin(statuses = defaultStatuses) {
     orderBy: [{ updatedAt: "desc" }],
     take: 100,
   });
+  return serializeMoney(jobs);
 }
 
 export async function getProvisioningJobStats() {

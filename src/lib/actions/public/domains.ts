@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { toNumber } from "@/lib/money";
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
@@ -300,9 +301,9 @@ export async function searchDomainAvailability(
     return {
       domain,
       available: !externallyRegisteredDomains.has(domain),
-      price: tld?.registerPrice ?? 0,
-      renewPrice: tld?.renewPrice ?? 0,
-      transfer: tld?.transferPrice ?? 0,
+      price: toNumber(tld?.registerPrice),
+      renewPrice: toNumber(tld?.renewPrice),
+      transfer: toNumber(tld?.transferPrice),
     };
   });
 

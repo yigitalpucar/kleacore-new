@@ -16,10 +16,6 @@ const billingPeriodLabels: Record<BillingPeriod, string> = {
   triennial: "36 ay",
 };
 
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
-}
-
 export async function generateRenewalInvoices(): Promise<CronJobResult> {
   const now = new Date();
   const windowEnd = new Date(now);
@@ -64,8 +60,9 @@ export async function generateRenewalInvoices(): Promise<CronJobResult> {
     }
 
     const expiryDate = service.nextDueDate ?? service.expiresAt ?? windowEnd;
-    const subtotal = roundMoney(Number(service.amount));
-    const taxed = calculateTax(subtotal, taxRate);
+    // Decimal maths inside calculateTax (src/lib/money.ts); kuruş-exact numbers out.
+    const taxed = calculateTax(service.amount, taxRate);
+    const subtotal = taxed.subtotal;
     const periodLabel = billingPeriodLabels[service.billingPeriod] ?? service.billingPeriod;
 
     const invoice = await db.$transaction(async (tx) => {

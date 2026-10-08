@@ -29,14 +29,12 @@ import { redirectToCheckoutUrl } from "@/lib/utils/safe-redirect";
 import { addonPeriodTotal, priceBasisForItemType } from "@/lib/billing/period-price";
 import { PeriodBadge, PeriodNote } from "@/components/checkout/period-note";
 import type { CartItem } from "@/store/cart-store";
+import { cartTotals } from "@/lib/billing/cart-totals";
 
 function formatPrice(value: number) {
   return formatTRY(value, { keepDecimals: true });
 }
 
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
 
 const typeLabels: Record<CartItem["type"], string> = {
   domain: "Alan adı",
@@ -60,8 +58,8 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
   const clearCart = useCartStore((state) => state.clearCart);
   const subtotal = useCartStore((state) => state.getSubtotal());
   const totalItems = useCartStore((state) => state.getTotalItems());
-  const taxAmount = roundMoney(roundMoney(subtotal) * (taxRate / 100));
-  const grandTotal = roundMoney(roundMoney(subtotal) + taxAmount);
+  // KDV per line, as checkout charges it (one invoice per cart line).
+  const { taxAmount, total: grandTotal } = cartTotals(items, taxRate);
   const hasYearly = items.some(
     (item) => itemPeriod(item) === "yearly" && priceBasisForItemType(item.type) === "monthly-equivalent"
   );

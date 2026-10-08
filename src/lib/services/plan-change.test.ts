@@ -4,7 +4,7 @@ import {
   determinePlanChangeType,
   isPlanChangeOrder,
 } from "./plan-change";
-import type { BillingPeriod } from "@prisma/client";
+import { Prisma, type BillingPeriod } from "@prisma/client";
 
 function buildService(overrides: {
   amount?: number;
@@ -204,6 +204,17 @@ describe("determinePlanChangeType", () => {
         { displayOrder: 2, basePrice: 100 }
       )
     ).toBe("DOWNGRADE");
+  });
+
+  it("compares Decimal prices numerically, not as strings", () => {
+    // "99" > "100" as strings; Decimal valueOf() is a string, so a bare `>`
+    // on two Decimals would call this a downgrade.
+    expect(
+      determinePlanChangeType(
+        { displayOrder: 2, basePrice: new Prisma.Decimal("99") },
+        { displayOrder: 2, basePrice: new Prisma.Decimal("100") }
+      )
+    ).toBe("UPGRADE");
   });
 });
 

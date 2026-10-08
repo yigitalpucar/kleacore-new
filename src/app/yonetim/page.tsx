@@ -23,6 +23,7 @@ import { getServiceStats } from "@/lib/dal/services";
 import { formatTRY } from "@/lib/format/price";
 import { daysUntil, formatDate, formatDateLong, formatDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
+import { add, money as toMoney, sum, toNumber } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -64,14 +65,14 @@ export default async function AdminDashboard() {
   ]);
 
   // Monthly collections from paid invoices (paidAmount by paidAt month).
-  const byMonth = new Map(months.map((m) => [m.key, 0]));
+  const byMonth = new Map(months.map((m) => [m.key, toMoney(0)]));
   for (const inv of revenue.paidInvoices) {
     if (!inv.paidAt) continue;
     const key = monthKeyFmt.format(inv.paidAt).slice(0, 7);
-    if (byMonth.has(key)) byMonth.set(key, (byMonth.get(key) ?? 0) + Number(inv.paidAmount));
+    if (byMonth.has(key)) byMonth.set(key, add(byMonth.get(key), inv.paidAmount));
   }
-  const chartData = months.map((m) => ({ label: m.label, value: Math.round((byMonth.get(m.key) ?? 0) * 100) / 100 }));
-  const sixMonthTotal = chartData.reduce((s, d) => s + d.value, 0);
+  const chartData = months.map((m) => ({ label: m.label, value: toNumber(byMonth.get(m.key)) }));
+  const sixMonthTotal = toNumber(sum(chartData.map((d) => d.value)));
 
   const recentOrders = data.recentOrders.map((o) => ({
     id: o.id,

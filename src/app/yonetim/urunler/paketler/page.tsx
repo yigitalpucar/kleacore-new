@@ -3,6 +3,7 @@ import { getProducts } from "@/lib/dal/products";
 import { parsePagination } from "@/lib/utils/pagination";
 import { PackagesContent } from "./content";
 import type { ProductCategorySlug, ProductStatus } from "@prisma/client";
+import { serializeMoney } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export default async function PackagesPage({
 
   return (
     <PackagesContent
-      data={result.data}
+      data={serializeMoney(result.data)}
       total={result.total}
       initialCategory={categorySlug || "all"}
     />

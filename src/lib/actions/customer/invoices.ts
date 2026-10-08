@@ -13,6 +13,7 @@ import {
   roundMoney,
 } from "@/lib/payments/orchestrator";
 import { createLogger } from "@/lib/logger";
+import { eq, max, sub } from "@/lib/money";
 
 const log = createLogger("customer.invoices");
 
@@ -70,9 +71,7 @@ export async function payInvoice(input: PayInvoiceInput) {
       return { success: false, error: "İptal edilmiş fatura ödenemez" };
     }
 
-    const remainingAmount = roundMoney(
-      Math.max(0, Number(invoice.totalAmount) - Number(invoice.paidAmount))
-    );
+    const remainingAmount = roundMoney(max(0, sub(invoice.totalAmount, invoice.paidAmount)));
 
     if (remainingAmount <= 0) {
       return { success: false, error: "Ödenecek tutar bulunamadı" };
@@ -106,7 +105,7 @@ export async function payInvoice(input: PayInvoiceInput) {
             notes: `Müşteri paneli kredi kartı ödemesi (${invoice.invoiceNumber})`,
           },
         });
-      } else if (Number(existingPendingPayment.amount) !== remainingAmount) {
+      } else if (!eq(existingPendingPayment.amount, remainingAmount)) {
         await db.payment.update({
           where: { id: existingPendingPayment.id },
           data: {

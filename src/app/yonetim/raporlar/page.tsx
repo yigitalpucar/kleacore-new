@@ -32,7 +32,8 @@ import {
   getServiceReport,
   getAccountingReport,
 } from "@/lib/dal/reports";
-import type { PaymentMethod } from "@prisma/client";
+import type { PaymentMethod, Prisma } from "@prisma/client";
+import { add, sum, toNumber, type MoneyInput } from "@/lib/money";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { PeriodFilter } from "./period-filter";
 import { ReportExportButton } from "./report-export-button";
@@ -98,18 +99,18 @@ function monthKey(date: Date) {
 }
 
 function buildRevenueChartData(
-  paidInvoices: Array<{ paidAt: Date | null; paidAmount: number }>,
+  paidInvoices: Array<{ paidAt: Date | null; paidAmount: MoneyInput }>,
   period: ReportPeriod,
   now: Date
 ) {
   if (period === "7days" || period === "30days") {
     const dayCount = period === "7days" ? 7 : 30;
-    const revenueByDay = new Map<string, number>();
+    const revenueByDay = new Map<string, Prisma.Decimal>();
 
     for (const invoice of paidInvoices) {
       if (!invoice.paidAt) continue;
       const key = dayKey(new Date(invoice.paidAt));
-      revenueByDay.set(key, (revenueByDay.get(key) ?? 0) + Number(invoice.paidAmount));
+      revenueByDay.set(key, add(revenueByDay.get(key), invoice.paidAmount));
     }
 
     const points = [];
@@ -125,7 +126,7 @@ function buildRevenueChartData(
       points.push({
         key,
         month: label,
-        revenue: revenueByDay.get(key) ?? 0,
+        revenue: toNumber(revenueByDay.get(key)),
       });
     }
 
@@ -136,12 +137,12 @@ function buildRevenueChartData(
   }
 
   const monthCount = period === "3months" ? 3 : period === "1year" ? 12 : 6;
-  const revenueByMonth = new Map<string, number>();
+  const revenueByMonth = new Map<string, Prisma.Decimal>();
 
   for (const invoice of paidInvoices) {
     if (!invoice.paidAt) continue;
     const key = monthKey(new Date(invoice.paidAt));
-    revenueByMonth.set(key, (revenueByMonth.get(key) ?? 0) + Number(invoice.paidAmount));
+    revenueByMonth.set(key, add(revenueByMonth.get(key), invoice.paidAmount));
   }
 
   const points = [];
@@ -156,7 +157,7 @@ function buildRevenueChartData(
     points.push({
       key,
       month: label,
-      revenue: revenueByMonth.get(key) ?? 0,
+      revenue: toNumber(revenueByMonth.get(key)),
     });
   }
 
@@ -200,7 +201,7 @@ export default async function ReportsPage({
 
   const chart = buildRevenueChartData(revenueData.paidInvoices, period, now);
   const chartData = chart.points.map((p) => ({ label: p.month, value: p.revenue }));
-  const chartTotal = chart.points.reduce((sum, p) => sum + p.revenue, 0);
+  const chartTotal = toNumber(sum(chart.points.map((p) => p.revenue)));
 
   const totalActiveServices = serviceData.servicesByStatus.find((s) => s.status === "ACTIVE")?._count.id ?? 0;
 

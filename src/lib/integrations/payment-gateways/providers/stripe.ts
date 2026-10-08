@@ -1,5 +1,5 @@
 import { getStripe } from "@/lib/stripe";
-import { roundMoney } from "@/lib/payments/orchestrator";
+import { toKurus, toNumber } from "@/lib/money";
 import { persistGatewayCheckout } from "../persist";
 import type { CheckoutSessionInput, CheckoutSessionResult, PaymentGatewayProvider } from "../types";
 
@@ -16,7 +16,7 @@ export function createStripePaymentGatewayProvider(): PaymentGatewayProvider {
       }
 
       const stripe = getStripe();
-      const normalizedAmount = roundMoney(input.totalAmount);
+      const normalizedAmount = toNumber(input.totalAmount);
 
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
@@ -32,7 +32,7 @@ export function createStripePaymentGatewayProvider(): PaymentGatewayProvider {
             quantity: 1,
             price_data: {
               currency: "try",
-              unit_amount: Math.round(normalizedAmount * 100),
+              unit_amount: toKurus(normalizedAmount),
               product_data: {
                 name: "KLEACORE Ödeme",
                 description: input.description,

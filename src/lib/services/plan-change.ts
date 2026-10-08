@@ -1,16 +1,10 @@
-import type {
-  BillingPeriod,
-  PlanChangeType,
-  Prisma,
-  Product,
-  PricingTier,
-  Service,
-} from "@prisma/client";
+import type { BillingPeriod, PlanChangeType, Prisma, Service } from "@prisma/client";
 import { db } from "@/lib/db";
 import { changeRemoteServicePlan } from "@/lib/integrations/provisioning-provider";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
 import { periodTotal, priceBasisForCategory } from "@/lib/billing/period-price";
 import { billingMonths } from "@/lib/payments/renewal-fulfillment";
+import { compare, div, max, money, mul, roundHalfUp, sub, toNumber, type MoneyInput } from "@/lib/money";
 import {
   generateInvoiceNumber,
   generateOrderNumber,
@@ -18,16 +12,19 @@ import {
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
-type ProductWithPricing = Pick<Product, "basePrice"> & {
-  pricingTiers: Array<
-    Pick<PricingTier, "period" | "price" | "discountedPrice" | "isActive">
-  >;
+type ProductWithPricing = {
+  basePrice: MoneyInput;
+  pricingTiers: Array<{
+    period: BillingPeriod;
+    price: MoneyInput;
+    discountedPrice: MoneyInput;
+    isActive: boolean;
+  }>;
 };
 
-type ServiceForProration = Pick<
-  Service,
-  "amount" | "billingPeriod" | "nextDueDate" | "expiresAt"
->;
+type ServiceForProration = Pick<Service, "billingPeriod" | "nextDueDate" | "expiresAt"> & {
+  amount: MoneyInput;
+};
 
 export interface ProratedPlanChangeResult {
   proratedAmount: number;
@@ -39,11 +36,7 @@ export interface ProratedPlanChangeResult {
 }
 
 function resolveProductPrice(
-  product: Pick<Product, "basePrice"> & {
-    pricingTiers: Array<
-      Pick<PricingTier, "period" | "price" | "discountedPrice" | "isActive">
-    >;
-  },
+  product: ProductWithPricing,
   billingPeriod: BillingPeriod,
   categorySlug?: string | null
 ): number {
@@ -53,7 +46,7 @@ function resolveProductPrice(
   // Service amounts are the pre-tax charge for one whole billing period, so a
   // yearly hosting/server tier (stored as a monthly equivalent) becomes 12 ×.
   return periodTotal(
-    Number(tier?.discountedPrice ?? tier?.price ?? product.basePrice),
+    tier?.discountedPrice ?? tier?.price ?? product.basePrice,
     billingPeriod,
     priceBasisForCategory(categorySlug)
   );
@@ -75,9 +68,9 @@ export function calculateProratedPlanChange(
   billingPeriod: BillingPeriod = service.billingPeriod,
   categorySlug?: string | null
 ): ProratedPlanChangeResult {
-  const currentPrice = Number(service.amount);
+  const currentPrice = toNumber(service.amount);
   const newPrice = resolveProductPrice(targetProduct, billingPeriod, categorySlug);
-  const priceDiff = Number((newPrice - currentPrice).toFixed(2));
+  const priceDiff = toNumber(sub(newPrice, currentPrice));
 
   const now = new Date();
   const periodEnd = service.nextDueDate ?? service.expiresAt ?? now;
@@ -86,7 +79,7 @@ export function calculateProratedPlanChange(
   const totalDays = billingMonths[billingPeriod] * 30;
   const proratedAmount =
     totalDays > 0
-      ? Number(((remainingDays / totalDays) * priceDiff).toFixed(2))
+      ? toNumber(roundHalfUp(div(mul(priceDiff, remainingDays), totalDays)))
       : priceDiff;
 
   return {
@@ -100,8 +93,8 @@ export function calculateProratedPlanChange(
 }
 
 export function determinePlanChangeType(
-  fromProduct: Pick<Product, "displayOrder" | "basePrice">,
-  toProduct: Pick<Product, "displayOrder" | "basePrice">
+  fromProduct: { displayOrder: number; basePrice: MoneyInput },
+  toProduct: { displayOrder: number; basePrice: MoneyInput }
 ): PlanChangeType {
   if (toProduct.displayOrder > fromProduct.displayOrder) {
     return "UPGRADE";
@@ -110,7 +103,7 @@ export function determinePlanChangeType(
     return "DOWNGRADE";
   }
 
-  return toProduct.basePrice >= fromProduct.basePrice ? "UPGRADE" : "DOWNGRADE";
+  return compare(toProduct.basePrice, fromProduct.basePrice) >= 0 ? "UPGRADE" : "DOWNGRADE";
 }
 
 function parsePlanChangeConfiguration(configuration: unknown): {
@@ -221,7 +214,7 @@ export async function requestPlanChange(input: RequestPlanChangeInput) {
     service.billingPeriod,
     service.product.category.slug
   );
-  const chargeAmount = changeType === "UPGRADE" ? Math.max(0, proration.proratedAmount) : 0;
+  const chargeAmount = changeType === "UPGRADE" ? toNumber(max(0, proration.proratedAmount)) : 0;
 
   const now = new Date();
   const dueDate = new Date(now);
@@ -444,7 +437,7 @@ export async function applyPlanChange(
     ...planChange.service,
     productId: planChange.toProductId,
     product: planChange.toProduct,
-    amount: newAmount,
+    amount: money(newAmount),
   };
 
   const remoteResult = await changeRemoteServicePlan(
@@ -470,7 +463,7 @@ export async function applyPlanChange(
           serviceId: planChange.serviceId,
           fromProduct: planChange.fromProduct.name,
           toProduct: planChange.toProduct.name,
-          priceDiff: planChange.proratedAmount,
+          priceDiff: toNumber(planChange.proratedAmount),
           remoteApplied: remoteResult.ok,
           remoteProvider: remoteResult.provider,
           remoteError: remoteResult.ok ? undefined : remoteResult.error,
@@ -587,7 +580,7 @@ export async function getPlanChangeOptionsForService(serviceId: string, customer
       (product) =>
         product.displayOrder > service.product.displayOrder ||
         (product.displayOrder === service.product.displayOrder &&
-          product.basePrice > service.product.basePrice)
+          compare(product.basePrice, service.product.basePrice) > 0)
     )
     .map((product) => ({
       product,
@@ -605,7 +598,7 @@ export async function getPlanChangeOptionsForService(serviceId: string, customer
       (product) =>
         product.displayOrder < service.product.displayOrder ||
         (product.displayOrder === service.product.displayOrder &&
-          product.basePrice < service.product.basePrice)
+          compare(product.basePrice, service.product.basePrice) < 0)
     )
     .map((product) => ({
       product,

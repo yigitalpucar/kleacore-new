@@ -18,6 +18,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import { persistGatewayCheckout } from "./persist";
+import { moneyEq } from "@/test-utils/money";
 
 const baseInput = {
   invoiceIds: ["inv-1"],
@@ -67,7 +68,7 @@ describe("persistGatewayCheckout", () => {
         where: { invoiceId_transactionId: { invoiceId: "inv-1", transactionId: "sess-2" } },
         create: expect.objectContaining({
           invoiceId: "inv-1",
-          amount: 100,
+          amount: moneyEq(100),
           method: "CREDIT_CARD",
           status: "PENDING",
           transactionId: "sess-2",

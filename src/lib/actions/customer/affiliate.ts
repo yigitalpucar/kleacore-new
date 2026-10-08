@@ -9,6 +9,7 @@ import { isValidPayoutIban } from "@/lib/affiliate/payouts";
 import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
+import { toNumber } from "@/lib/money";
 
 function mapPayoutError(error: unknown) {
   if (error instanceof AffiliatePayoutError) {
@@ -60,7 +61,7 @@ export async function requestPayout(amount: number) {
       success: true as const,
       data: {
         paymentId: payment.id,
-        amount: payment.amount,
+        amount: toNumber(payment.amount),
         status: payment.status,
       },
     };

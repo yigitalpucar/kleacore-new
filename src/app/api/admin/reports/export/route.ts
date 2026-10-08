@@ -8,7 +8,8 @@ import {
   getRevenueReport,
   getServiceReport,
 } from "@/lib/dal/reports";
-import type { PaymentMethod } from "@prisma/client";
+import type { PaymentMethod, Prisma } from "@prisma/client";
+import { add, toNumber, type MoneyInput } from "@/lib/money";
 import { forbidden, unauthorized } from "@/lib/utils/api-response";
 
 export const dynamic = "force-dynamic";
@@ -150,7 +151,7 @@ function monthKey(date: Date) {
 }
 
 function buildRevenueTrendRows(
-  paidInvoices: Array<{ paidAt: Date | null; paidAmount: number }>,
+  paidInvoices: Array<{ paidAt: Date | null; paidAmount: MoneyInput }>,
   period: ReportPeriod,
   now: Date
 ) {
@@ -158,12 +159,12 @@ function buildRevenueTrendRows(
 
   if (period === "7days" || period === "30days") {
     const dayCount = period === "7days" ? 7 : 30;
-    const revenueByDay = new Map<string, number>();
+    const revenueByDay = new Map<string, Prisma.Decimal>();
 
     for (const invoice of paidInvoices) {
       if (!invoice.paidAt) continue;
       const key = dayKey(new Date(invoice.paidAt));
-      revenueByDay.set(key, (revenueByDay.get(key) ?? 0) + Number(invoice.paidAmount));
+      revenueByDay.set(key, add(revenueByDay.get(key), invoice.paidAmount));
     }
 
     for (let i = dayCount - 1; i >= 0; i--) {
@@ -174,19 +175,19 @@ function buildRevenueTrendRows(
         dayCount <= 7
           ? `${String(date.getDate()).padStart(2, "0")} ${monthNames[date.getMonth()]}`
           : `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
-      rows.push([label, Number((revenueByDay.get(key) ?? 0).toFixed(2))]);
+      rows.push([label, toNumber(revenueByDay.get(key))]);
     }
 
     return rows;
   }
 
   const monthCount = period === "3months" ? 3 : period === "1year" ? 12 : 6;
-  const revenueByMonth = new Map<string, number>();
+  const revenueByMonth = new Map<string, Prisma.Decimal>();
 
   for (const invoice of paidInvoices) {
     if (!invoice.paidAt) continue;
     const key = monthKey(new Date(invoice.paidAt));
-    revenueByMonth.set(key, (revenueByMonth.get(key) ?? 0) + Number(invoice.paidAmount));
+    revenueByMonth.set(key, add(revenueByMonth.get(key), invoice.paidAmount));
   }
 
   for (let i = monthCount - 1; i >= 0; i--) {
@@ -197,7 +198,7 @@ function buildRevenueTrendRows(
         ? `${monthNames[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`
         : monthNames[date.getMonth()];
 
-    rows.push([label, Number((revenueByMonth.get(key) ?? 0).toFixed(2))]);
+    rows.push([label, toNumber(revenueByMonth.get(key))]);
   }
 
   return rows;

@@ -1,4 +1,5 @@
 import type { OrderRow } from "./order-list";
+import { toNumber, toNumberOrNull, type MoneyInput } from "@/lib/money";
 
 type DateLike = Date | string | null | undefined;
 
@@ -6,12 +7,12 @@ type OrderLike = {
   id: string;
   orderNumber: string;
   status: string;
-  totalAmount: number | string | { toString(): string };
+  totalAmount: MoneyInput;
   createdAt: Date | string;
   cancelledAt?: DateLike;
   cancellationReason?: string | null;
   refundedAt?: DateLike;
-  refundAmount?: number | null;
+  refundAmount?: MoneyInput;
   serviceId?: string | null;
   suspendReason?: string | null;
   customer: { id: string; name: string; surname: string; email: string };
@@ -26,12 +27,12 @@ export function serializeOrder(o: OrderLike): OrderRow {
     id: o.id,
     orderNumber: o.orderNumber,
     status: o.status,
-    totalAmount: Number(o.totalAmount),
+    totalAmount: toNumber(o.totalAmount),
     createdAt: new Date(o.createdAt).toISOString(),
     cancelledAt: iso(o.cancelledAt),
     cancellationReason: o.cancellationReason ?? null,
     refundedAt: iso(o.refundedAt),
-    refundAmount: o.refundAmount == null ? null : Number(o.refundAmount),
+    refundAmount: toNumberOrNull(o.refundAmount),
     serviceId: o.serviceId ?? null,
     suspendReason: o.suspendReason ?? null,
     customer: { id: o.customer.id, name: o.customer.name, surname: o.customer.surname, email: o.customer.email },

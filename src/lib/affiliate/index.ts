@@ -1,16 +1,13 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { generateAffiliateCode } from "@/lib/utils/number-generators";
+import { isPositive, mul, roundHalfUp, type MoneyInput } from "@/lib/money";
 
 export const AFFILIATE_REF_COOKIE = "kleacore_ref";
 export const AFFILIATE_REF_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 export const AFFILIATE_COMMISSION_RATE = 0.1;
 
 type DbClient = Prisma.TransactionClient | typeof db;
-
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
-}
 
 export { getSafeRedirectPath } from "@/lib/utils/safe-redirect";
 
@@ -96,15 +93,14 @@ export async function createCustomerUser(
 
 export async function applyAffiliateCommission(
   tx: Prisma.TransactionClient,
-  input: { customerId: string; orderTotal: number }
+  input: { customerId: string; orderTotal: MoneyInput }
 ) {
-  const orderTotal = Number(input.orderTotal);
-  if (!Number.isFinite(orderTotal) || orderTotal <= 0) {
+  if (!isPositive(input.orderTotal)) {
     return;
   }
 
-  const commissionAmount = roundMoney(orderTotal * AFFILIATE_COMMISSION_RATE);
-  if (commissionAmount <= 0) {
+  const commissionAmount = roundHalfUp(mul(input.orderTotal, AFFILIATE_COMMISSION_RATE));
+  if (!isPositive(commissionAmount)) {
     return;
   }
 

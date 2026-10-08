@@ -6,6 +6,7 @@ import {
   notifyInvoicePaymentReceived,
 } from "@/lib/payments/fulfillment";
 import { runUnsuspendJobsForInvoices } from "@/lib/payments/service-lifecycle";
+import { sum, toFixed2, toKurus, type MoneyInput } from "@/lib/money";
 
 /** What the gateway says was charged for a session, as reported in its callback. */
 export interface GatewayPaymentConfirmation {
@@ -19,10 +20,6 @@ export interface GatewayPaymentConfirmation {
 
 const ACCEPTED_CURRENCIES = new Set(["TRY", "TL"]);
 
-function toKurus(value: number) {
-  return Math.round(value * 100);
-}
-
 /**
  * Compares the gateway-reported amount with what we expected to collect for
  * the session, in kuruş so float noise (0.1 + 0.2) never causes a mismatch.
@@ -30,7 +27,7 @@ function toKurus(value: number) {
  * (installment surcharge paid by the customer) but never fall short.
  */
 export function verifyGatewayAmount(
-  expectedAmount: number,
+  expectedAmount: MoneyInput,
   confirmation: GatewayPaymentConfirmation | undefined
 ): { ok: true } | { ok: false; reason: string } {
   if (!confirmation) {
@@ -53,7 +50,7 @@ export function verifyGatewayAmount(
     if (toKurus(confirmation.requestedAmount) !== expected) {
       return {
         ok: false,
-        reason: `REQUESTED_AMOUNT_MISMATCH:${confirmation.requestedAmount}!=${expectedAmount}`,
+        reason: `REQUESTED_AMOUNT_MISMATCH:${confirmation.requestedAmount}!=${toFixed2(expectedAmount)}`,
       };
     }
   }
@@ -65,7 +62,7 @@ export function verifyGatewayAmount(
     if (toKurus(confirmation.paidAmount) < expected) {
       return {
         ok: false,
-        reason: `PAID_AMOUNT_MISMATCH:${confirmation.paidAmount}<${expectedAmount}`,
+        reason: `PAID_AMOUNT_MISMATCH:${confirmation.paidAmount}<${toFixed2(expectedAmount)}`,
       };
     }
   }
@@ -110,7 +107,7 @@ export async function fulfillPaymentsByGatewayReference(
     };
   }
 
-  const expectedAmount = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const expectedAmount = sum(payments.map((payment) => payment.amount));
   const verification = verifyGatewayAmount(expectedAmount, confirmation);
 
   if (!verification.ok) {

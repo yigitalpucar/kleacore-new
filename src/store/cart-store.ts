@@ -7,6 +7,7 @@ import {
   periodTotal,
   priceBasisForItemType,
 } from "@/lib/billing/period-price";
+import { add, mul, sum, toNumber } from "@/lib/money";
 
 export type CartItemType = "domain" | "hosting" | "server" | "ssl" | "datacenter";
 
@@ -212,10 +213,7 @@ export const useCartStore = create<CartState>()(
 
           wasAdded = true;
 
-          const addonTotal = addons.reduce(
-            (sum, a) => sum + addonPeriodTotal(a, billingPeriod),
-            0
-          );
+          const addonTotal = sum(addons.map((a) => addonPeriodTotal(a, billingPeriod)));
           const domainPrice = domainChoice.type === "new" ? (domainChoice.price ?? 0) : 0;
 
           const nextItems: CartItem[] = [
@@ -223,10 +221,9 @@ export const useCartStore = create<CartState>()(
               id,
               type: "hosting",
               title,
-              unitPrice:
-                Math.round(
-                  (chargeFor("hosting", price, billingPeriod) + addonTotal + configOptionTotal) * 100
-                ) / 100,
+              unitPrice: toNumber(
+                add(chargeFor("hosting", price, billingPeriod), addonTotal, configOptionTotal)
+              ),
               quantity: 1,
               createdAt: new Date().toISOString(),
               metadata: {
@@ -336,10 +333,7 @@ export const useCartStore = create<CartState>()(
         get().items.reduce((total, item) => total + item.quantity, 0),
 
       getSubtotal: () =>
-        get().items.reduce(
-          (total, item) => total + item.unitPrice * item.quantity,
-          0,
-        ),
+        toNumber(sum(get().items.map((item) => mul(item.unitPrice, item.quantity)))),
     }),
     {
       name: "kleacore-cart",

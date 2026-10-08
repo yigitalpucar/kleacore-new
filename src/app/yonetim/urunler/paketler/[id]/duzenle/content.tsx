@@ -11,7 +11,11 @@ import type { ProductFormData, BillingPeriod } from "@/types/products";
 import { updateProduct } from "@/lib/actions/admin/products";
 import { ProductConfigOptionsSection } from "@/components/admin/product-config-options-section";
 import { toast } from "@/lib/toast";
-import type { ProductConfigOption } from "@prisma/client";
+import type { ProductConfigOption as ProductConfigOptionRow } from "@prisma/client";
+import type { Serialized } from "@/lib/money";
+
+/** Config option as sent to the browser (unit prices are numbers). */
+type ProductConfigOption = Serialized<ProductConfigOptionRow>;
 
 interface ProductWithRelations {
   id: string;

@@ -36,6 +36,22 @@ import {
   calculateConfigurationPrice,
   validateConfigurationSelections,
 } from "@/lib/products/configurator";
+import {
+  add,
+  compare,
+  div,
+  isPositive,
+  max,
+  min,
+  money,
+  mul,
+  percent,
+  roundHalfUp,
+  sub,
+  sum,
+  toKurus,
+  toNumber,
+} from "@/lib/money";
 
 type CheckoutPaymentMethod = CustomerPaymentMethod;
 
@@ -73,10 +89,6 @@ const allowedPaymentMethods: CheckoutPaymentMethod[] = [...CUSTOMER_PAYMENT_METH
 
 function normalizeBillingPeriod(value: string | undefined): BillingPeriod {
   return value === "yearly" ? "yearly" : "monthly";
-}
-
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
 }
 
 function getDomainName(item: CheckoutItemInput) {
@@ -120,8 +132,8 @@ async function getDomainProduct(domain: string, tx: Prisma.TransactionClient) {
 
   return {
     product,
-    unitPrice: Number(tld.registerPrice),
-    renewPrice: Number(tld.renewPrice),
+    unitPrice: roundHalfUp(tld.registerPrice),
+    renewPrice: toNumber(tld.renewPrice),
     tld: tld.ext,
   };
 }
@@ -147,7 +159,7 @@ async function getCatalogProduct(item: CheckoutItemInput, tx: Prisma.Transaction
   // the yearly charge is 12 × that price; domain/SSL/e-mail tiers are already
   // period totals (see src/lib/billing/period-price.ts).
   const basePrice = periodTotal(
-    Number(tier?.discountedPrice ?? tier?.price ?? product.basePrice),
+    tier?.discountedPrice ?? tier?.price ?? product.basePrice,
     billingPeriod,
     priceBasisForCategory(product.category.slug)
   );
@@ -169,10 +181,7 @@ async function getCatalogProduct(item: CheckoutItemInput, tx: Prisma.Transaction
     throw new Error(`ADDON_NOT_FOUND:${sku}`);
   }
 
-  const addonTotal = addons.reduce(
-    (total, addon) => total + addonPeriodTotal(addon, billingPeriod),
-    0
-  );
+  const addonTotal = sum(addons.map((addon) => addonPeriodTotal(addon, billingPeriod)));
 
   const configSelections = item.metadata?.configuration ?? {};
   const configValidation = await validateConfigurationSelections(product.id, configSelections);
@@ -189,7 +198,7 @@ async function getCatalogProduct(item: CheckoutItemInput, tx: Prisma.Transaction
   return {
     product,
     billingPeriod,
-    unitPrice: roundMoney(basePrice + addonTotal + configPricing.total),
+    unitPrice: roundHalfUp(add(basePrice, addonTotal, configPricing.total)),
     addons,
     configOptions: configPricing.lines,
     configSelections,
@@ -235,9 +244,9 @@ async function calculatePromotion(
     categorySlug: string;
     billingPeriod: BillingPeriod;
     quantity: number;
-    unitPrice: number;
+    unitPrice: Prisma.Decimal;
   }>,
-  subtotal: number
+  subtotal: Prisma.Decimal
 ) {
   const normalizedCode = promoCode?.trim().toUpperCase();
   if (!normalizedCode) return null;
@@ -255,7 +264,7 @@ async function calculatePromotion(
     throw new Error("PROMO_EXPIRED");
   }
 
-  if (promo.minOrderAmount && subtotal < Number(promo.minOrderAmount)) {
+  if (promo.minOrderAmount && compare(subtotal, promo.minOrderAmount) < 0) {
     throw new Error("PROMO_MIN_ORDER");
   }
 
@@ -281,22 +290,24 @@ async function calculatePromotion(
     }
   }
 
-  const applicableTotal = roundMoney(
-    preparedItems
-      .filter((item) => promoAppliesToPreparedItem(promo, item))
-      .reduce((total, item) => total + item.unitPrice * item.quantity, 0)
+  const applicableTotal = roundHalfUp(
+    sum(
+      preparedItems
+        .filter((item) => promoAppliesToPreparedItem(promo, item))
+        .map((item) => mul(item.unitPrice, item.quantity))
+    )
   );
 
-  if (applicableTotal <= 0) {
+  if (!isPositive(applicableTotal)) {
     throw new Error("PROMO_NOT_APPLICABLE");
   }
 
   const discount =
     promo.discountType === "PERCENTAGE"
-      ? roundMoney(applicableTotal * (Number(promo.discountValue) / 100))
-      : roundMoney(Math.min(Number(promo.discountValue), applicableTotal));
+      ? percent(applicableTotal, promo.discountValue)
+      : roundHalfUp(min(promo.discountValue, applicableTotal));
 
-  if (discount <= 0) {
+  if (!isPositive(discount)) {
     throw new Error("PROMO_NOT_APPLICABLE");
   }
 
@@ -360,7 +371,7 @@ export async function checkoutCart(input: CheckoutInput) {
             categorySlug: domainProduct.product.category.slug,
             billingPeriod: "yearly" as BillingPeriod,
             quantity,
-            unitPrice: roundMoney(domainProduct.unitPrice),
+            unitPrice: domainProduct.unitPrice,
             configuration: {
               type: "domain",
               domain,
@@ -401,11 +412,11 @@ export async function checkoutCart(input: CheckoutInput) {
         });
       }
 
-      const subtotal = roundMoney(
-        preparedItems.reduce((total, item) => total + item.unitPrice * item.quantity, 0)
+      const subtotal = roundHalfUp(
+        sum(preparedItems.map((item) => mul(item.unitPrice, item.quantity)))
       );
 
-      if (subtotal <= 0) {
+      if (!isPositive(subtotal)) {
         throw new Error("INVALID_TOTAL");
       }
 
@@ -416,7 +427,7 @@ export async function checkoutCart(input: CheckoutInput) {
         preparedItems,
         subtotal
       );
-      const discountAmount = promotion?.discountAmount ?? 0;
+      const discountAmount = promotion?.discountAmount ?? money(0);
       const taxRate = await getTaxRate();
 
       const now = new Date();
@@ -425,8 +436,8 @@ export async function checkoutCart(input: CheckoutInput) {
 
       const orderIds: string[] = [];
       const invoiceIds: string[] = [];
-      let checkoutTotalAmount = 0;
-      let totalResellerDiscount = 0;
+      let checkoutTotalAmount = money(0);
+      let totalResellerDiscount = money(0);
       let remainingDiscount = discountAmount;
       const applicableIndexes = promotion
         ? preparedItems
@@ -436,23 +447,25 @@ export async function checkoutCart(input: CheckoutInput) {
       const lastApplicableIndex = applicableIndexes[applicableIndexes.length - 1] ?? -1;
 
       for (const [index, item] of preparedItems.entries()) {
-        const lineTotal = roundMoney(item.unitPrice * item.quantity);
+        const lineTotal = roundHalfUp(mul(item.unitPrice, item.quantity));
+        // The promo discount is spread over its lines pro rata; the last line
+        // takes the remainder so the line discounts add up to the promo exactly.
         const promoLineDiscount =
           promotion && promoAppliesToPreparedItem(promotion, item)
             ? index === lastApplicableIndex
-              ? roundMoney(remainingDiscount)
-              : roundMoney((lineTotal / promotion.applicableTotal) * promotion.discountAmount)
-            : 0;
-        remainingDiscount = roundMoney(remainingDiscount - promoLineDiscount);
-        const afterPromoTotal = roundMoney(Math.max(0, lineTotal - promoLineDiscount));
+              ? roundHalfUp(remainingDiscount)
+              : roundHalfUp(div(mul(lineTotal, promotion.discountAmount), promotion.applicableTotal))
+            : money(0);
+        remainingDiscount = sub(remainingDiscount, promoLineDiscount);
+        const afterPromoTotal = max(0, sub(lineTotal, promoLineDiscount));
         const resellerLineDiscount = resellerDiscount
           ? applyResellerDiscount(afterPromoTotal, resellerDiscount.discountPercent)
-          : 0;
-        const lineDiscount = roundMoney(promoLineDiscount + resellerLineDiscount);
-        totalResellerDiscount = roundMoney(totalResellerDiscount + resellerLineDiscount);
-        const payableLineTotal = roundMoney(Math.max(0, lineTotal - lineDiscount));
+          : money(0);
+        const lineDiscount = add(promoLineDiscount, resellerLineDiscount);
+        totalResellerDiscount = add(totalResellerDiscount, resellerLineDiscount);
+        const payableLineTotal = max(0, sub(lineTotal, lineDiscount));
         const taxed = calculateTax(payableLineTotal, taxRate);
-        checkoutTotalAmount = roundMoney(checkoutTotalAmount + taxed.totalAmount);
+        checkoutTotalAmount = add(checkoutTotalAmount, taxed.totalAmount);
         const isStripe = input.paymentMethod === "CREDIT_CARD";
         const isPaid = false;
 
@@ -482,7 +495,7 @@ export async function checkoutCart(input: CheckoutInput) {
               isStripe
                 ? "Sepet ödemesi kredi kartı onayı bekliyor"
                 : "Sepet ödemesi banka havalesi bekliyor",
-              resellerDiscount && resellerLineDiscount > 0
+              resellerDiscount && isPositive(resellerLineDiscount)
                 ? `Bayi indirimi uygulandı: %${resellerDiscount.discountPercent} (${resellerDiscount.resellerName})`
                 : null,
             ]
@@ -556,12 +569,12 @@ export async function checkoutCart(input: CheckoutInput) {
               invoiceId: invoice.id,
               totalAmount: taxed.totalAmount,
               promoCode: promotion?.code,
-              ...(resellerDiscount && resellerLineDiscount > 0
+              ...(resellerDiscount && isPositive(resellerLineDiscount)
                 ? {
                     resellerDiscount: {
                       resellerId: resellerDiscount.resellerId,
                       discountPercent: resellerDiscount.discountPercent,
-                      discountAmount: resellerLineDiscount,
+                      discountAmount: toNumber(resellerLineDiscount),
                     },
                   }
                 : {}),
@@ -609,9 +622,10 @@ export async function checkoutCart(input: CheckoutInput) {
       return {
         orderIds,
         invoiceIds,
-        totalAmount: checkoutTotalAmount,
-        discountAmount: roundMoney(discountAmount + totalResellerDiscount),
-        resellerDiscountAmount: totalResellerDiscount,
+        // Plain numbers: this object is returned to the client component.
+        totalAmount: toNumber(checkoutTotalAmount),
+        discountAmount: toNumber(add(discountAmount, totalResellerDiscount)),
+        resellerDiscountAmount: toNumber(totalResellerDiscount),
         promoCode: promotion?.code,
         orderNumbers: orderNumbers.map((order) => order.orderNumber),
       };
@@ -649,7 +663,7 @@ export async function checkoutCart(input: CheckoutInput) {
             quantity: 1,
             price_data: {
               currency: "try",
-              unit_amount: Math.round(result.totalAmount * 100),
+              unit_amount: toKurus(result.totalAmount),
               product_data: {
                 name: "KLEACORE Sepet Ödemesi",
                 description: result.promoCode

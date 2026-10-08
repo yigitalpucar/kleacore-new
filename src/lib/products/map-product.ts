@@ -3,6 +3,7 @@ import type { HostingPlan } from "@/components/hosting/pricing-card";
 import type { PlanCardData } from "@/components/site/plan-card";
 import type { ServerPlanRow } from "@/components/site/server-plan-table";
 import { getIcon } from "@/lib/utils/icon-map";
+import { mul, toNumber } from "@/lib/money";
 
 export type ProductWithPricing = Product & {
   category: ProductCategory;
@@ -27,8 +28,8 @@ export function mapProductToHostingPlan(product: ProductWithPricing): HostingPla
     slug: product.slug,
     name: product.name,
     description: product.shortDescription,
-    price: monthlyTier?.price ?? product.basePrice,
-    yearlyPrice: yearlyTier?.discountedPrice ?? yearlyTier?.price,
+    price: toNumber(monthlyTier?.price ?? product.basePrice),
+    yearlyPrice: yearlyTier ? toNumber(yearlyTier.discountedPrice ?? yearlyTier.price) : undefined,
     period: "ay",
     features: (product.includedFeatures as string[]) ?? [],
     storage: resources?.storage ?? "",
@@ -78,11 +79,13 @@ export function mapProductToServerPlan(product: ProductWithPricing): ServerPlanV
     disk: res?.disk ?? "",
     traffic: res?.traffic ?? "",
     port: res?.port ?? "",
-    monthlyPrice: monthly?.renewalPrice ?? monthly?.price ?? product.basePrice,
-    discountedMonthly: monthly?.discountedPrice ?? monthly?.price ?? product.basePrice,
+    monthlyPrice: toNumber(monthly?.renewalPrice ?? monthly?.price ?? product.basePrice),
+    discountedMonthly: toNumber(monthly?.discountedPrice ?? monthly?.price ?? product.basePrice),
     // Yearly tier prices are stored as the monthly equivalent (e.g. 83,99/ay).
-    yearlyPrice: (yearly?.discountedPrice ?? yearly?.price ?? monthly?.price ?? product.basePrice) * 12,
-    yearlyMonthly: yearly?.discountedPrice ?? yearly?.price ?? monthly?.price ?? product.basePrice,
+    yearlyPrice: toNumber(
+      mul(yearly?.discountedPrice ?? yearly?.price ?? monthly?.price ?? product.basePrice, 12)
+    ),
+    yearlyMonthly: toNumber(yearly?.discountedPrice ?? yearly?.price ?? monthly?.price ?? product.basePrice),
     popular: product.isPopular,
   };
 }
@@ -95,8 +98,8 @@ export function mapProductToServerPlan(product: ProductWithPricing): ServerPlanV
 function tierPrices(product: ProductWithPricing) {
   const monthly = product.pricingTiers.find((t) => t.period === "monthly");
   const yearly = product.pricingTiers.find((t) => t.period === "yearly");
-  const monthlyPrice = monthly?.discountedPrice ?? monthly?.price ?? product.basePrice;
-  const yearlyMonthlyPrice = yearly ? (yearly.discountedPrice ?? yearly.price) : null;
+  const monthlyPrice = toNumber(monthly?.discountedPrice ?? monthly?.price ?? product.basePrice);
+  const yearlyMonthlyPrice = yearly ? toNumber(yearly.discountedPrice ?? yearly.price) : null;
   return { monthlyPrice, yearlyMonthlyPrice };
 }
 

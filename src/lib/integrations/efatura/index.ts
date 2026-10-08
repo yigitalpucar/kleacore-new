@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { serializeMoney } from "@/lib/money";
 import { db } from "@/lib/db";
 import { getSettingMap, isEnabled } from "../settings";
 import { buildUblTrDraft } from "./builder";
@@ -124,7 +125,7 @@ export async function queueEInvoiceDraft(invoiceId: string) {
     throw new Error("INVOICE_NOT_PAID");
   }
 
-  const draft = buildUblTrDraft(invoice, config.companyVkn);
+  const draft = buildUblTrDraft(serializeMoney(invoice), config.companyVkn);
   const provider = await getEInvoiceProvider();
 
   const record = await db.eInvoiceRecord.create({
@@ -227,7 +228,7 @@ export async function retryEInvoiceRecord(recordId: string) {
     throw new Error("INVOICE_NOT_PAID");
   }
 
-  const draft = buildUblTrDraft(record.invoice, config.companyVkn);
+  const draft = buildUblTrDraft(serializeMoney(record.invoice), config.companyVkn);
   const provider = await getEInvoiceProvider();
 
   await db.eInvoiceRecord.update({

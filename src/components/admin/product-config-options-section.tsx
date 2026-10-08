@@ -20,7 +20,11 @@ import {
   updateProductConfigOption,
 } from "@/lib/actions/admin/product-config-options";
 import { toast } from "@/lib/toast";
-import type { ProductConfigOption } from "@prisma/client";
+import type { ProductConfigOption as ProductConfigOptionRow } from "@prisma/client";
+import type { Serialized } from "@/lib/money";
+
+/** Config option as sent to the browser (unit prices are numbers). */
+type ProductConfigOption = Serialized<ProductConfigOptionRow>;
 
 interface ProductConfigOptionsSectionProps {
   productId: string;

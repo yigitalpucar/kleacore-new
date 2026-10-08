@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import type { ConfigOptionChoice } from "@/lib/products/configurator-types";
+import { serializeMoney } from "@/lib/money";
 
 interface ProductConfigOptionInput {
   productId: string;
@@ -43,10 +44,12 @@ async function getNextDisplayOrder(productId: string) {
 export async function getAdminProductConfigOptions(productId: string) {
   await requireAdmin();
 
-  return db.productConfigOption.findMany({
+  const options = await db.productConfigOption.findMany({
     where: { productId },
     orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
   });
+  // Unit prices as numbers: the result is passed to a client component.
+  return serializeMoney(options);
 }
 
 export async function createProductConfigOption(data: ProductConfigOptionInput) {

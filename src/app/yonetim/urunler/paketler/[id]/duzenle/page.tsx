@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getProductById } from "@/lib/dal/products";
 import { getAdminProductConfigOptions } from "@/lib/actions/admin/product-config-options";
 import { EditPackageContent } from "./content";
+import { serializeMoney } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -21,5 +22,5 @@ export default async function EditPackagePage({
 
   if (!product) return notFound();
 
-  return <EditPackageContent product={product} configOptions={configOptions} />;
+  return <EditPackageContent product={serializeMoney(product)} configOptions={configOptions} />;
 }

@@ -23,11 +23,15 @@ import type {
 } from "@/lib/products/configurator-types";
 import type { Product, PricingTier, ProductCategory } from "@prisma/client";
 import type { DomainChoice, SelectedAddon } from "@/app/hosting/satin-al/[slug]/content";
+import { add, sum, type Serialized } from "@/lib/money";
+import { cartTotals } from "@/lib/billing/cart-totals";
 
-type ProductWithPricing = Product & {
-  category: ProductCategory;
-  pricingTiers: PricingTier[];
-};
+type ProductWithPricing = Serialized<
+  Product & {
+    category: ProductCategory;
+    pricingTiers: PricingTier[];
+  }
+>;
 
 interface StepSummaryProps {
   product: ProductWithPricing;
@@ -39,11 +43,7 @@ interface StepSummaryProps {
 }
 
 /** Display only; the checkout action applies the configured rate (billing.tax_rate). */
-const TAX_RATE = 0.2;
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
+const TAX_RATE_PERCENT = 20;
 
 export const StepSummary = ({
   product,
@@ -75,7 +75,7 @@ export const StepSummary = ({
     addon,
     total: addonPeriodTotal(addon, period),
   }));
-  const addonTotal = addonLines.reduce((sum, line) => sum + line.total, 0);
+  const addonTotal = sum(addonLines.map((line) => line.total));
 
   const configPricing = useMemo(
     () => calculateConfigurationPrice(configOptions, configSelections, period),
@@ -84,9 +84,15 @@ export const StepSummary = ({
 
   const domainPrice = domainChoice.type === "new" ? (domainChoice.price ?? 0) : 0;
 
-  const subtotal = roundMoney(hostingCharge + addonTotal + configPricing.total + domainPrice);
-  const tax = roundMoney(subtotal * TAX_RATE);
-  const total = roundMoney(subtotal + tax);
+  // Same lines and Decimal maths as the cart/checkout: the hosting bundle and
+  // a new domain become two cart lines, each taxed (half-up) on its own.
+  const { subtotal, taxAmount: tax, total } = cartTotals(
+    [
+      { unitPrice: add(hostingCharge, addonTotal, configPricing.total), quantity: 1 },
+      ...(domainPrice > 0 ? [{ unitPrice: domainPrice, quantity: 1 }] : []),
+    ],
+    TAX_RATE_PERCENT
+  );
 
   const handleAddToCart = () => {
     const added = addHostingBundle({
@@ -188,7 +194,7 @@ export const StepSummary = ({
             <dd className="tabular-nums">{money(subtotal)}</dd>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground">KDV (%{Math.round(TAX_RATE * 100)})</dt>
+            <dt className="text-muted-foreground">KDV (%{TAX_RATE_PERCENT})</dt>
             <dd className="tabular-nums">{money(tax)}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-4 border-t border-dashed pt-3">

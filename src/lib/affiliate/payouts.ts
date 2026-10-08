@@ -1,14 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { MIN_PAYOUT_AMOUNT } from "@/lib/affiliate/constants";
+import { add, compare, money, roundHalfUp, sub, toNumber, type MoneyInput } from "@/lib/money";
 
 export { MIN_PAYOUT_AMOUNT };
 
 type DbClient = Prisma.TransactionClient | typeof db;
-
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
-}
 
 export class AffiliatePayoutError extends Error {
   constructor(
@@ -51,16 +48,13 @@ export async function getAffiliateBalance(
     }),
   ]);
 
-  const totalCommissions = Number(commissionAggregate._sum.commission ?? 0);
-  const reservedPayments = Number(paymentAggregate._sum.amount ?? 0);
-
-  return roundMoney(totalCommissions - reservedPayments);
+  return toNumber(sub(commissionAggregate._sum.commission, paymentAggregate._sum.amount));
 }
 
 async function selectReferralsForPayout(
   tx: Prisma.TransactionClient,
   affiliateId: string,
-  amount: number
+  amount: MoneyInput
 ) {
   const referrals = await tx.affiliateReferral.findMany({
     where: {
@@ -76,15 +70,15 @@ async function selectReferralsForPayout(
   });
 
   const selectedIds: string[] = [];
-  let allocated = 0;
+  let allocated = money(0);
 
   for (const referral of referrals) {
-    if (allocated >= amount) {
+    if (compare(allocated, amount) >= 0) {
       break;
     }
 
     selectedIds.push(referral.id);
-    allocated = roundMoney(allocated + Number(referral.commission));
+    allocated = add(allocated, referral.commission);
   }
 
   return selectedIds;
@@ -106,13 +100,17 @@ export function isValidPayoutIban(value: string | null | undefined) {
 }
 
 export async function requestAffiliatePayout(affiliateId: string, amount: number) {
-  const normalizedAmount = roundMoney(amount);
-
-  if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+  if (!Number.isFinite(amount)) {
     throw new AffiliatePayoutError("Geçerli bir tutar girin", "INVALID_AMOUNT");
   }
 
-  if (normalizedAmount < MIN_PAYOUT_AMOUNT) {
+  const normalizedAmount = roundHalfUp(amount);
+
+  if (compare(normalizedAmount, 0) <= 0) {
+    throw new AffiliatePayoutError("Geçerli bir tutar girin", "INVALID_AMOUNT");
+  }
+
+  if (compare(normalizedAmount, MIN_PAYOUT_AMOUNT) < 0) {
     throw new AffiliatePayoutError(
       `Minimum ödeme talep tutarı ${MIN_PAYOUT_AMOUNT} TL'dir`,
       "BELOW_MINIMUM"
@@ -134,7 +132,7 @@ export async function requestAffiliatePayout(affiliateId: string, amount: number
   return db.$transaction(async (tx) => {
     const balance = await getAffiliateBalance(affiliateId, tx);
 
-    if (normalizedAmount > balance) {
+    if (compare(normalizedAmount, balance) > 0) {
       throw new AffiliatePayoutError(
         "Talep edilen tutar kullanılabilir bakiyeden fazla",
         "INSUFFICIENT_BALANCE"
@@ -280,9 +278,9 @@ export async function getAffiliatePayoutStats() {
   ]);
 
   return {
-    totalPending: Number(pendingAggregate._sum.amount ?? 0),
+    totalPending: toNumber(pendingAggregate._sum.amount),
     pendingCount: pendingAggregate._count,
-    totalPaidThisMonth: Number(paidThisMonthAggregate._sum.amount ?? 0),
+    totalPaidThisMonth: toNumber(paidThisMonthAggregate._sum.amount),
   };
 }
 

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { AddServiceContent } from "./content";
 import type { BillingPeriod, ProductCategorySlug } from "@prisma/client";
+import { toNumber } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +75,7 @@ export default async function AddServicePage() {
     id: product.id,
     name: product.name,
     shortDescription: product.shortDescription,
-    basePrice: product.basePrice,
+    basePrice: toNumber(product.basePrice),
     category: {
       slug: product.category.slug as ProductCategorySlug,
       name: product.category.name,
@@ -82,7 +83,7 @@ export default async function AddServicePage() {
     features: toStringArray(product.includedFeatures).slice(0, 4),
     pricingTiers: product.pricingTiers.map((tier) => ({
       period: tier.period as BillingPeriod,
-      price: tier.price,
+      price: toNumber(tier.price),
       isDefault: tier.isDefault,
     })),
   }));

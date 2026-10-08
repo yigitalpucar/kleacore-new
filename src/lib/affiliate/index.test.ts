@@ -157,16 +157,23 @@ describe("applyAffiliateCommission", () => {
       orderTotal: 99.99,
     });
 
-    const expectedCommission = Number(
-      (99.99 * AFFILIATE_COMMISSION_RATE).toFixed(2)
-    );
-
+    expect(AFFILIATE_COMMISSION_RATE).toBe(0.1);
     expect(update).toHaveBeenCalledWith({
       where: { id: "ref-1" },
       data: {
-        commission: { increment: expectedCommission },
+        commission: { increment: expect.anything() },
       },
     });
+    // 99.99 × 10 % = 9.999 -> 10.00 (half-up, Decimal)
+    expect(update.mock.calls[0][0].data.commission.increment.toFixed(2)).toBe("10.00");
+  });
+
+  it("rounds half-up to kuruş (0.05 × 10 % = 0.005 -> 0.01)", async () => {
+    findFirst.mockResolvedValue({ id: "ref-3" });
+
+    await applyAffiliateCommission(tx, { customerId: "cust-3", orderTotal: 0.05 });
+
+    expect(update.mock.calls[0][0].data.commission.increment.toFixed(2)).toBe("0.01");
   });
 
   it("rounds commission to two decimal places", async () => {
@@ -180,8 +187,9 @@ describe("applyAffiliateCommission", () => {
     expect(update).toHaveBeenCalledWith({
       where: { id: "ref-2" },
       data: {
-        commission: { increment: 3.33 },
+        commission: { increment: expect.anything() },
       },
     });
+    expect(update.mock.calls[0][0].data.commission.increment.toFixed(2)).toBe("3.33");
   });
 });

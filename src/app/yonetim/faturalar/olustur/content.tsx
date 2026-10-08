@@ -8,6 +8,8 @@ import { FormField, FormSection, PageHeader, appButton } from "@/components/app"
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createInvoice } from "@/lib/actions/admin/invoices";
+import { calculateInvoiceTotals } from "@/lib/billing/invoice-totals";
+import { toNumber } from "@/lib/money";
 import { formatTRY } from "@/lib/format/price";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -48,9 +50,11 @@ export function CreateInvoiceContent({ customers }: CreateInvoiceContentProps) {
     setItems(items.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   };
 
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const taxAmount = subtotal * (taxRate / 100);
-  const total = subtotal + taxAmount;
+  // Same Decimal calculation the server uses when it saves the invoice.
+  const totals = calculateInvoiceTotals(items, taxRate);
+  const subtotal = toNumber(totals.subtotal);
+  const taxAmount = toNumber(totals.taxAmount);
+  const total = toNumber(totals.totalAmount);
 
   const itemsInvalid = items.some((i) => !i.description || i.unitPrice <= 0);
 
@@ -62,17 +66,13 @@ export function CreateInvoiceContent({ customers }: CreateInvoiceContentProps) {
     setSubmitting(true);
     const result = await createInvoice({
       customerId,
-      subtotal,
       taxRate,
-      taxAmount,
-      totalAmount: total,
       dueDate,
       notes: notes || undefined,
       items: items.map((item) => ({
         description: item.description,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        totalPrice: item.quantity * item.unitPrice,
       })),
     });
     setSubmitting(false);
@@ -213,7 +213,7 @@ export function CreateInvoiceContent({ customers }: CreateInvoiceContentProps) {
                   </FormField>
                 </div>
                 <p className="mt-3 text-right text-sm text-muted-foreground">
-                  Kalem toplamı <span className="font-medium tabular-nums text-foreground">{money(item.quantity * item.unitPrice)}</span>
+                  Kalem toplamı <span className="font-medium tabular-nums text-foreground">{money(toNumber(totals.lines[index].totalPrice))}</span>
                 </p>
               </li>
             ))}

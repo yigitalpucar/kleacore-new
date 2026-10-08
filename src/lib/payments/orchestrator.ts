@@ -3,6 +3,7 @@ import { getPaymentGatewayProvider } from "@/lib/integrations/payment-gateways";
 import { getAppBaseUrl } from "@/lib/stripe";
 import type { PaymentContext } from "@/lib/payments/context";
 import type { CustomerPaymentMethod } from "@/lib/payments/methods";
+import { toNumber, type MoneyInput } from "@/lib/money";
 
 export type { PaymentContext } from "@/lib/payments/context";
 
@@ -16,8 +17,9 @@ interface CreateStripeCheckoutInput {
   context: PaymentContext;
 }
 
-export function roundMoney(value: number) {
-  return Number(value.toFixed(2));
+/** Kuruş-rounded number (half-up). Prefer the helpers in `@/lib/money` for new code. */
+export function roundMoney(value: MoneyInput): number {
+  return toNumber(value);
 }
 
 /** @deprecated Use getPaymentGatewayProvider().createCheckout() */

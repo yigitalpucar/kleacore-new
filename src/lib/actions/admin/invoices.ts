@@ -16,23 +16,27 @@ import { runUnsuspendJobsForInvoices } from "@/lib/payments/service-lifecycle";
 import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import { createLogger } from "@/lib/logger";
+import { calculateInvoiceTotals } from "@/lib/billing/invoice-totals";
+import { money, toNumber } from "@/lib/money";
 
 const log = createLogger("admin.invoices");
 
 interface InvoiceItemInput {
   description: string;
   quantity: number;
-  unitPrice: number;
-  totalPrice: number;
+  unitPrice: number | string;
+  /** Ignored: recomputed on the server as round(quantity × unitPrice). */
+  totalPrice?: number;
 }
 
 interface InvoiceInput {
   customerId: string;
   orderId?: string;
-  subtotal: number;
   taxRate?: number;
-  taxAmount: number;
-  totalAmount: number;
+  /** Ignored: subtotal / KDV / total are recomputed on the server from the items. */
+  subtotal?: number;
+  taxAmount?: number;
+  totalAmount?: number;
   dueDate: string;
   notes?: string;
   items: InvoiceItemInput[];
@@ -55,6 +59,24 @@ export async function createInvoice(data: InvoiceInput) {
       return { success: false, error: "Müşteri bulunamadı" };
     }
 
+    const taxRate = money(data.taxRate ?? 20);
+    const itemsValid =
+      Array.isArray(data.items) &&
+      data.items.length > 0 &&
+      data.items.every(
+        (item) =>
+          Number.isInteger(item.quantity) &&
+          item.quantity > 0 &&
+          money(item.unitPrice).greaterThanOrEqualTo(0)
+      );
+    if (!itemsValid || taxRate.isNegative() || taxRate.greaterThan(100)) {
+      return { success: false, error: "Fatura kalemleri veya KDV oranı geçersiz" };
+    }
+
+    // Totals are computed here, in Decimal, from the lines — never trusted
+    // from the browser — so the invoice always equals the sum of its lines.
+    const totals = calculateInvoiceTotals(data.items, taxRate);
+
     const invoiceNumber = await generateInvoiceNumber();
 
     const invoice = await db.invoice.create({
@@ -62,19 +84,19 @@ export async function createInvoice(data: InvoiceInput) {
         invoiceNumber,
         customerId: data.customerId,
         orderId: data.orderId ?? null,
-        subtotal: data.subtotal,
-        taxRate: data.taxRate ?? 20,
-        taxAmount: data.taxAmount,
-        totalAmount: data.totalAmount,
+        subtotal: totals.subtotal,
+        taxRate: totals.taxRate,
+        taxAmount: totals.taxAmount,
+        totalAmount: totals.totalAmount,
         status: "PENDING",
         dueDate: new Date(data.dueDate),
         notes: data.notes ?? null,
         items: {
-          create: data.items.map((item) => ({
+          create: data.items.map((item, index) => ({
             description: item.description,
             quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
+            unitPrice: totals.lines[index].unitPrice,
+            totalPrice: totals.lines[index].totalPrice,
           })),
         },
       },
@@ -90,7 +112,7 @@ export async function createInvoice(data: InvoiceInput) {
         customer: recipient,
         invoiceId: invoice.id,
         invoiceNumber,
-        totalAmount: data.totalAmount,
+        totalAmount: toNumber(totals.totalAmount),
         dueDate: new Date(data.dueDate),
       });
     });
