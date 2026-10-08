@@ -1,7 +1,10 @@
 // Security response headers, shared by next.config.mjs and its tests.
 // Plain .mjs so next.config.mjs can import it without a TS loader.
 
-const IYZICO = "https://*.iyzipay.com";
+// iyzico's checkout bundle loads from *.iyzipay.com and reports analytics to
+// countly.iyzico.com and errors to Sentry (observed with the sandbox form).
+const IYZICO = ["https://*.iyzipay.com", "https://*.iyzico.com"];
+const IYZICO_TELEMETRY = "https://*.sentry.io";
 const PAYTR = "https://www.paytr.com";
 const STRIPE_JS = "https://js.stripe.com";
 
@@ -21,13 +24,13 @@ export function buildContentSecurityPolicy({ dev = false, reportUri } = {}) {
     "base-uri": ["'self'"],
     "object-src": ["'none'"],
     "frame-ancestors": ["'self'"],
-    "form-action": ["'self'", IYZICO, PAYTR, "https://checkout.stripe.com"],
-    "script-src": ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), IYZICO, PAYTR, STRIPE_JS],
-    "style-src": ["'self'", "'unsafe-inline'", IYZICO],
+    "form-action": ["'self'", ...IYZICO, PAYTR, "https://checkout.stripe.com"],
+    "script-src": ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...IYZICO, PAYTR, STRIPE_JS],
+    "style-src": ["'self'", "'unsafe-inline'", ...IYZICO],
     "img-src": ["'self'", "data:", "blob:", "https:"],
-    "font-src": ["'self'", "data:", IYZICO],
-    "connect-src": ["'self'", IYZICO, ...(dev ? ["ws:"] : [])],
-    "frame-src": ["'self'", IYZICO, PAYTR, STRIPE_JS],
+    "font-src": ["'self'", "data:", ...IYZICO],
+    "connect-src": ["'self'", ...IYZICO, IYZICO_TELEMETRY, ...(dev ? ["ws:"] : [])],
+    "frame-src": ["'self'", ...IYZICO, PAYTR, STRIPE_JS],
     "worker-src": ["'self'", "blob:"],
     "manifest-src": ["'self'"],
   };
