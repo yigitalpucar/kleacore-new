@@ -1,0 +1,83 @@
+# Zamanlanmış görevler (Dokploy cron)
+
+## Neden değişti
+
+Eski `scripts/setup-dokploy-schedules.mjs` görevleri `shellType: "bash"` ve
+`curl -H "Authorization: Bearer <CRON_SECRET>" https://kleacore.com/...` komutuyla
+oluşturuyordu. Komutlar uygulama konteynerinin içinde çalışır
+(`docker exec <id> bash -c '...'`) ve imaj `node:22-alpine` tabanlıdır: içinde
+**bash ve curl yok**, bu yüzden tüm görevler başarısız oluyordu. Ayrıca gizli
+anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
+
+## Yeni düzen
+
+- İmajda `/app/cron-run.sh` var (kaynak: `scripts/cron-run.sh`). Busybox `sh` +
+  `wget` kullanır, `CRON_SECRET` değerini **konteynerin ortam değişkeninden**
+  okur ve uygulamayı `http://127.0.0.1:$PORT` üzerinden çağırır (DNS/TLS'e
+  bağımlı değil). HTTP 4xx/5xx durumunda sıfır olmayan kodla çıkar; Dokploy
+  çalıştırmayı "hata" olarak işaretler.
+- Dokploy'daki komut yalnızca `/app/cron-run.sh <iş>` olur; tırnak, `$` veya
+  gizli değer içermez (Dokploy uzak sunucuda komutu `'...'` ve `"..."` içine
+  sarar).
+- Uygulama tarafında her cron çağrısı JSON log üretir:
+  `{"scope":"cron","message":"cron job finished|cron job failed|cron request rejected",...}`.
+
+| Görev adı | Zamanlama (Europe/Istanbul) | Komut |
+|---|---|---|
+| KLEACORE: Günlük Faturalama | `0 2 * * *` | `/app/cron-run.sh daily-billing` |
+| KLEACORE: Yedeklemeler | `0 3 * * *` | `/app/cron-run.sh run-backups` |
+| KLEACORE: SSL Süre Kontrolü | `0 4 * * *` | `/app/cron-run.sh ssl-expiry` |
+| KLEACORE: Gecikmiş Faturalar | `0 5 * * *` | `/app/cron-run.sh overdue-invoices` |
+| KLEACORE: Hizmet Askıya Alma | `0 6 * * *` | `/app/cron-run.sh suspend-services` |
+| KLEACORE: Provisioning Retry | `*/15 * * * *` | `/app/cron-run.sh retry-provisioning` |
+
+Hepsi: `scheduleType: "application"`, `shellType: "sh"`, `enabled: true`.
+
+## Operatör adımları
+
+1. **Önce** bu dalı içeren imajı yayınlayın (`/app/cron-run.sh` imajda olmalı).
+2. Uygulamanın Dokploy ortam değişkenlerinde `CRON_SECRET` tanımlı olduğunu
+   doğrulayın (konteyner içinde: `docker exec <id> sh -c 'test -n "$CRON_SECRET" && echo ok'`).
+3. Konteyner içinde elle deneyin (zararsız bir iş seçin, ör. SSL kontrolü):
+
+   ```sh
+   docker exec <app-container> /app/cron-run.sh ssl-expiry
+   ```
+
+   Beklenen çıktı: `cron-run: POST /api/cron/ssl-expiry` ve ardından
+   `{"success":true,...}`; çıkış kodu 0.
+4. Görevleri senkronlayın. Betik görevleri **ada göre eşler**: var olanları
+   `schedule.update` ile düzeltir, eksikleri `schedule.create` ile ekler
+   (kopya oluşturmaz). Önce ne gönderileceğini görün:
+
+   ```sh
+   node scripts/setup-dokploy-schedules.mjs --dry-run
+   ```
+
+   Sonra uygulayın (`DOKPLOY_URL` `/api` ile bitmeli; `CRON_SECRET` artık
+   gerekmez):
+
+   ```sh
+   DOKPLOY_URL=https://<dokploy-host>/api \
+   DOKPLOY_API_KEY=<api-key> \
+   node scripts/setup-dokploy-schedules.mjs --application-id=wJ-OFQk0M8mJsgGVvXbu7
+   ```
+
+5. Dokploy arayüzünde bir görevi "Run now" ile çalıştırıp logunda
+   `✅ Command executed successfully` görün.
+
+### Betiği kullanmadan elle düzeltme
+
+Dokploy → Uygulama → Schedules → her görevi düzenleyin: **Shell type = sh**,
+**Command = tablodaki komut**. Eski `curl ... Bearer <gizli>` komutlarını
+kaldırın; gizli değer o loglarda göründüğü için `CRON_SECRET` değerini
+yenilemek (ve Dokploy ortam değişkenini güncellemek) önerilir.
+
+## Yerel deneme
+
+```sh
+docker build -t kleacore:local .
+docker run -d --name kc -p 3310:3000 -e DATABASE_URL=... -e CRON_SECRET=test -e AUTH_SECRET=... kleacore:local
+docker exec kc /app/cron-run.sh ssl-expiry   # 0 ile çıkar
+docker exec -e CRON_SECRET=yanlis kc /app/cron-run.sh ssl-expiry   # 401 → 1 ile çıkar
+```

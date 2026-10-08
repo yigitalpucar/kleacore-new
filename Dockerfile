@@ -46,7 +46,8 @@ COPY --from=migrator /migrate/node_modules ./migrate/node_modules
 COPY --from=builder /app/prisma ./migrate/prisma
 COPY --from=builder /app/prisma.config.ts ./migrate/prisma.config.ts
 COPY --from=builder /app/scripts/docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x ./docker-entrypoint.sh
+COPY --from=builder /app/scripts/cron-run.sh ./cron-run.sh
+RUN chmod +x ./docker-entrypoint.sh ./cron-run.sh
 
 USER nextjs
 EXPOSE 3000
