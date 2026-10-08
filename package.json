@@ -23,7 +23,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:db": "RUN_DB_TESTS=1 vitest run src/lib/jobs/queue.integration.test.ts"
+    "test:db": "RUN_DB_TESTS=1 vitest run --no-file-parallelism .integration.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

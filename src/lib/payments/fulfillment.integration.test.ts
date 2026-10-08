@@ -17,6 +17,7 @@ const remote = vi.hoisted(() => ({
   createRemoteService: vi.fn(),
   registerDomainWithRegistrar: vi.fn(),
   provisionSslCertificate: vi.fn(),
+  requiresManualProvisioning: vi.fn(async (slug: string) => slug === "vds"),
 }));
 
 // Every remote integration fails loudly: if any of them ran inside the
@@ -32,6 +33,12 @@ vi.mock("@/lib/integrations/registrar", async (importOriginal) => ({
 vi.mock("@/lib/integrations/ssl", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/integrations/ssl")>()),
   provisionSslCertificate: remote.provisionSslCertificate,
+}));
+// Hosting is automated in these tests (no WHM configured locally); VDS is a
+// manual product (default manual_provisioning_categories = "vds").
+vi.mock("@/lib/provisioning/manual", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/provisioning/manual")>()),
+  requiresManualProvisioning: remote.requiresManualProvisioning,
 }));
 vi.mock("@/lib/stripe", () => ({
   getStripe: () => ({ webhooks: { constructEvent: (body: string) => JSON.parse(body) } }),
@@ -56,6 +63,7 @@ const tag = `itest-${randomUUID().slice(0, 8)}`;
 let customerId = "";
 const createdOrders: string[] = [];
 const createdInvoices: string[] = [];
+const startedAt = new Date();
 
 async function scenario(options: {
   slug: ProductCategorySlug;
@@ -172,6 +180,8 @@ describe.runIf(enabled)("payment fulfilment (integration, real Postgres)", () =>
         }
       }
       await db.provisioningJob.deleteMany({ where: { orderId: { in: createdOrders } } });
+      await db.notificationLog.deleteMany({ where: { OR: [{ userId: customerId }, { dedupeKey: { startsWith: "manual-provisioning:" }, createdAt: { gte: startedAt } }] } });
+      await db.notification.deleteMany({ where: { title: "Manuel kurulum bekliyor", createdAt: { gte: startedAt } } });
       await db.orderActivity.deleteMany({ where: { orderId: { in: createdOrders } } });
       await db.payment.deleteMany({ where: { customerId } });
       await db.invoice.deleteMany({ where: { customerId } });
@@ -240,6 +250,28 @@ describe.runIf(enabled)("payment fulfilment (integration, real Postgres)", () =>
     after = await state(invoice.id, order.id);
     expect(after.job).toMatchObject({ status: "PENDING", attempts: 1, lastError: "WHM_HTTP_500" });
     expect(after.invoice.status).toBe("PAID");
+  });
+
+  it("a VDS payment opens a MANUAL task and a PENDING service instead of remote provisioning", async () => {
+    const reference = `${tag}-kt-vds`;
+    const { order, invoice } = await scenario({ slug: "vds", reference, provider: "kuveytturk" });
+
+    await fulfillGatewayReference(reference, "Kuveyt Türk VPOS ödemesi", { requestedAmount: 120 });
+
+    const after = await state(invoice.id, order.id);
+    expect(after.invoice.status).toBe("PAID");
+    expect(after.payments[0].status).toBe("COMPLETED");
+    expect(after.job).toMatchObject({ kind: "MANUAL", status: "PENDING", serviceId: after.order.serviceId });
+    const service = await db.service.findUniqueOrThrow({ where: { id: after.order.serviceId! } });
+    expect(service).toMatchObject({ status: "PENDING", expiresAt: null, nextDueDate: null });
+    // Admins are told in-app, with the commit; nothing goes to provisioning.run.
+    expect(
+      await db.notification.count({ where: { link: `/yonetim/kurulumlar/${after.job!.id}` } })
+    ).toBeGreaterThan(0);
+    expect(await queueJobs(PROVISIONING_RUN_JOB, after.job!.id)).toHaveLength(0);
+    expect(remote.createRemoteService).not.toHaveBeenCalled();
+    // A stray queue attempt never touches a MANUAL task.
+    await expect(runQueuedProvisioningJob(after.job!.id, ctx(0))).resolves.toEqual({ skipped: "MANUAL_TASK" });
   });
 
   it("concurrent callbacks of one session settle once (one payment, one job, one follow-up)", async () => {

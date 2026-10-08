@@ -10,7 +10,7 @@ import type { Prisma } from "@prisma/client";
  * (`company_name`, `legal_seller_address` / `company_address`,
  * `company_phone`, `support_email` / `company_email`, `legal_seller_tax_id`,
  * `site_url`), except for known placeholder values, which count as unset.
- * Pure module apart from `loadCompanyInfo` (safe to import in client code).
+ * No server-only imports: safe to use from client components (site footer).
  */
 export const COMPANY_INFO_DEFAULTS = {
   name: "KLEAWORK DIGITAL LLC",
@@ -83,9 +83,9 @@ export function companyInfoFromSettings(settings: Partial<Record<string, string 
 
 type SettingsClient = { setting: Pick<Prisma.TransactionClient["setting"], "findMany"> };
 
-export async function loadCompanyInfo(client?: SettingsClient): Promise<CompanyInfo> {
-  const source = client ?? (await import("@/lib/db")).db;
-  const rows = await source.setting.findMany({
+/** Reads the company settings through the given client (db or a transaction). */
+export async function loadCompanyInfo(client: SettingsClient): Promise<CompanyInfo> {
+  const rows = await client.setting.findMany({
     where: { key: { in: [...COMPANY_SETTING_KEYS] } },
     select: { key: true, value: true },
   });
