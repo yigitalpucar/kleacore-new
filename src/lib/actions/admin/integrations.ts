@@ -11,6 +11,14 @@ import { createEInvoiceProvider, getEInvoiceConfig } from "@/lib/integrations/ef
 import { getSslProvider } from "@/lib/integrations/ssl";
 import { getSmsProvider } from "@/lib/integrations/sms";
 import { getPaymentGatewayConfig } from "@/lib/integrations/payment-gateways";
+import { getPrimaryCardGateway } from "@/lib/integrations/payment-gateways/config";
+import {
+  PAYMENT_METHODS_SETTING_KEY,
+  isPaymentMethodId,
+  normalizeOrder,
+  normalizePaymentMethodsSettings,
+  serializePaymentMethodsSettings,
+} from "@/lib/integrations/payment-gateways/methods-config";
 import { createIyzicoPaymentGatewayProvider } from "@/lib/integrations/payment-gateways/providers/iyzico";
 import { createKuveytTurkPaymentGatewayProvider } from "@/lib/integrations/payment-gateways/providers/kuveytturk";
 import { getStripe } from "@/lib/stripe";
@@ -466,19 +474,15 @@ export async function savePaymentGatewayIntegrationSettings(formData: FormData) 
   const currentPaytrSalt = getSettingValue(settings, "paytr_merchant_salt", "");
   const currentKuveytturkPassword = getSettingValue(settings, "kuveytturk_password", "");
 
+  // Credentials only: which gateways are offered is saved by
+  // savePaymentMethodsSettings (the method list is the single on/off switch).
   const result = await updateSettings([
-    {
-      key: "payment_gateway_provider",
-      value: getFormValue(formData, "payment_gateway_provider", "stripe"),
-    },
-    { key: "iyzico_enabled", value: getFormValue(formData, "iyzico_enabled", "false") },
     { key: "iyzico_api_key", value: getFormValue(formData, "iyzico_api_key") },
     {
       key: "iyzico_secret_key",
       value: getSecretFormValue(formData, "iyzico_secret_key", currentIyzicoSecret),
     },
     { key: "iyzico_test_mode", value: getFormValue(formData, "iyzico_test_mode", "true") },
-    { key: "paytr_enabled", value: getFormValue(formData, "paytr_enabled", "false") },
     { key: "paytr_merchant_id", value: getFormValue(formData, "paytr_merchant_id") },
     {
       key: "paytr_merchant_key",
@@ -488,7 +492,6 @@ export async function savePaymentGatewayIntegrationSettings(formData: FormData) 
       key: "paytr_merchant_salt",
       value: getSecretFormValue(formData, "paytr_merchant_salt", currentPaytrSalt),
     },
-    { key: "kuveytturk_enabled", value: getFormValue(formData, "kuveytturk_enabled", "false") },
     { key: "kuveytturk_merchant_id", value: getFormValue(formData, "kuveytturk_merchant_id") },
     { key: "kuveytturk_customer_id", value: getFormValue(formData, "kuveytturk_customer_id") },
     { key: "kuveytturk_username", value: getFormValue(formData, "kuveytturk_username") },
@@ -509,6 +512,42 @@ export async function savePaymentGatewayIntegrationSettings(formData: FormData) 
     result.success
       ? "Ödeme ağ geçidi ayarları kaydedildi."
       : result.error ?? "Ödeme ağ geçidi ayarları kaydedilemedi."
+  );
+}
+
+/**
+ * Saves which payment methods are offered, their order and the default.
+ * The legacy per-gateway flags and `payment_gateway_provider` are written
+ * too so older readers (module status, settings overview) stay consistent.
+ */
+export async function savePaymentMethodsSettings(formData: FormData) {
+  await requireAdmin();
+
+  const order = normalizeOrder(getFormValue(formData, "method_order").split(","));
+  const enabled = order.filter((id) => formData.get(`method_enabled_${id}`) === "on");
+  const requestedDefault = getFormValue(formData, "default_method");
+
+  if (!isPaymentMethodId(requestedDefault) || !enabled.includes(requestedDefault)) {
+    redirectWithFeedback("payment", false, "Varsayılan ödeme yöntemi etkin yöntemlerden biri olmalı.");
+  }
+
+  const methods = normalizePaymentMethodsSettings({ order, enabled, defaultMethod: requestedDefault });
+  const config = await getPaymentGatewayConfig();
+  const primaryCard = getPrimaryCardGateway({ ...config, methods });
+
+  const result = await updateSettings([
+    { key: PAYMENT_METHODS_SETTING_KEY, value: serializePaymentMethodsSettings(methods) },
+    { key: "kuveytturk_enabled", value: String(methods.enabled.includes("kuveytturk")) },
+    { key: "paytr_enabled", value: String(methods.enabled.includes("paytr")) },
+    { key: "iyzico_enabled", value: String(methods.enabled.includes("iyzico")) },
+    { key: "payment_gateway_provider", value: primaryCard ?? "" },
+  ]);
+
+  revalidatePath(INTEGRATIONS_PATH);
+  redirectWithFeedback(
+    "payment",
+    result.success,
+    result.success ? "Ödeme yöntemleri kaydedildi." : result.error ?? "Ödeme yöntemleri kaydedilemedi."
   );
 }
 
@@ -586,9 +625,7 @@ export async function testPaytrConnection() {
   const merchantId = getSettingValue(settings, "paytr_merchant_id");
   const merchantKey = getSettingValue(settings, "paytr_merchant_key");
   const merchantSalt = getSettingValue(settings, "paytr_merchant_salt");
-  const enabled = getSettingValue(settings, "paytr_enabled", "false") === "true";
-
-  if (!enabled || !merchantId || !merchantKey || !merchantSalt) {
+  if (!merchantId || !merchantKey || !merchantSalt) {
     redirectWithFeedback("payment", false, "PayTR yapılandırılmamış.");
   }
 

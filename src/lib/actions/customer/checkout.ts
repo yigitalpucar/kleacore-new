@@ -23,10 +23,12 @@ import { getPaymentGatewayProvider } from "@/lib/integrations/payment-gateways";
 import { loadCheckoutCustomer } from "@/lib/payments/orchestrator";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod, Prisma } from "@prisma/client";
+import { resolveCustomerPaymentMethod } from "@/lib/payments/payment-options";
+import { paymentRecordMethod } from "@/lib/integrations/payment-gateways/methods-config";
 import {
-  CUSTOMER_PAYMENT_METHODS,
-  type CustomerPaymentMethod,
-} from "@/lib/payments/methods";
+  balancePaymentErrorMessage,
+  payInvoicesWithBalance,
+} from "@/lib/payments/balance-payment";
 import { claimPromotionUse } from "@/lib/billing/promo-usage";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
 import {
@@ -55,8 +57,6 @@ import {
   toNumber,
 } from "@/lib/money";
 
-type CheckoutPaymentMethod = CustomerPaymentMethod;
-
 interface CheckoutAddonInput {
   sku: string;
 }
@@ -82,12 +82,11 @@ interface CheckoutItemInput {
 }
 
 interface CheckoutInput {
-  paymentMethod: CheckoutPaymentMethod;
+  /** Method id from the picker ("kuveytturk", "bank_transfer", "balance", …) or legacy "CREDIT_CARD". */
+  paymentMethod: string;
   items: CheckoutItemInput[];
   promoCode?: string;
 }
-
-const allowedPaymentMethods: CheckoutPaymentMethod[] = [...CUSTOMER_PAYMENT_METHODS];
 
 function normalizeBillingPeriod(value: string | undefined): BillingPeriod {
   return value === "yearly" ? "yearly" : "monthly";
@@ -333,23 +332,26 @@ export async function checkoutCart(input: CheckoutInput) {
     return { success: false, error: "Ödeme için giriş yapmalısınız", code: "LOGIN_REQUIRED" as const };
   }
 
-  if (!allowedPaymentMethods.includes(input.paymentMethod)) {
-    return { success: false, error: "Geçersiz ödeme yöntemi" };
-  }
-
   if (!Array.isArray(input.items) || input.items.length === 0) {
     return { success: false, error: "Sepetiniz boş" };
   }
 
+  const method = await resolveCustomerPaymentMethod(input.paymentMethod);
+  if (!method.id) {
+    return { success: false, error: "Seçilen ödeme yöntemi şu anda kullanılamıyor" };
+  }
+  const methodId = method.id;
+  const recordMethod = paymentRecordMethod(methodId);
+
   try {
-    // Card payments go through the active gateway (Kuveyt Türk, iyzico,
-    // PayTR); Stripe keeps its own session flow below.
-    const cardProvider =
-      input.paymentMethod === "CREDIT_CARD" ? await getPaymentGatewayProvider() : null;
+    // Card payments go through the gateway the customer picked (the default
+    // card gateway unless "Diğer kart ödeme seçenekleri" was used); Stripe
+    // keeps its own session flow below.
+    const cardProvider = method.cardGateway ? await getPaymentGatewayProvider(method.cardGateway) : null;
     if (cardProvider?.name === "disabled") {
       return {
         success: false,
-        error: "Kredi kartı ödemesi şu anda kullanılamıyor. Lütfen banka havalesi seçin.",
+        error: "Kartla ödeme şu anda kullanılamıyor. Lütfen başka bir ödeme yöntemi seçin.",
       };
     }
     const stripeClient = cardProvider?.name === "stripe" ? getStripe() : null;
@@ -478,8 +480,13 @@ export async function checkoutCart(input: CheckoutInput) {
         const payableLineTotal = max(0, sub(lineTotal, lineDiscount));
         const taxed = calculateTax(payableLineTotal, taxRate);
         checkoutTotalAmount = add(checkoutTotalAmount, taxed.totalAmount);
-        const isStripe = input.paymentMethod === "CREDIT_CARD";
+        const isStripe = recordMethod === "CREDIT_CARD";
         const isPaid = false;
+        const waitingNote = isStripe
+          ? "Kredi kartı ödemesi bekleniyor"
+          : recordMethod === "BALANCE"
+            ? "Bakiye ile ödeme bekleniyor"
+            : "Banka havalesi bekleniyor";
 
         const order = await tx.order.create({
           data: {
@@ -504,9 +511,7 @@ export async function checkoutCart(input: CheckoutInput) {
             approvedAt: isPaid ? now : undefined,
             completedAt: isPaid ? now : undefined,
             customerNotes: [
-              isStripe
-                ? "Sepet ödemesi kredi kartı onayı bekliyor"
-                : "Sepet ödemesi banka havalesi bekliyor",
+              `Sepet ödemesi: ${waitingNote.toLocaleLowerCase("tr-TR")}`,
               resellerDiscount && isPositive(resellerLineDiscount)
                 ? `Bayi indirimi uygulandı: %${resellerDiscount.discountPercent} (${resellerDiscount.resellerName})`
                 : null,
@@ -540,9 +545,7 @@ export async function checkoutCart(input: CheckoutInput) {
             status: isPaid ? "PAID" : "PENDING",
             paidAt: isPaid ? now : undefined,
             dueDate,
-            notes: isStripe
-              ? "Kredi kartı ödeme onayı bekleniyor"
-              : "Banka havalesi sonrası ödeme onayı bekleniyor",
+            notes: waitingNote,
             items: {
               create: {
                 description: item.productName,
@@ -559,11 +562,9 @@ export async function checkoutCart(input: CheckoutInput) {
             invoiceId: invoice.id,
             customerId,
             amount: taxed.totalAmount,
-            method: input.paymentMethod,
+            method: recordMethod,
             status: isPaid ? "COMPLETED" : "PENDING",
-            notes: isStripe
-              ? "Kredi kartı ödemesi bekleniyor"
-              : "Banka havalesi bekleniyor",
+            notes: waitingNote,
             paidAt: isPaid ? now : undefined,
           },
         });
@@ -572,12 +573,10 @@ export async function checkoutCart(input: CheckoutInput) {
           data: {
             orderId: order.id,
             action: isPaid ? "CHECKOUT_PAID" : "CHECKOUT_CREATED",
-            description: isStripe
-              ? "Sepet siparişi kredi kartı ödeme onayı bekliyor"
-              : "Sepet siparişi banka havalesi bekliyor",
+            description: `Sepet siparişi: ${waitingNote.toLocaleLowerCase("tr-TR")}`,
             performedBy: customerId,
             metadata: {
-              paymentMethod: input.paymentMethod,
+              paymentMethod: methodId,
               invoiceId: invoice.id,
               totalAmount: taxed.totalAmount,
               promoCode: promotion?.code,
@@ -622,6 +621,12 @@ export async function checkoutCart(input: CheckoutInput) {
         invoiceIds.push(invoice.id);
       }
 
+      // Checked before anything is committed: an order paid by balance is
+      // only created when the balance covers it.
+      if (recordMethod === "BALANCE" && compare(customer.balance, checkoutTotalAmount) < 0) {
+        throw new Error("INSUFFICIENT_BALANCE");
+      }
+
       if (promotion) {
         await claimPromotionUse(tx, promotion);
       }
@@ -653,7 +658,7 @@ export async function checkoutCart(input: CheckoutInput) {
         customer,
         orderNumbers: result.orderNumbers,
         totalAmount: result.totalAmount,
-        paymentMethod: input.paymentMethod,
+        paymentMethod: recordMethod,
         isPaid: false,
         promoCode: result.promoCode,
       });
@@ -730,6 +735,21 @@ export async function checkoutCart(input: CheckoutInput) {
       };
     }
 
+    let paidWithBalance = false;
+    if (recordMethod === "BALANCE") {
+      try {
+        await payInvoicesWithBalance({
+          customerId,
+          invoiceIds: result.invoiceIds,
+          performedBy: customerId,
+        });
+        paidWithBalance = true;
+      } catch (error) {
+        // Orders stay open; the customer can pay the invoices another way.
+        if (!balancePaymentErrorMessage(error)) throw error;
+      }
+    }
+
     revalidatePath("/musteri/panel");
     revalidatePath("/musteri/panel/faturalar");
     revalidatePath("/musteri/panel/hizmetlerim");
@@ -738,9 +758,12 @@ export async function checkoutCart(input: CheckoutInput) {
     revalidatePath("/yonetim/siparisler");
     revalidatePath("/yonetim/faturalar");
 
-    return { success: true, data: result };
+    return { success: true, data: { ...result, paymentMethod: methodId, paidWithBalance } };
   } catch (error) {
     if (error instanceof Error) {
+      if (error.message === "INSUFFICIENT_BALANCE") {
+        return { success: false, error: "Bakiyeniz bu sipariş için yeterli değil" };
+      }
       if (error.message === "CUSTOMER_NOT_FOUND") {
         return { success: false, error: "Kullanıcı bulunamadı" };
       }

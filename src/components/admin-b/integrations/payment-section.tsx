@@ -1,5 +1,5 @@
-import { Landmark } from "lucide-react";
-import { FormField, FormSection, IconTile, StatusBadge, appButton } from "@/components/app";
+import { Landmark, Trash2 } from "lucide-react";
+import { CopyButton, FormSection, FormField, IconTile, StatusBadge, appButton } from "@/components/app";
 import { Input } from "@/components/ui/input";
 import {
   savePaymentGatewayIntegrationSettings,
@@ -8,29 +8,17 @@ import {
   testPaytrConnection,
   testStripeConnection,
 } from "@/lib/actions/admin/integrations";
-import { CodeValue, EnvRow, FieldGrid, ToggleRow, inputClass, selectClass } from "./shared";
+import { deleteBankAccount, saveBankAccount, toggleBankAccount } from "@/lib/actions/admin/bank-transfer";
+import { PaymentMethodsForm } from "./payment-methods-form";
+import { CodeValue, EnvRow, FieldGrid, inputClass, selectClass } from "./shared";
 import type { EnvFlags, PaymentGatewayConfig } from "./types";
 
 export function PaymentSection({ paymentGateway, env }: { paymentGateway: PaymentGatewayConfig; env: EnvFlags }) {
   return (
     <div className="space-y-8">
-      <form action={savePaymentGatewayIntegrationSettings} className="space-y-8">
-        <FormSection title="Ödeme ağ geçidi" description="Kredi kartı ödemeleri için aktif sağlayıcıyı seçin.">
-          <FormField label="Aktif sağlayıcı" htmlFor="payment_gateway_provider">
-            <select
-              id="payment_gateway_provider"
-              name="payment_gateway_provider"
-              defaultValue={paymentGateway.provider}
-              className={selectClass}
-            >
-              <option value="kuveytturk">Kuveyt Türk Sanal POS (önerilen)</option>
-              <option value="stripe">Stripe</option>
-              <option value="iyzico">iyzico</option>
-              <option value="paytr">PayTR</option>
-            </select>
-          </FormField>
-        </FormSection>
+      <PaymentMethodsForm methods={paymentGateway.methods} />
 
+      <form action={savePaymentGatewayIntegrationSettings} className="space-y-8">
         <FormSection
           title="Kuveyt Türk Sanal POS"
           description="3D Model (TDV2.0.0) ile tek çekim kredi kartı ödemesi. Kart formu sitemizde açılır, kart bilgisi saklanmaz."
@@ -40,12 +28,6 @@ export function PaymentSection({ paymentGateway, env }: { paymentGateway: Paymen
             </button>
           }
         >
-          <ToggleRow
-            title="Kuveyt Türk aktif"
-            description="Aktif sağlayıcı olarak seçildiğinde kart ödemeleri bu POS üzerinden alınır."
-            fieldName="kuveytturk_enabled"
-            defaultChecked={paymentGateway.kuveytturk.enabled}
-          />
           <FieldGrid>
             <FormField label="Üye işyeri no (MerchantId)" htmlFor="kuveytturk_merchant_id">
               <Input
@@ -112,12 +94,6 @@ export function PaymentSection({ paymentGateway, env }: { paymentGateway: Paymen
             </button>
           }
         >
-          <ToggleRow
-            title="iyzico aktif"
-            description="Sağlayıcı seçildiğinde kullanılabilir."
-            fieldName="iyzico_enabled"
-            defaultChecked={paymentGateway.iyzico.enabled}
-          />
           <FieldGrid>
             <FormField label="API anahtarı" htmlFor="iyzico_api_key">
               <Input
@@ -162,12 +138,6 @@ export function PaymentSection({ paymentGateway, env }: { paymentGateway: Paymen
             </button>
           }
         >
-          <ToggleRow
-            title="PayTR aktif"
-            description="Sağlayıcı seçildiğinde kullanılabilir."
-            fieldName="paytr_enabled"
-            defaultChecked={paymentGateway.paytr.enabled}
-          />
           <FieldGrid>
             <FormField label="Mağaza no (merchant_id)" htmlFor="paytr_merchant_id">
               <Input
@@ -204,7 +174,7 @@ export function PaymentSection({ paymentGateway, env }: { paymentGateway: Paymen
 
         <div className="flex justify-end border-t pt-6">
           <button type="submit" className={appButton()}>
-            Ödeme ayarlarını kaydet
+            Sağlayıcı bilgilerini kaydet
           </button>
         </div>
       </form>
@@ -240,17 +210,109 @@ export function PaymentSection({ paymentGateway, env }: { paymentGateway: Paymen
         <CodeValue label="Webhook URL" value={`${env.appBaseUrl}/api/payments/stripe/webhook`} />
       </FormSection>
 
-      <FormSection title="Banka havalesi" description="Manuel onay akışı; ek yapılandırma gerekmez.">
-        <div className="flex items-center gap-3">
-          <IconTile>
-            <Landmark />
-          </IconTile>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">Havale / EFT</p>
-            <p className="text-xs text-muted-foreground">Ödemeler yönetim panelinden onaylanır.</p>
+      <FormSection
+        title="Havale / EFT banka hesapları"
+        description="Fatura ödeme sayfasında müşterilere gösterilir. Müşteri açıklamaya fatura numarasını yazar ve ödeme bildirimi gönderir; bildirimler Faturalar › Havale bildirimleri ekranında onaylanır."
+      >
+        {paymentGateway.bankAccounts.length === 0 ? (
+          <div className="flex items-center gap-3 rounded-md border border-dashed p-3">
+            <IconTile>
+              <Landmark />
+            </IconTile>
+            <p className="text-sm text-muted-foreground">
+              Henüz banka hesabı yok. Hesap eklenene kadar Havale / EFT müşterilere gösterilmez.
+            </p>
           </div>
-          <StatusBadge tone="info" label="Dahili · Aktif" />
-        </div>
+        ) : (
+          <ul className="divide-y rounded-lg border">
+            {paymentGateway.bankAccounts.map((account) => (
+              <li key={account.id} className="flex flex-wrap items-start gap-3 p-3">
+                <div className="min-w-0 flex-1 text-sm">
+                  <p className="flex flex-wrap items-center gap-2 font-medium">
+                    {account.bankName}
+                    {account.branch ? <span className="font-normal text-muted-foreground">· {account.branch}</span> : null}
+                    <StatusBadge tone={account.isActive ? "success" : "muted"} label={account.isActive ? "Yayında" : "Gizli"} />
+                  </p>
+                  <p className="text-muted-foreground">
+                    {account.accountName} · {account.currency} · Sıra {account.sortOrder}
+                  </p>
+                  <p className="flex items-center gap-1 font-mono text-[13px]">
+                    {account.ibanFormatted}
+                    <CopyButton value={account.iban} label="IBAN'ı kopyala" />
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <form action={toggleBankAccount}>
+                    <input type="hidden" name="id" value={account.id} />
+                    <button type="submit" className={appButton({ variant: "outline", size: "sm" })}>
+                      {account.isActive ? "Gizle" : "Yayınla"}
+                    </button>
+                  </form>
+                  <form action={deleteBankAccount}>
+                    <input type="hidden" name="id" value={account.id} />
+                    <button
+                      type="submit"
+                      aria-label={`${account.bankName} hesabını sil`}
+                      className={appButton({ variant: "destructive", size: "icon-sm" })}
+                    >
+                      <Trash2 aria-hidden />
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form action={saveBankAccount} className="space-y-5 border-t pt-5">
+          <p className="text-sm font-medium">Hesap ekle</p>
+          <FieldGrid>
+            <FormField label="Banka" htmlFor="bank_name">
+              <Input id="bank_name" name="bankName" required placeholder="Kuveyt Türk" className={inputClass} />
+            </FormField>
+            <FormField label="Şube" htmlFor="bank_branch" hint="İsteğe bağlı">
+              <Input id="bank_branch" name="branch" placeholder="Merkez / 001" className={inputClass} />
+            </FormField>
+          </FieldGrid>
+          <FieldGrid>
+            <FormField label="Hesap sahibi" htmlFor="bank_account_name">
+              <Input id="bank_account_name" name="accountName" required className={inputClass} />
+            </FormField>
+            <FormField label="IBAN" htmlFor="bank_iban" hint="TR ile başlayan 26 karakter; kontrol basamağı doğrulanır.">
+              <Input
+                id="bank_iban"
+                name="iban"
+                required
+                autoComplete="off"
+                placeholder="TR00 0000 0000 0000 0000 0000 00"
+                className={`${inputClass} font-mono`}
+              />
+            </FormField>
+          </FieldGrid>
+          <FieldGrid>
+            <FormField label="Para birimi" htmlFor="bank_currency">
+              <select id="bank_currency" name="currency" defaultValue="TRY" className={selectClass}>
+                <option value="TRY">TRY</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </FormField>
+            <FormField label="Sıra" htmlFor="bank_sort">
+              <Input
+                id="bank_sort"
+                name="sortOrder"
+                type="number"
+                defaultValue={paymentGateway.bankAccounts.length}
+                className={inputClass}
+              />
+            </FormField>
+          </FieldGrid>
+          <div className="flex justify-end">
+            <button type="submit" className={appButton()}>
+              Hesabı ekle
+            </button>
+          </div>
+        </form>
       </FormSection>
     </div>
   );

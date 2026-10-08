@@ -1,3 +1,5 @@
+import type { PaymentMethodId } from "@/lib/integrations/payment-gateways/methods-config";
+import type { BankAccountView } from "@/lib/dal/bank-transfer";
 import type { IntegrationModule, IntegrationOverview } from "@/lib/integrations/module-status";
 
 export type { IntegrationModule, IntegrationOverview };
@@ -70,8 +72,19 @@ export interface WebhooksConfig {
   payments: string;
 }
 
+export interface PaymentMethodsView {
+  order: PaymentMethodId[];
+  enabled: PaymentMethodId[];
+  defaultMethod: PaymentMethodId;
+  /** No saved list yet: values were derived from the old single-provider settings. */
+  derived: boolean;
+  /** Credentials / bank accounts present, per method. */
+  configured: Record<PaymentMethodId, boolean>;
+}
+
 export interface PaymentGatewayConfig {
-  provider: string;
+  methods: PaymentMethodsView;
+  bankAccounts: BankAccountView[];
   iyzico: { enabled: boolean; apiKey: string; hasSecretKey: boolean; testMode: boolean };
   paytr: { enabled: boolean; merchantId: string; hasMerchantKey: boolean; hasMerchantSalt: boolean };
   kuveytturk: {
