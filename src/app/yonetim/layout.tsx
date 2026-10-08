@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { db } from "@/lib/db";
 import { getNotifications } from "@/lib/dal/notifications";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requireStaff } from "@/lib/utils/auth-helpers";
 
 export const metadata: Metadata = {
   title: {
@@ -13,7 +13,9 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireAdmin();
+  // Any staff role gets in (2FA enforced when require_staff_2fa is on); pages
+  // check their own permission and the nav is filtered by role.
+  const session = await requireStaff();
   const user = session.user;
 
   const [
@@ -37,6 +39,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <AdminShell
       user={{ name: user?.name || "Yönetici", email: user?.email }}
+      role={user.role}
       counts={{
         pendingOrders,
         openTickets,

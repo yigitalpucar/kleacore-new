@@ -3,7 +3,8 @@
 import type { TicketStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { emitTicketClosed, statusChange } from "@/lib/support/tickets";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { STAFF_ROLES } from "@/lib/auth/permissions";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 
 // Staff replies (with attachments) go through POST
@@ -17,7 +18,7 @@ function revalidateTicket(ticketId: string) {
 }
 
 export async function assignTicket(ticketId: string, adminId: string) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
 
   try {
     const ticket = await db.supportTicket.findUnique({
@@ -28,7 +29,7 @@ export async function assignTicket(ticketId: string, adminId: string) {
     }
 
     const admin = await db.user.findUnique({
-      where: { id: adminId, role: "ADMIN" },
+      where: { id: adminId, role: { in: [...STAFF_ROLES] }, status: "ACTIVE" },
     });
     if (!admin) {
       return { success: false, error: "Geçersiz admin kullanıcı" };
@@ -48,7 +49,7 @@ export async function assignTicket(ticketId: string, adminId: string) {
 }
 
 export async function closeTicket(ticketId: string) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
 
   try {
     const ticket = await db.supportTicket.findUnique({
@@ -79,7 +80,7 @@ export async function closeTicket(ticketId: string) {
 }
 
 export async function reopenTicket(ticketId: string) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
 
   try {
     const ticket = await db.supportTicket.findUnique({
@@ -109,7 +110,7 @@ const SETTABLE_STATUSES: TicketStatus[] = ["OPEN", "ADMIN_REPLY", "WAITING"];
  * starts the auto-close clock. Closing has its own action.
  */
 export async function setTicketStatus(ticketId: string, status: TicketStatus) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
   if (!SETTABLE_STATUSES.includes(status)) return { success: false, error: "Geçersiz durum" };
 
   const result = await db.supportTicket.updateMany({
@@ -127,7 +128,7 @@ export async function setTicketStatus(ticketId: string, status: TicketStatus) {
  * address, after the staff member checked the sender.
  */
 export async function linkTicketToCustomer(ticketId: string, customerEmail: string) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
   const email = customerEmail.trim().toLowerCase();
   const customer = await db.user.findFirst({
     where: { email: { equals: email, mode: "insensitive" }, role: "CUSTOMER" },

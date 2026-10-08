@@ -16,7 +16,7 @@ vi.mock("@/lib/db", () => ({
     moduleInstance: { findUnique: mocks.moduleInstanceFindUnique },
   },
 }));
-vi.mock("@/lib/utils/auth-helpers", () => ({ requireAdmin: vi.fn().mockResolvedValue({ user: { id: "adm-1" } }) }));
+vi.mock("@/lib/utils/auth-helpers", () => ({ requirePermission: vi.fn().mockResolvedValue({ user: { id: "adm-1" } }) }));
 vi.mock("@/lib/activity-log", () => ({ logActivity: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/modules/legacy", () => ({ syncLegacyModuleInstances: vi.fn(), verifyLegacyModuleInstances: vi.fn() }));

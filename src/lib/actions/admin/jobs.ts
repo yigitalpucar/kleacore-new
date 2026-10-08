@@ -8,7 +8,7 @@ import { cancelQueueJob, findQueueJob, retryQueueJob } from "@/lib/jobs/admin";
 import { jobRegistry, PROVISIONING_RUN_JOB } from "@/lib/jobs/definitions";
 import { drainJobs } from "@/lib/jobs/worker";
 import { createLogger } from "@/lib/logger";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("admin.jobs");
 
@@ -40,7 +40,7 @@ function revalidate() {
  * for the next drain / worker poll.
  */
 export async function retryQueueJobAction(name: string, id: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("jobs.manage");
   const parsed = inputSchema.safeParse({ name, id });
   if (!parsed.success) return { success: false, error: "Geçersiz iş" };
 
@@ -77,7 +77,7 @@ export async function retryQueueJobAction(name: string, id: string): Promise<Act
 }
 
 export async function cancelQueueJobAction(name: string, id: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("jobs.manage");
   const parsed = inputSchema.safeParse({ name, id });
   if (!parsed.success) return { success: false, error: "Geçersiz iş" };
 

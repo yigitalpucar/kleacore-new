@@ -6,7 +6,7 @@ import {
   retryEInvoiceRecord,
   syncEInvoiceStatuses,
 } from "@/lib/integrations/efatura";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 
 function failure(error: unknown, fallback: string) {
@@ -22,7 +22,7 @@ function revalidate(invoiceId?: string) {
 }
 
 export async function retryEInvoiceRecordAction(recordId: string) {
-  await requireAdmin();
+  await requirePermission("efatura.manage");
 
   try {
     const record = await retryEInvoiceRecord(recordId);
@@ -36,7 +36,7 @@ export async function retryEInvoiceRecordAction(recordId: string) {
 
 /** Issue for a paid invoice that has no e-invoice record yet (e.g. paid before the module was enabled). */
 export async function issueEInvoiceForInvoiceAction(invoiceId: string) {
-  await requireAdmin();
+  await requirePermission("efatura.manage");
 
   try {
     const outcome = await issueEInvoiceForInvoice(invoiceId);
@@ -49,7 +49,7 @@ export async function issueEInvoiceForInvoiceAction(invoiceId: string) {
 }
 
 export async function syncEInvoiceStatusesAction() {
-  await requireAdmin();
+  await requirePermission("efatura.manage");
 
   try {
     const result = await syncEInvoiceStatuses({ limit: 100 });
@@ -61,7 +61,7 @@ export async function syncEInvoiceStatusesAction() {
 }
 
 export async function cancelEInvoiceRecordAction(recordId: string, reason: string) {
-  await requireAdmin();
+  await requirePermission("efatura.manage");
 
   try {
     const record = await cancelEInvoiceRecord(recordId, reason);

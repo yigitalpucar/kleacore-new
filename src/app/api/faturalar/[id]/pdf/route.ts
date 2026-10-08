@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { hasPermission } from "@/lib/auth/permissions";
 import { getInvoiceById } from "@/lib/dal/invoices";
 import { forbidden, notFound, unauthorized } from "@/lib/utils/api-response";
 
@@ -122,7 +123,7 @@ export async function GET(
   const invoice = await getInvoiceById(id);
   if (!invoice) return notFound("Fatura bulunamadi");
 
-  const isAdmin = user.role === "ADMIN";
+  const isAdmin = hasPermission(user.role, "invoices.view");
   const isOwner = user.role === "CUSTOMER" && invoice.customerId === user.id;
 
   if (!isAdmin && !isOwner) return forbidden();

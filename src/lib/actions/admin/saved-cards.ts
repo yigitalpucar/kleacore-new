@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { updateSettings } from "@/lib/actions/admin/settings";
 import { SAVED_CARD_SETTING_KEYS } from "@/lib/payments/saved-cards";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const PAGE = "/yonetim/faturalar/otomatik-tahsilat";
 
@@ -14,7 +14,7 @@ function intField(formData: FormData, name: string, fallback: number, min: numbe
 
 /** Saved cards on/off, max auto-charge attempts per invoice, grace window. */
 export async function saveSavedCardSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("invoices.edit");
   const result = await updateSettings([
     { key: SAVED_CARD_SETTING_KEYS.enabled, value: String(formData.get("enabled") === "on") },
     { key: SAVED_CARD_SETTING_KEYS.maxAttempts, value: intField(formData, "maxAttempts", 3, 1, 10) },

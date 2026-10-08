@@ -86,6 +86,8 @@ const DESCRIPTIONS: Record<string, string> = {
   closesAt: "Otomatik kapanma zamanı",
   hasAccount: "Müşteri hesabı var mı",
   replyTo: "Yanıt adresi (destek posta kutusu)",
+  roleLabel: "Personel rolü (ör. Destek)",
+  invitedBy: "Davet eden",
   receipt: "Makbuz mu",
 };
 

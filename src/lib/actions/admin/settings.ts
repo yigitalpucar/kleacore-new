@@ -6,7 +6,7 @@ import {
   isSecretSettingKey,
   MASKED_SECRET_PLACEHOLDER,
 } from "@/lib/secrets/setting-keys";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 
 interface SettingInput {
@@ -15,7 +15,7 @@ interface SettingInput {
 }
 
 export async function updateSettings(data: SettingInput[]) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   try {
     if (!Array.isArray(data) || data.length === 0) {

@@ -11,7 +11,7 @@ import {
   loadCustomerRecipient,
   sendAffiliatePayoutCompletedEmail,
 } from "@/lib/notifications/email";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { toNumber } from "@/lib/money";
 
@@ -29,7 +29,7 @@ function mapPayoutError(error: unknown) {
 }
 
 export async function approvePayout(paymentId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("invoices.edit");
 
   try {
     await approveAffiliatePayout(paymentId, session.user.id);
@@ -41,7 +41,7 @@ export async function approvePayout(paymentId: string) {
 }
 
 export async function rejectPayout(paymentId: string, reason?: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("invoices.edit");
 
   try {
     await rejectAffiliatePayout(paymentId, session.user.id, reason);
@@ -53,7 +53,7 @@ export async function rejectPayout(paymentId: string, reason?: string) {
 }
 
 export async function completePayout(paymentId: string, notes?: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("invoices.edit");
 
   try {
     const payment = await completeAffiliatePayout(

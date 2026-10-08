@@ -5,7 +5,7 @@ import { logActivity } from "@/lib/activity-log";
 import { redeliverEvent } from "@/lib/events/dispatch";
 import { getSubscriber } from "@/lib/events/subscribers";
 import { createLogger } from "@/lib/logger";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("admin.events");
 
@@ -15,7 +15,7 @@ const log = createLogger("admin.events");
  * even if it delivered (notification dedupe keys still prevent a second mail).
  */
 export async function redeliverEventAction(eventId: string, subscriber?: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("jobs.manage");
   if (subscriber && !getSubscriber(subscriber)) {
     return { success: false as const, error: "Bilinmeyen abone" };
   }

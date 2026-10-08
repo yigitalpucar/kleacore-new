@@ -3,6 +3,7 @@ import { getOrders, getOrderStats } from "@/lib/dal/orders";
 import { parsePagination } from "@/lib/utils/pagination";
 import { serializeOrder, withDefaultPerPage } from "../_components/serialize";
 import { AllOrdersContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function AllOrdersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("orders.view");
   const sp = await searchParams;
   const params = parsePagination(withDefaultPerPage(sp));
 

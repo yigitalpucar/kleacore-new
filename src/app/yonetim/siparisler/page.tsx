@@ -6,12 +6,14 @@ import { getOrders, getOrderStats } from "@/lib/dal/orders";
 import { formatTRY } from "@/lib/format/price";
 import { OrderTable } from "./_components/order-list";
 import { serializeOrder } from "./_components/serialize";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Siparişler" };
 
 export default async function OrdersDashboardPage() {
+  await requirePermission("orders.view");
   const [stats, recentResult] = await Promise.all([
     getOrderStats(),
     getOrders({ page: 1, perPage: 8, sortBy: "createdAt", sortOrder: "desc" }),

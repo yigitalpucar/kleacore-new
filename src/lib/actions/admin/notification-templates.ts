@@ -20,7 +20,7 @@ import {
 } from "@/lib/notifications/template-admin";
 import type { TemplateFieldError } from "@/lib/notifications/template-variables";
 import { hasTemplate } from "@/lib/notifications/templates";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("admin.notification-templates");
 
@@ -46,7 +46,7 @@ function revalidate() {
 
 /** Live preview of an unsaved draft with the template's sample data. */
 export async function previewTemplateDraftAction(key: string, channelInput: string, draft: TemplateDraft) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
   const channel = parseChannel(channelInput);
   if (!channel || !hasTemplate(key)) return { success: false as const, error: "Geçersiz şablon" };
   try {
@@ -65,7 +65,7 @@ export async function previewTemplateDraftAction(key: string, channelInput: stri
 }
 
 export async function saveTemplateAction(key: string, channelInput: string, draft: TemplateDraft) {
-  const session = await requireAdmin();
+  const session = await requirePermission("settings.manage");
   const channel = parseChannel(channelInput);
   if (!channel) return { success: false as const, error: "Geçersiz kanal" };
   try {
@@ -85,7 +85,7 @@ export async function saveTemplateAction(key: string, channelInput: string, draf
 }
 
 export async function revertTemplateAction(key: string, channelInput: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("settings.manage");
   const channel = parseChannel(channelInput);
   if (!channel) return { success: false as const, error: "Geçersiz kanal" };
   try {
@@ -107,7 +107,7 @@ export async function revertTemplateAction(key: string, channelInput: string) {
 }
 
 export async function restoreTemplateVersionAction(key: string, channelInput: string, versionId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("settings.manage");
   const channel = parseChannel(channelInput);
   if (!channel) return { success: false as const, error: "Geçersiz kanal" };
   try {
@@ -131,7 +131,7 @@ export async function restoreTemplateVersionAction(key: string, channelInput: st
  * own e-mail (or phone for SMS). Not logged as a customer notification.
  */
 export async function sendTemplateTestAction(key: string, channelInput: string, draft: TemplateDraft) {
-  const session = await requireAdmin();
+  const session = await requirePermission("settings.manage");
   const channel = parseChannel(channelInput);
   if (!channel || !hasTemplate(key)) return { success: false as const, error: "Geçersiz şablon" };
 

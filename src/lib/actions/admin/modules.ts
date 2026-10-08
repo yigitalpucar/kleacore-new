@@ -16,7 +16,7 @@ import {
 import { syncLegacyModuleInstances, verifyLegacyModuleInstances } from "@/lib/modules/legacy";
 import { getModule, parseProductOptions } from "@/lib/modules/registry";
 import { describeSchema, formValuesToInput, type SchemaFormValues } from "@/lib/modules/schema-form";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("actions.admin.modules");
 const MODULES_PATH = "/yonetim/moduller";
@@ -44,7 +44,7 @@ function optionalInt(value: string) {
 }
 
 export async function saveModuleInstanceAction(input: ModuleInstanceFormInput): Promise<ActionResult<{ id: string }>> {
-  const session = await requireAdmin();
+  const session = await requirePermission("modules.manage");
   const manifest = getModule(input.moduleId);
   if (!manifest) return { success: false, error: "Modül bulunamadı." };
 
@@ -89,7 +89,7 @@ export async function saveModuleInstanceAction(input: ModuleInstanceFormInput): 
 
 /** "Bağlantıyı test et" for an instance; records the result on the row. */
 export async function testModuleInstanceAction(id: string): Promise<{ ok: boolean; message: string }> {
-  await requireAdmin();
+  await requirePermission("modules.manage");
   const health = await runHealthCheck(id);
   revalidatePath(MODULES_PATH);
   revalidatePath(`${MODULES_PATH}/${id}`);
@@ -98,13 +98,13 @@ export async function testModuleInstanceAction(id: string): Promise<{ ok: boolea
 
 /** Health check of a settings-backed module (payment, e-invoice, SMS). */
 export async function testSettingsModuleAction(moduleId: string): Promise<{ ok: boolean; message: string }> {
-  await requireAdmin();
+  await requirePermission("modules.manage");
   const health = await runSettingsHealthCheck(moduleId);
   return { ok: health.ok, message: health.message ?? (health.ok ? "Bağlantı başarılı." : "Bağlantı başarısız.") };
 }
 
 export async function setModuleInstanceActiveAction(id: string, isActive: boolean): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("modules.manage");
   const instance = await db.moduleInstance.update({ where: { id }, data: { isActive } }).catch(() => null);
   if (!instance) return { success: false, error: "Modül örneği bulunamadı." };
   await logActivity({
@@ -120,7 +120,7 @@ export async function setModuleInstanceActiveAction(id: string, isActive: boolea
 
 /** Detaches a legacy mirror: its config becomes editable here and stops following the Entegrasyonlar form. */
 export async function unlinkLegacyModuleInstanceAction(id: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("modules.manage");
   const instance = await db.moduleInstance.update({ where: { id }, data: { legacySource: null } }).catch(() => null);
   if (!instance) return { success: false, error: "Modül örneği bulunamadı." };
   await logActivity({ userId: session.user.id, action: "MODULE_INSTANCE_UNLINK_LEGACY", entity: "ModuleInstance", entityId: id });
@@ -130,7 +130,7 @@ export async function unlinkLegacyModuleInstanceAction(id: string): Promise<Acti
 
 /** Deletes an instance nothing points at (products, services, servers, IP pools). */
 export async function deleteModuleInstanceAction(id: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("modules.manage");
   const usage = await db.moduleInstance.findUnique({
     where: { id },
     select: { _count: { select: { products: true, services: true, servers: true, ipPools: true } } },
@@ -153,7 +153,7 @@ export async function deleteModuleInstanceAction(id: string): Promise<ActionResu
 export async function syncLegacyModulesAction(): Promise<
   ActionResult<{ reports: Awaited<ReturnType<typeof syncLegacyModuleInstances>>; verification: Awaited<ReturnType<typeof verifyLegacyModuleInstances>> }>
 > {
-  const session = await requireAdmin();
+  const session = await requirePermission("modules.manage");
   try {
     const reports = await syncLegacyModuleInstances();
     const verification = await verifyLegacyModuleInstances();
@@ -222,7 +222,7 @@ export async function checkProductPackagesAction(
   productId: string,
   input: { moduleInstanceId: string; values: SchemaFormValues }
 ): Promise<ActionResult<{ check: ProductPackageCheck }>> {
-  await requireAdmin();
+  await requirePermission("modules.manage");
   const product = await db.product.findUnique({ where: { id: productId }, select: { sku: true } });
   if (!product) return { success: false, error: "Ürün bulunamadı." };
   const instance = await db.moduleInstance.findUnique({ where: { id: input.moduleInstanceId }, select: { moduleId: true } });
@@ -243,7 +243,7 @@ export async function saveProductModuleBindingAction(
   productId: string,
   input: { moduleInstanceId: string | null; values: SchemaFormValues }
 ): Promise<ActionResult<{ warning?: string }>> {
-  const session = await requireAdmin();
+  const session = await requirePermission("modules.manage");
   const product = await db.product.findUnique({ where: { id: productId }, include: { category: true } });
   if (!product) return { success: false, error: "Ürün bulunamadı." };
 
@@ -304,7 +304,7 @@ export async function assignServiceModuleAction(
   serviceId: string,
   input: { moduleInstanceId: string | null; remoteId: string }
 ): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("modules.manage");
   const remoteId = input.remoteId.trim() || null;
   if (input.moduleInstanceId) {
     const instance = await db.moduleInstance.findUnique({ where: { id: input.moduleInstanceId }, select: { kind: true } });

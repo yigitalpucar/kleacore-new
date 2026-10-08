@@ -4,12 +4,14 @@ import { DNS_HOSTING_IP_SETTING, getDnsDefaultProvider } from "@/lib/dns/setting
 import { getSettingValue } from "@/lib/integrations/settings";
 import { listActiveInstances } from "@/lib/modules/instances";
 import { AdminDnsContent, type ZoneRow } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "DNS bölgeleri" };
 
 export default async function AdminDnsPage() {
+  await requirePermission("dns.manage");
   const [zones, provider, hostingIp, instances] = await Promise.all([
     db.dnsZone.findMany({
       orderBy: { createdAt: "desc" },

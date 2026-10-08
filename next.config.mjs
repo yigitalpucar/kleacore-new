@@ -5,6 +5,10 @@ const nextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
+  experimental: {
+    // forbidden() → 403 page for staff without the needed permission (3.6).
+    authInterrupts: true,
+  },
   async headers() {
     return [
       {

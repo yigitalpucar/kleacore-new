@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  requireAdmin: vi.fn(),
+  requirePermission: vi.fn(),
   revalidatePath: vi.fn(),
   logActivity: vi.fn(),
   db: {
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/utils/auth-helpers", () => ({ requireAdmin: mocks.requireAdmin }));
+vi.mock("@/lib/utils/auth-helpers", () => ({ requirePermission: mocks.requirePermission }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("@/lib/activity-log", () => ({ logActivity: mocks.logActivity }));
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
@@ -27,11 +27,11 @@ const ADMIN = { user: { id: "admin_1", role: "ADMIN" } };
 
 describe("system-status admin actions", () => {
   beforeEach(() => {
-    mocks.requireAdmin.mockResolvedValue(ADMIN);
+    mocks.requirePermission.mockResolvedValue(ADMIN);
   });
 
   it("stops before touching the database when the caller is not an admin", async () => {
-    mocks.requireAdmin.mockRejectedValue(new Error("NEXT_REDIRECT"));
+    mocks.requirePermission.mockRejectedValue(new Error("NEXT_REDIRECT"));
     await expect(createStatusComponent({ serviceName: "DNS", status: "OPERATIONAL" })).rejects.toThrow("NEXT_REDIRECT");
     await expect(deleteIncident("x")).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.db.systemStatus.create).not.toHaveBeenCalled();

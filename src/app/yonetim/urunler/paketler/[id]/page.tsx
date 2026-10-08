@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getProductById } from "@/lib/dal/products";
 import { PackageDetailContent } from "./content";
 import { serializeMoney } from "@/lib/money";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function ProductDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePermission("products.manage");
   const { id } = await params;
   const product = await getProductById(id);
 

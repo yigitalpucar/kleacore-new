@@ -3,6 +3,7 @@ import { getNotificationLogStats, getNotificationLogs } from "@/lib/dal/notifica
 import { listTemplates } from "@/lib/notifications/templates";
 import { parsePagination } from "@/lib/utils/pagination";
 import { BildirimlerContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function BildirimlerPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("settings.manage");
   const sp = await searchParams;
   const { page } = parsePagination(sp);
   const filters = {

@@ -4,6 +4,7 @@ import { parsePagination } from "@/lib/utils/pagination";
 import { PackagesContent } from "./content";
 import type { ProductCategorySlug, ProductStatus } from "@prisma/client";
 import { serializeMoney } from "@/lib/money";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export default async function PackagesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("products.manage");
   const sp = await searchParams;
   const params = parsePagination(sp);
 

@@ -3,7 +3,7 @@ import { FX_CURRENCIES } from "@/lib/fx/tcmb";
 import { getLatestRates } from "@/lib/fx/rates";
 import { TLD_PRICE_KINDS, getTldPricingOverview } from "@/lib/fx/tld-pricing";
 import { toNumber, toNumberOrNull } from "@/lib/money";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { TldPricingContent, type TldPriceRow } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "TLD fiyatları" };
 
 export default async function TldPricingPage() {
-  await requireAdmin();
+  await requirePermission("products.manage");
   const [overview, latest] = await Promise.all([getTldPricingOverview(), getLatestRates(FX_CURRENCIES)]);
 
   const rows: TldPriceRow[] = overview.suggestions.map((s) => ({

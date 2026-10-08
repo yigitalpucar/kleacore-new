@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/utils/auth-helpers", () => ({
   requireCustomer: vi.fn().mockResolvedValue({ user: { id: "cus-1" } }),
-  requireAdmin: vi.fn().mockResolvedValue({ user: { id: "adm-1" } }),
+  requirePermission: vi.fn().mockResolvedValue({ user: { id: "adm-1" } }),
 }));
 vi.mock("@/lib/services/panel-access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/services/panel-access")>()),

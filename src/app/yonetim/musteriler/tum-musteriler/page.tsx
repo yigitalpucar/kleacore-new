@@ -3,6 +3,7 @@ import { getCustomers } from "@/lib/dal/customers";
 import { parsePagination } from "@/lib/utils/pagination";
 import { listPerPage, toCustomerRow } from "../_components/customer-row";
 import { CustomerSegmentPage } from "../_components/segment-page";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function AllCustomersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("customers.view");
   const sp = await searchParams;
   const params = parsePagination(sp);
   const result = await getCustomers({ ...params, perPage: listPerPage(sp, params.perPage) });

@@ -1,12 +1,16 @@
-/**
- * Who may see a ticket (and its attachments). Staff roles: ADMIN today;
- * SUPPORT is listed for the staff-roles work (3.6) — compared as strings so
- * this compiles before and after that enum change.
- */
-const SUPPORT_STAFF_ROLES: ReadonlySet<string> = new Set(["ADMIN", "SUPPORT"]);
+import { hasPermission } from "@/lib/auth/permissions";
 
+/**
+ * Who may see a ticket (and its attachments): staff holding tickets.view
+ * (ADMIN, SUPPORT — src/lib/auth/permissions.ts), or the ticket's customer.
+ */
 export function isSupportStaff(role: string | null | undefined): boolean {
-  return !!role && SUPPORT_STAFF_ROLES.has(role);
+  return hasPermission(role, "tickets.view");
+}
+
+/** Staff who may answer tickets (reply with attachments, canned replies). */
+export function canReplyToTickets(role: string | null | undefined): boolean {
+  return hasPermission(role, "tickets.reply");
 }
 
 export interface TicketViewer {

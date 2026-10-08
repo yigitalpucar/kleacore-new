@@ -1,5 +1,6 @@
 "use client";
 
+import { canAccessRoute, hasPermission, type StaffRole } from "@/lib/auth/permissions";
 import Link from "next/link";
 import {
   Ban,
@@ -297,7 +298,11 @@ const transactionColumns: ColumnDef<TransactionRow>[] = [
 
 /* ------------------------------------------------------------------ page */
 
-export function CustomerDetailContent({ customer }: { customer: CustomerDetail }) {
+export function CustomerDetailContent({ customer, role }: { customer: CustomerDetail; role: StaffRole }) {
+  // Sections and actions follow the viewer's permissions (the page also omits the data).
+  const canEdit = hasPermission(role, "customers.edit");
+  const showInvoices = hasPermission(role, "invoices.view");
+  const showOrders = hasPermission(role, "orders.view");
   const { handleSuspendCustomer, handleActivateCustomer, handleCloseCustomer, handleMarkEmailVerified } =
     useCustomerActions();
   const fullName = `${customer.name} ${customer.surname}`.trim() || customer.email;
@@ -337,13 +342,13 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
         }
         actions={
           <>
-            <EditCustomerDialog customer={customer} />
+            {canEdit && <EditCustomerDialog customer={customer} />}
             <a href={`mailto:${customer.email}`} className={appButton({ variant: "outline" })}>
               <Mail aria-hidden />
               E-posta gönder
             </a>
-            {statusAction}
-            {customer.status !== "CLOSED" ? (
+            {canEdit && statusAction}
+            {canEdit && customer.status !== "CLOSED" ? (
               <button
                 type="button"
                 className={appButton({ variant: "destructive" })}
@@ -358,23 +363,27 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
       />
 
       <StatGrid columns={4}>
+        {showInvoices && (
         <StatCard
           label="Bakiye"
           value={money(customer.balance)}
           hint={customer.transactions.length ? `Son hareket ${formatDate(customer.transactions[0].createdAt)}` : "Bakiye hareketi yok"}
           tone={customer.balance < 0 ? "danger" : undefined}
         />
+        )}
         <StatCard
           label="Hizmetler"
           value={customer.services.length.toLocaleString("tr-TR")}
           hint={`${activeServices} aktif`}
         />
+        {showInvoices && (
         <StatCard
           label="Ödenmemiş fatura"
           value={unpaid.length.toLocaleString("tr-TR")}
           hint={unpaid.length ? money(toNumber(sum(unpaid.map((i) => i.totalAmount)))) : "Son 10 faturada ödenmemiş yok"}
           tone={unpaid.some((i) => i.status === "OVERDUE") ? "danger" : unpaid.length ? "warning" : undefined}
         />
+        )}
         <StatCard
           label="Alan adı / SSL"
           value={`${customer.domains.length} / ${customer.sslCount}`}
@@ -420,6 +429,7 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
             />
           </SectionCard>
 
+          {showInvoices && (
           <SectionCard
             title="Faturalar"
             description="Son 10 fatura"
@@ -454,7 +464,9 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
               emptyState={<EmptyState compact icon={FileText} title="Fatura yok" />}
             />
           </SectionCard>
+          )}
 
+          {showOrders && (
           <SectionCard title="Siparişler" description="Son 10 sipariş" flush>
             <DataTable
               framed={false}
@@ -480,6 +492,8 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
               emptyState={<EmptyState compact icon={ShoppingCart} title="Sipariş yok" />}
             />
           </SectionCard>
+
+          )}
 
           <SectionCard title="Destek talepleri" description="Son 5 talep" flush>
             <DataTable
@@ -507,6 +521,7 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
             />
           </SectionCard>
 
+          {showInvoices && (
           <SectionCard id="aktivite" title="Bakiye hareketleri" description="Son 10 hareket" flush>
             <DataTable
               framed={false}
@@ -530,6 +545,7 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
               emptyState={<EmptyState compact icon={Wallet} title="Bakiye hareketi yok" />}
             />
           </SectionCard>
+          )}
         </div>
 
         <div className="min-w-0 space-y-6">
@@ -608,7 +624,9 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
                 { href: "/yonetim/faturalar/olustur", label: "Fatura oluştur", icon: FilePlus },
                 { href: "/yonetim/hizmet-ekle", label: "Hizmet ekle", icon: PackagePlus },
                 { href: "/yonetim/siparisler/tum-siparisler", label: "Tüm siparişler", icon: Eye },
-              ].map((l) => (
+              ]
+                .filter((l) => canAccessRoute(role, l.href))
+                .map((l) => (
                 <Link
                   key={l.href}
                   href={l.href}

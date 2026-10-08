@@ -10,7 +10,7 @@ import { isProposalReady } from "@/lib/imports/mapping";
 import { importProposalSchema, parseProposal, parseRecord } from "@/lib/imports/proposal";
 import type { ImportProposal } from "@/lib/imports/types";
 import { createLogger } from "@/lib/logger";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("actions.admin.imports");
 const BASE_PATH = "/yonetim/ice-aktar";
@@ -33,7 +33,7 @@ const createRunSchema = z.object({
 });
 
 export async function createImportRunAction(input: z.input<typeof createRunSchema>): Promise<ActionResult<{ id: string }>> {
-  const session = await requireAdmin();
+  const session = await requirePermission("imports.run");
   const parsed = createRunSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Geçersiz giriş." };
 
@@ -72,7 +72,7 @@ export async function createImportRunAction(input: z.input<typeof createRunSchem
 }
 
 export async function refetchImportRunAction(runId: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("imports.run");
   const run = await db.importRun.findUnique({ where: { id: runId }, select: { status: true, appliedAt: true } });
   if (!run) return { success: false, error: "Kayıt bulunamadı." };
   if (run.appliedAt || run.status === "IMPORTING" || run.status === "FETCHING") {
@@ -92,7 +92,7 @@ export async function refetchImportRunAction(runId: string): Promise<ActionResul
 }
 
 export async function startImportApplyAction(runId: string): Promise<ActionResult<{ selected: number }>> {
-  const session = await requireAdmin();
+  const session = await requirePermission("imports.run");
   const run = await db.importRun.findUnique({ where: { id: runId }, select: { status: true } });
   if (!run) return { success: false, error: "Kayıt bulunamadı." };
   if (run.status !== "READY" && run.status !== "COMPLETED") {
@@ -150,7 +150,7 @@ const rowEditSchema = z.object({
 export type ImportRowEdit = z.input<typeof rowEditSchema>;
 
 export async function updateImportRowAction(rowId: string, input: ImportRowEdit): Promise<ActionResult<{ ready: boolean }>> {
-  await requireAdmin();
+  await requirePermission("imports.run");
   const parsed = rowEditSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Geçersiz giriş." };
   const found = await editableRow(rowId);
@@ -227,7 +227,7 @@ export async function setImportRowsSelectedAction(
   runId: string,
   input: { rowIds?: string[]; scope?: "ready" | "all"; selected: boolean }
 ): Promise<ActionResult<{ count: number }>> {
-  await requireAdmin();
+  await requirePermission("imports.run");
   const run = await db.importRun.findUnique({ where: { id: runId }, select: { status: true } });
   if (!run || (run.status !== "READY" && run.status !== "COMPLETED")) return { success: false, error: "Bu aşamada seçim değiştirilemez." };
 

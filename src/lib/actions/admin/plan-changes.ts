@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { approvePlanChangeDowngrade } from "@/lib/services/plan-change";
 
 export async function approvePendingPlanChangeDowngrade(planChangeId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("orders.manage");
 
   try {
     const result = await approvePlanChangeDowngrade(planChangeId, session.user.id);

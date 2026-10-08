@@ -4,12 +4,12 @@ import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity-log";
 import { createLogger } from "@/lib/logger";
 import { saveReminderSchedule } from "@/lib/notifications/reminder-schedule";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("admin.reminder-schedule");
 
 export async function saveReminderScheduleAction(input: unknown) {
-  const session = await requireAdmin();
+  const session = await requirePermission("settings.manage");
   try {
     const result = await saveReminderSchedule(input);
     if (!result.ok) {

@@ -4,6 +4,7 @@ import { eventLabel, listEventDefinitions } from "@/lib/events/catalog";
 import { eventSubscribers } from "@/lib/events/subscribers";
 import { parsePagination } from "@/lib/utils/pagination";
 import { OlaylarContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export default async function OlaylarPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("activity.view");
   const sp = await searchParams;
   const { page } = parsePagination(sp);
   const filters = {

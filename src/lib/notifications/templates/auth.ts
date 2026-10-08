@@ -111,3 +111,42 @@ export const accountInvite = defineTemplate({
     note: `Bu e-postayı beklemiyorsanız ${brand.supportEmail} adresine yazın.`,
   }),
 });
+
+/**
+ * Staff invitation (3.6, /yonetim/personel): same one-time PasswordResetToken
+ * mechanism as `account.invite`, with copy for a new panel user.
+ */
+export const accountStaffInvite = defineTemplate({
+  key: "account.staff-invite",
+  label: "Personel daveti",
+  group: "Hesap",
+  audience: "admin",
+  schema: templateSchema({
+    inviteUrl: z.string().url(),
+    expiresInDays: z.number().int().positive(),
+    /** e.g. "Destek" */
+    roleLabel: z.string(),
+    invitedBy: z.string().optional(),
+  }),
+  sensitive: ["inviteUrl"],
+  sample: {
+    recipientName: "Mehmet Kaya",
+    inviteUrl: "https://kleacore.com/musteri/sifre-sifirla?token=ornek",
+    expiresInDays: 7,
+    roleLabel: "Destek",
+    invitedBy: "Yiğit Alp",
+  },
+  render: (data, { baseUrl, brand }) => ({
+    subject: `${brand.siteName} yönetim paneline davet edildiniz`,
+    heading: "Yönetim paneline davetlisiniz",
+    greetingName: data.recipientName,
+    intro: [
+      `${data.invitedBy ? `${data.invitedBy} sizi` : "Sizi"} ${brand.siteName} yönetim paneline "${data.roleLabel}" rolüyle ekledi.`,
+      "Başlamak için aşağıdaki butondan şifrenizi belirleyin; ardından giriş yapıp yönetim paneline geçebilirsiniz.",
+    ],
+    details: [{ label: "Yönetim paneli", value: `${baseUrl}/yonetim` }],
+    action: { label: "Şifremi belirle", url: data.inviteUrl },
+    outro: [`Bu bağlantı ${data.expiresInDays} gün boyunca geçerlidir ve yalnızca bir kez kullanılabilir.`],
+    note: `Bu daveti beklemiyorsanız ${brand.supportEmail} adresine yazın.`,
+  }),
+});

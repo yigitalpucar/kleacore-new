@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { getAutoCloseDays } from "@/lib/support/settings";
 import { SupportSettingsContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Destek ayarları" };
 
 export default async function SupportSettingsPage() {
+  await requirePermission("settings.manage");
   const [autoCloseDays, mailboxes, inbound, lastRun] = await Promise.all([
     getAutoCloseDays(),
     db.supportMailbox.findMany({ orderBy: { createdAt: "asc" } }),

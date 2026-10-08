@@ -4,6 +4,7 @@ import { getInvoiceById } from "@/lib/dal/invoices";
 import { getInvoiceRefundSummary } from "@/lib/payments/refunds";
 import { getInvoiceBankTransferNotices } from "@/lib/dal/bank-transfer";
 import { InvoiceDetailContent, type AdminInvoiceDetail } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export default async function InvoiceDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePermission("invoices.view");
   const { id } = await params;
   const invoice = await getInvoiceById(id);
   if (!invoice) return notFound();

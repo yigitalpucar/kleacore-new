@@ -4,6 +4,7 @@ import { Gauge } from "lucide-react";
 import { EmptyState, PageHeader, SectionCard, StatusBadge, UsageMeter } from "@/components/app";
 import { formatDateTime } from "@/lib/format/date";
 import { listOverQuotaServices } from "@/lib/services/usage-sync";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export const metadata: Metadata = { title: "Kota aşımı" };
  * panel usage sync (hosting.usage-sync). Bandwidth is the current month.
  */
 export default async function OverQuotaServicesPage() {
+  await requirePermission("services.view");
   const services = await listOverQuotaServices();
 
   return (

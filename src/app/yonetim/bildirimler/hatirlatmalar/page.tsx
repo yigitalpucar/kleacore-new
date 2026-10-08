@@ -3,12 +3,14 @@ import { PageHeader } from "@/components/app";
 import { getSuspendGraceDays } from "@/lib/cron/jobs/suspend-overdue-services";
 import { DEFAULT_REMINDER_SCHEDULE, getReminderSchedule } from "@/lib/notifications/reminder-schedule";
 import { ReminderScheduleForm } from "./schedule-form";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Hatırlatma takvimi" };
 
 export default async function HatirlatmalarPage() {
+  await requirePermission("settings.manage");
   const [schedule, graceDays] = await Promise.all([getReminderSchedule(), getSuspendGraceDays()]);
   return (
     <>

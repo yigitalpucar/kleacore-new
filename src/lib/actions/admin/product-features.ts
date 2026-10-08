@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { productFeatureCreateSchema } from "@/lib/validations/product";
 import { revalidatePath } from "next/cache";
 import type { ProductCategorySlug } from "@prisma/client";
@@ -31,7 +31,7 @@ function revalidateFeaturesPage() {
 }
 
 export async function createProductFeature(data: ProductFeatureInput) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const parsed = productFeatureCreateSchema.safeParse(data);
@@ -82,7 +82,7 @@ export async function createProductFeature(data: ProductFeatureInput) {
 }
 
 export async function updateProductFeature(id: string, data: Partial<ProductFeatureInput>) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const existing = await db.productFeature.findUnique({ where: { id } });
@@ -129,7 +129,7 @@ export async function updateProductFeature(id: string, data: Partial<ProductFeat
 }
 
 export async function deleteProductFeature(id: string) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const existing = await db.productFeature.findUnique({ where: { id } });
@@ -147,7 +147,7 @@ export async function deleteProductFeature(id: string) {
 }
 
 export async function setProductFeatureActive(id: string, isActive: boolean) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const existing = await db.productFeature.findUnique({ where: { id } });
@@ -168,7 +168,7 @@ export async function setProductFeatureActive(id: string, isActive: boolean) {
 }
 
 export async function setProductFeatureHighlighted(id: string, isHighlighted: boolean) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const existing = await db.productFeature.findUnique({ where: { id } });
@@ -192,7 +192,7 @@ export async function moveProductFeature(
   id: string,
   direction: "up" | "down"
 ) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const current = await db.productFeature.findUnique({ where: { id } });

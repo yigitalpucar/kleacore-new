@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { getAdminDomainList } from "@/lib/dal/domains";
 import { AdminDomainsContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Alan adları" };
 
 export default async function AdminDomainsPage() {
+  await requirePermission("domains.view");
   const domains = await getAdminDomainList();
 
   return (

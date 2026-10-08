@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { sendNotification } from "@/lib/notifications/send";
 
@@ -23,7 +23,7 @@ function revalidateCancellationPaths(request: {
 }
 
 export async function approveCancellationRequest(requestId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("orders.manage");
 
   try {
     const request = await db.cancellationRequest.findUnique({
@@ -108,7 +108,7 @@ export async function approveCancellationRequest(requestId: string) {
 }
 
 export async function rejectCancellationRequest(requestId: string, reason?: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("orders.manage");
 
   try {
     const request = await db.cancellationRequest.findUnique({

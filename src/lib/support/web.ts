@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
 import { ticketCreateSchema } from "@/lib/validations/ticket";
 import { validateAttachments, type AttachmentInput } from "./attachments";
-import { isSupportStaff } from "./access";
+import { canReplyToTickets } from "./access";
 import {
   appendTicketMessage,
   createTicketRecord,
@@ -157,7 +157,7 @@ export async function addStaffReply(
   rawStatus: string | undefined,
   uploads: AttachmentInput[]
 ): Promise<WebResult> {
-  if (!isSupportStaff(actor.role)) return fail("Yetkisiz erişim", 403);
+  if (!canReplyToTickets(actor.role)) return fail("Yetkisiz erişim", 403);
   const message = rawMessage.trim();
   if (!message) return fail("Mesaj boş olamaz", 422);
   if (message.length > MAX_MESSAGE_LENGTH) return fail("Mesaj çok uzun", 422);

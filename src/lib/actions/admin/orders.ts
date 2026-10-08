@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db";
 import { emitEvent } from "@/lib/events/emit";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { generateInvoiceNumber } from "@/lib/utils/number-generators";
 import { prepareOrderProvisioning } from "@/lib/provisioning/internal";
 import { logActivity } from "@/lib/activity-log";
@@ -14,7 +14,7 @@ import { netInvoiceLine, netInvoiceLineFromOrder } from "@/lib/billing/invoice-l
 const log = createLogger("admin.orders");
 
 export async function approveOrder(id: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("orders.manage");
 
   try {
     const order = await db.order.findUnique({
@@ -108,7 +108,7 @@ export async function approveOrder(id: string) {
 }
 
 export async function rejectOrder(id: string, reason: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("orders.manage");
 
   try {
     const order = await db.order.findUnique({ where: { id } });
@@ -154,7 +154,7 @@ export async function rejectOrder(id: string, reason: string) {
 }
 
 export async function cancelOrder(id: string, reason: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("orders.manage");
 
   try {
     const order = await db.order.findUnique({ where: { id } });
@@ -200,7 +200,7 @@ export async function cancelOrder(id: string, reason: string) {
 }
 
 export async function completeOrder(id: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("orders.manage");
 
   try {
     const order = await db.order.findUnique({ where: { id } });

@@ -47,6 +47,8 @@ interface DestekContentProps {
   totalPages: number;
   /** Filters applied on the server from ?status / ?priority / ?department. */
   serverFilters: { status?: string; priority?: string; department?: string };
+  /** Header links shown only to staff who may open them (tickets.reply / settings.manage). */
+  links?: { cannedReplies: boolean; settings: boolean };
 }
 
 const detailHref = (id: string) => `/yonetim/destek/${id}`;
@@ -135,7 +137,14 @@ const columns: ColumnDef<AdminTicketRow>[] = [
   },
 ];
 
-export function DestekContent({ data, total, page, totalPages, serverFilters }: DestekContentProps) {
+export function DestekContent({
+  data,
+  total,
+  page,
+  totalPages,
+  serverFilters,
+  links = { cannedReplies: true, settings: true },
+}: DestekContentProps) {
   const router = useRouter();
 
   const handleCloseTicket = async (ticketId: string) => {
@@ -187,14 +196,18 @@ export function DestekContent({ data, total, page, totalPages, serverFilters }: 
         description="Müşteri taleplerini yanıtlayın, personele atayın ve kapatın."
         actions={
           <>
-            <Link href="/yonetim/destek/hazir-yanitlar" className={appButton({ variant: "outline" })}>
-              <MessageSquareText aria-hidden />
-              Hazır yanıtlar
-            </Link>
-            <Link href="/yonetim/destek/ayarlar" className={appButton({ variant: "outline" })}>
-              <Settings aria-hidden />
-              Ayarlar
-            </Link>
+            {links.cannedReplies && (
+              <Link href="/yonetim/destek/hazir-yanitlar" className={appButton({ variant: "outline" })}>
+                <MessageSquareText aria-hidden />
+                Hazır yanıtlar
+              </Link>
+            )}
+            {links.settings && (
+              <Link href="/yonetim/destek/ayarlar" className={appButton({ variant: "outline" })}>
+                <Settings aria-hidden />
+                Ayarlar
+              </Link>
+            )}
           </>
         }
       />

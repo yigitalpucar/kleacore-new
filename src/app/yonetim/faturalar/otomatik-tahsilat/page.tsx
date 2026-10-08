@@ -8,7 +8,7 @@ import { formatDateTime } from "@/lib/format/date";
 import { formatTRY } from "@/lib/format/price";
 import { saveSavedCardSettings } from "@/lib/actions/admin/saved-cards";
 import { getSavedCardAvailability, savedCardLabel } from "@/lib/payments/saved-cards";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ const ATTEMPT_STATUS = {
 } as const;
 
 export default async function AutoChargePage() {
-  await requireAdmin();
+  await requirePermission("invoices.edit");
   const availability = await getSavedCardAvailability();
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 

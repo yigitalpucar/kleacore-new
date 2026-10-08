@@ -15,7 +15,7 @@ import {
   getTldPricingRules,
   type TldPricingRules,
 } from "@/lib/fx/tld-pricing";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("actions.admin.tld-pricing");
 const PAGE_PATH = "/yonetim/urunler/tld-fiyatlari";
@@ -30,7 +30,7 @@ const rulesInputSchema = z.object({
 });
 
 export async function saveTldPricingRulesAction(input: z.infer<typeof rulesInputSchema>): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("products.manage");
   const parsed = rulesInputSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "Geçersiz kural." };
 
@@ -105,7 +105,7 @@ function optionalCost(value: string) {
 }
 
 export async function updateTldCostAction(input: z.infer<typeof costInputSchema>): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("products.manage");
   const parsed = costInputSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "Geçersiz maliyet." };
 
@@ -167,7 +167,7 @@ const applyInputSchema = z.object({
 export async function applyTldSuggestionsAction(
   input: z.infer<typeof applyInputSchema>
 ): Promise<ActionResult<{ applied: number }>> {
-  const session = await requireAdmin();
+  const session = await requirePermission("products.manage");
   const parsed = applyInputSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "Geçersiz istek." };
 
@@ -195,7 +195,7 @@ export async function applyTldSuggestionsAction(
 
 /** "Kurları şimdi güncelle": same lock/run log as the cron, without auto-apply. */
 export async function syncFxRatesNowAction(): Promise<ActionResult<{ message: string }>> {
-  await requireAdmin();
+  await requirePermission("products.manage");
   try {
     const outcome = await runCronWithLock("fx-rates", () => syncTcmbRates({ skipAutoApply: true }), { force: true });
     revalidatePath(PAGE_PATH);

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getManualProvisioningCounts, getManualProvisioningTasks } from "@/lib/dal/manual-provisioning";
 import { getManualSlaHours } from "@/lib/provisioning/manual";
 import { KurulumlarContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function KurulumlarPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("provisioning.manage");
   const sp = await searchParams;
   const tab = sp.status === "COMPLETED" ? "COMPLETED" : "PENDING";
   const [tasks, counts, slaHours] = await Promise.all([

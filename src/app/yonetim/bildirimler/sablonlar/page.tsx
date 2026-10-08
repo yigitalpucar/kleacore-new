@@ -6,6 +6,7 @@ import { loadRenderContext, renderNotification } from "@/lib/notifications/rende
 import { getActiveOverrideKeys, getTemplateEditorState } from "@/lib/notifications/template-admin";
 import { listTemplates } from "@/lib/notifications/templates";
 import { cn } from "@/lib/utils";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { TemplateEditor } from "./template-editor";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export default async function SablonlarPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("settings.manage");
   const sp = await searchParams;
   const templates = listTemplates();
   const selectedKey = typeof sp.t === "string" ? sp.t : templates[0]?.key;

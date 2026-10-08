@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import {
   createRemoteService,
   suspendRemoteService,
@@ -34,7 +34,7 @@ interface ServiceInput {
 }
 
 export async function createService(data: ServiceInput) {
-  await requireAdmin();
+  await requirePermission("services.manage");
 
   try {
     const customer = await db.user.findUnique({
@@ -124,7 +124,7 @@ export async function createService(data: ServiceInput) {
 }
 
 export async function suspendService(id: string, reason: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("services.manage");
 
   try {
     const service = await db.service.findUnique({
@@ -196,7 +196,7 @@ export async function suspendService(id: string, reason: string) {
 }
 
 export async function activateService(id: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("services.manage");
 
   try {
     const service = await db.service.findUnique({
@@ -252,7 +252,7 @@ export async function activateService(id: string) {
 }
 
 export async function cancelService(id: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("services.manage");
 
   try {
     const service = await db.service.findUnique({

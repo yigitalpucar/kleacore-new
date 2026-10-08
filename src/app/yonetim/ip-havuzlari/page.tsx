@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { getIpPoolUsage } from "@/lib/ipam";
 import { IpHavuzlariContent, type PoolRow } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "IP havuzları" };
 
 export default async function IpHavuzlariPage() {
+  await requirePermission("provisioning.manage");
   const pools = await db.ipPool.findMany({
     orderBy: { createdAt: "asc" },
     include: { moduleInstance: { select: { id: true, label: true } } },

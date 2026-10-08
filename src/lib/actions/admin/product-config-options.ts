@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import type { ConfigOptionChoice } from "@/lib/products/configurator-types";
@@ -42,7 +42,7 @@ async function getNextDisplayOrder(productId: string) {
 }
 
 export async function getAdminProductConfigOptions(productId: string) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   const options = await db.productConfigOption.findMany({
     where: { productId },
@@ -53,7 +53,7 @@ export async function getAdminProductConfigOptions(productId: string) {
 }
 
 export async function createProductConfigOption(data: ProductConfigOptionInput) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const productId = data.productId.trim();
@@ -108,7 +108,7 @@ export async function updateProductConfigOption(
   id: string,
   data: Partial<Omit<ProductConfigOptionInput, "productId">>
 ) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const existing = await db.productConfigOption.findUnique({ where: { id } });
@@ -160,7 +160,7 @@ export async function updateProductConfigOption(
 }
 
 export async function deleteProductConfigOption(id: string) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const existing = await db.productConfigOption.findUnique({ where: { id } });

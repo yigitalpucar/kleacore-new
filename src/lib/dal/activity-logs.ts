@@ -1,3 +1,4 @@
+import { STAFF_ROLES } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import {
   type PaginationParams,
@@ -86,20 +87,22 @@ export async function getActivityLogs(params: GetActivityLogsParams) {
   return { data, ...paginationMeta(total, params) };
 }
 
-export async function getActivityLogStats() {
+/** `userId` scopes every count to one user (staff with activity.view_own). */
+export async function getActivityLogStats(userId?: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const scope = userId ? { userId } : {};
 
   const [total, todayCount, adminCount, customerCount] = await Promise.all([
-    db.activityLog.count(),
+    db.activityLog.count({ where: scope }),
     db.activityLog.count({
-      where: { createdAt: { gte: today } },
+      where: { ...scope, createdAt: { gte: today } },
     }),
     db.activityLog.count({
-      where: { user: { role: "ADMIN" } },
+      where: { ...scope, user: { role: { in: [...STAFF_ROLES] } } },
     }),
     db.activityLog.count({
-      where: { user: { role: "CUSTOMER" } },
+      where: { ...scope, user: { role: "CUSTOMER" } },
     }),
   ]);
 

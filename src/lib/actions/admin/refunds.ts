@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { createLogger } from "@/lib/logger";
 import { parseMoney } from "@/lib/money";
 import {
@@ -51,7 +51,7 @@ function describe(outcome: RefundOutcome) {
 }
 
 export async function createRefundAction(input: RefundFormInput): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("payments.refund");
 
   const amount = parseMoney(input.amount);
   if (!amount) return { success: false, error: "İade tutarını girin." };
@@ -82,7 +82,7 @@ export async function resolvePendingRefundAction(
   refundId: string,
   outcome: "COMPLETED" | "FAILED"
 ): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("payments.refund");
   try {
     const result = await resolvePendingRefund(refundId, outcome, session.user.id);
     revalidateInvoice(invoiceId);

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { createLogger } from "@/lib/logger";
 import { logActivity } from "@/lib/activity-log";
 import { validateTrIban } from "@/lib/payments/bank-transfer/iban";
@@ -30,7 +30,7 @@ function feedback(success: boolean, message: string): never {
 }
 
 export async function saveBankAccount(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const id = text(formData, "id");
   const bankName = text(formData, "bankName");
@@ -69,7 +69,7 @@ export async function saveBankAccount(formData: FormData) {
 }
 
 export async function toggleBankAccount(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
   const id = text(formData, "id");
   const account = id ? await db.bankAccount.findUnique({ where: { id } }) : null;
   if (!account) feedback(false, "Banka hesabı bulunamadı.");
@@ -80,7 +80,7 @@ export async function toggleBankAccount(formData: FormData) {
 }
 
 export async function deleteBankAccount(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
   const id = text(formData, "id");
   if (!id) feedback(false, "Banka hesabı bulunamadı.");
 
@@ -91,7 +91,7 @@ export async function deleteBankAccount(formData: FormData) {
 }
 
 export async function approveBankTransferNoticeAction(noticeId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("bank_transfers.approve");
   try {
     const result = await approveBankTransferNotice(noticeId, session.user.id);
     await logActivity({
@@ -114,7 +114,7 @@ export async function approveBankTransferNoticeAction(noticeId: string) {
 }
 
 export async function rejectBankTransferNoticeAction(noticeId: string, reason: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("bank_transfers.approve");
   try {
     const result = await rejectBankTransferNotice(noticeId, session.user.id, reason);
     await logActivity({

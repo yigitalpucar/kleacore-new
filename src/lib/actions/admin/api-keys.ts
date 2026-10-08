@@ -1,12 +1,12 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { apiKeyIdSchema } from "@/lib/validations/customer";
 import { revalidatePath } from "next/cache";
 
 export async function revokeApiKeyByAdmin(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("customers.edit");
 
   try {
     const raw = {

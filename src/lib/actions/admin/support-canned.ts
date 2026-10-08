@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const cannedReplySchema = z.object({
   title: z.string().trim().min(2, "Başlık en az 2 karakter olmalı").max(120, "Başlık en fazla 120 karakter olabilir"),
@@ -19,7 +19,7 @@ function revalidate() {
 }
 
 export async function createCannedReply(input: CannedReplyInput) {
-  const session = await requireAdmin();
+  const session = await requirePermission("tickets.reply");
   const parsed = cannedReplySchema.safeParse(input);
   if (!parsed.success) return { success: false as const, error: parsed.error.errors[0]?.message ?? "Geçersiz bilgiler" };
   const reply = await db.cannedReply.create({
@@ -31,7 +31,7 @@ export async function createCannedReply(input: CannedReplyInput) {
 }
 
 export async function updateCannedReply(id: string, input: CannedReplyInput) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
   const parsed = cannedReplySchema.safeParse(input);
   if (!parsed.success) return { success: false as const, error: parsed.error.errors[0]?.message ?? "Geçersiz bilgiler" };
   const result = await db.cannedReply.updateMany({
@@ -44,7 +44,7 @@ export async function updateCannedReply(id: string, input: CannedReplyInput) {
 }
 
 export async function deleteCannedReply(id: string) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
   await db.cannedReply.deleteMany({ where: { id } });
   revalidate();
   return { success: true as const };
@@ -52,7 +52,7 @@ export async function deleteCannedReply(id: string) {
 
 /** Counted when inserted into a reply (sorting by usage on the reply screen). */
 export async function markCannedReplyUsed(id: string) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
   await db.cannedReply.updateMany({ where: { id }, data: { usageCount: { increment: 1 } } });
   return { success: true as const };
 }

@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { IpPoolDetailContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "IP havuzu" };
 
 export default async function IpPoolDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("provisioning.manage");
   const { id } = await params;
   const pool = await db.ipPool.findUnique({
     where: { id },

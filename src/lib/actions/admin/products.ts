@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { productCreateSchema } from "@/lib/validations/product";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod, Prisma, ProductCategorySlug } from "@prisma/client";
@@ -39,7 +39,7 @@ interface ProductInput {
 }
 
 export async function createProduct(data: ProductInput) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const parsed = productCreateSchema.safeParse(data);
@@ -117,7 +117,7 @@ export async function createProduct(data: ProductInput) {
 }
 
 export async function updateProduct(id: string, data: Partial<ProductInput>) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const product = await db.product.findUnique({ where: { id } });
@@ -185,7 +185,7 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
 }
 
 export async function deleteProduct(id: string) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const product = await db.product.findUnique({ where: { id } });

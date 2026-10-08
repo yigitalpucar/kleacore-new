@@ -6,6 +6,7 @@ import { getTicketWithMessages } from "@/lib/dal/tickets";
 import { getAdminUsers } from "@/lib/dal/settings";
 import { serializeThreadMessage } from "@/lib/support/serialize";
 import { TicketDetailContent, type AdminTicketDetail } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function TicketDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePermission("tickets.view");
   const { id } = await params;
   const [ticket, adminUsers, cannedReplies, session] = await Promise.all([
     getTicketWithMessages(id),

@@ -7,6 +7,7 @@ import { getInvoices } from "@/lib/dal/invoices";
 import { parsePagination } from "@/lib/utils/pagination";
 import { InvoiceTable } from "../_components/invoice-table";
 import { toAdminInvoiceRow, withListPageSize } from "../_components/invoice-rows";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function AllInvoicesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("invoices.view");
   const sp = await searchParams;
   const params = parsePagination(sp);
   const result = await getInvoices({ ...params, perPage: withListPageSize(sp, params) });

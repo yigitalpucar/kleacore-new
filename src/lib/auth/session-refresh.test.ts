@@ -28,6 +28,17 @@ describe("refreshSessionToken", () => {
     expect(mocks.db.user.findUnique).not.toHaveBeenCalled();
   });
 
+  it("picks up a staff role change (ADMIN → SUPPORT) after the interval", async () => {
+    mocks.db.user.findUnique.mockResolvedValue({ role: "SUPPORT", status: "ACTIVE", sessionVersion: 0 });
+    const later = NOW + SESSION_RECHECK_INTERVAL_MS;
+    const token = await refreshSessionToken(
+      { id: "u1", role: "ADMIN", sessionVersion: 0, checkedAt: NOW },
+      undefined,
+      later
+    );
+    expect(token).toMatchObject({ role: "SUPPORT", checkedAt: later });
+  });
+
   it("refreshes a demoted admin's role after the interval", async () => {
     mocks.db.user.findUnique.mockResolvedValue({ role: "CUSTOMER", status: "ACTIVE", sessionVersion: 0 });
     const later = NOW + SESSION_RECHECK_INTERVAL_MS;

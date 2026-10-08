@@ -6,12 +6,14 @@ import { getDnsDefaultProvider } from "@/lib/dns/settings";
 import { nameserversMatch } from "@/lib/dns/zones";
 import { listActiveInstances } from "@/lib/modules/instances";
 import { AdminDomainDetailContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Alan adı detayı" };
 
 export default async function AdminDomainDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("domains.view");
   const { id } = await params;
   const domain = await getAdminDomainDetail(id);
   if (!domain) notFound();

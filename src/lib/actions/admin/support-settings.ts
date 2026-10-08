@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { encryptSecret } from "@/lib/secrets/crypto";
 import { MAX_AUTO_CLOSE_DAYS, setAutoCloseDays } from "@/lib/support/settings";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const PATH = "/yonetim/destek/ayarlar";
 
@@ -36,7 +36,7 @@ function firstError(error: z.ZodError) {
 }
 
 export async function saveSupportMailbox(id: string | null, input: MailboxInput) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
   const parsed = mailboxSchema.safeParse(input);
   if (!parsed.success) return { success: false as const, error: firstError(parsed.error) };
   const { password, processedFolder, department, ...rest } = parsed.data;
@@ -61,7 +61,7 @@ export async function saveSupportMailbox(id: string | null, input: MailboxInput)
 }
 
 export async function deleteSupportMailbox(id: string) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
   await db.supportMailbox.deleteMany({ where: { id } });
   revalidatePath(PATH);
   return { success: true as const };
@@ -69,7 +69,7 @@ export async function deleteSupportMailbox(id: string) {
 
 /** Login + open folder with the stored credentials; reads nothing. */
 export async function testSupportMailbox(id: string) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
   const mailbox = await db.supportMailbox.findUnique({ where: { id } });
   if (!mailbox) return { success: false as const, error: "Posta kutusu bulunamadı" };
   try {
@@ -83,7 +83,7 @@ export async function testSupportMailbox(id: string) {
 
 /** Runs one poll of all active mailboxes now (same code path as the cron). */
 export async function pollSupportMailboxesNow() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
   const { runCronWithLock } = await import("@/lib/cron/run-log");
   const { pollSupportMailboxes } = await import("@/lib/support/inbound/poller");
   try {
@@ -98,7 +98,7 @@ export async function pollSupportMailboxesNow() {
 }
 
 export async function saveAutoCloseDays(days: number) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
   if (!Number.isInteger(days) || days < 0 || days > MAX_AUTO_CLOSE_DAYS) {
     return { success: false as const, error: `0 ile ${MAX_AUTO_CLOSE_DAYS} arasında bir gün sayısı girin (0 = kapalı)` };
   }

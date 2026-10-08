@@ -22,7 +22,7 @@ import {
 import { createIyzicoPaymentGatewayProvider } from "@/lib/integrations/payment-gateways/providers/iyzico";
 import { createKuveytTurkPaymentGatewayProvider } from "@/lib/integrations/payment-gateways/providers/kuveytturk";
 import { getStripe } from "@/lib/stripe";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { syncLegacyModuleInstanceQuietly } from "@/lib/modules/legacy";
 
@@ -63,7 +63,7 @@ function redirectWithFeedback(
 }
 
 export async function saveRegistrarIntegrationSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const currentPassword = getSettingValue(settings, "registrar_password", "");
@@ -109,7 +109,7 @@ export async function saveRegistrarIntegrationSettings(formData: FormData) {
 }
 
 export async function saveCpanelWhmIntegrationSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const currentToken = getSettingValue(settings, "cpanel_api_token", "");
@@ -141,7 +141,7 @@ export async function saveCpanelWhmIntegrationSettings(formData: FormData) {
 }
 
 export async function saveVpsVdsIntegrationSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const currentPassword = getSettingValue(settings, "vps_vds_api_password", "");
@@ -193,7 +193,7 @@ function prefixValue(formData: FormData, key: string) {
 }
 
 export async function saveEfaturaIntegrationSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const currentApiKey = getSettingValue(settings, "efatura_api_key", "");
@@ -246,7 +246,7 @@ export async function saveEfaturaIntegrationSettings(formData: FormData) {
 }
 
 export async function testEfaturaConnection() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const config = await getEInvoiceConfig();
   const provider = createEInvoiceProvider(config.provider, config);
@@ -265,7 +265,7 @@ export async function testEfaturaConnection() {
 }
 
 export async function saveSslIntegrationSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const currentSectigoApiKey = getSettingValue(settings, "ssl_sectigo_api_key", "");
@@ -291,7 +291,7 @@ export async function saveSslIntegrationSettings(formData: FormData) {
 }
 
 export async function testSslConnection() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const provider = await getSslProvider();
   const result = await provider.healthCheck();
@@ -309,7 +309,7 @@ export async function testSslConnection() {
 }
 
 export async function saveSmsIntegrationSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const currentNetgsmPassword = getSettingValue(settings, "sms_netgsm_password", "");
@@ -357,7 +357,7 @@ export async function saveSmsIntegrationSettings(formData: FormData) {
 }
 
 export async function saveSmtpIntegrationSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const currentPassword = getSettingValue(settings, "smtp_password", "");
@@ -387,7 +387,7 @@ export async function saveSmtpIntegrationSettings(formData: FormData) {
 }
 
 export async function saveWebhookIntegrationSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const result = await updateSettings([
     { key: "webhook_orders", value: getFormValue(formData, "webhook_orders") },
@@ -405,7 +405,7 @@ export async function saveWebhookIntegrationSettings(formData: FormData) {
 }
 
 export async function importGriTldPricingFromIntegrations() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const result = await syncRegistrarTldsFromProvider();
   revalidatePath(INTEGRATIONS_PATH);
@@ -419,7 +419,7 @@ export async function importGriTldPricingFromIntegrations() {
 }
 
 export async function testRegistrarConnection() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const provider = await getRegistrarProvider();
   const result = await provider.healthCheck();
@@ -437,7 +437,7 @@ export async function testRegistrarConnection() {
 }
 
 export async function testCpanelWhmConnection() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const provider = await getCpanelWhmProvider();
   const result = await provider.healthCheck();
@@ -455,7 +455,7 @@ export async function testCpanelWhmConnection() {
 }
 
 export async function testVpsVdsConnection() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const provider = await getVpsVdsProvider();
   const result = await provider.healthCheck();
@@ -473,7 +473,7 @@ export async function testVpsVdsConnection() {
 }
 
 export async function savePaymentGatewayIntegrationSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const currentIyzicoSecret = getSettingValue(settings, "iyzico_secret_key", "");
@@ -528,7 +528,7 @@ export async function savePaymentGatewayIntegrationSettings(formData: FormData) 
  * too so older readers (module status, settings overview) stay consistent.
  */
 export async function savePaymentMethodsSettings(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const order = normalizeOrder(getFormValue(formData, "method_order").split(","));
   const enabled = order.filter((id) => formData.get(`method_enabled_${id}`) === "on");
@@ -559,7 +559,7 @@ export async function savePaymentMethodsSettings(formData: FormData) {
 }
 
 export async function testStripeConnection() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   try {
     const stripe = getStripe();
@@ -573,7 +573,7 @@ export async function testStripeConnection() {
 }
 
 export async function testSmsConnection() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const provider = await getSmsProvider();
   const result = await provider.healthCheck();
@@ -591,7 +591,7 @@ export async function testSmsConnection() {
 }
 
 export async function testIyzicoConnection() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const config = await getPaymentGatewayConfig();
   const provider = createIyzicoPaymentGatewayProvider(config);
@@ -610,7 +610,7 @@ export async function testIyzicoConnection() {
 }
 
 export async function testKuveytTurkConnection() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const config = await getPaymentGatewayConfig();
   const result = await createKuveytTurkPaymentGatewayProvider(config).healthCheck();
@@ -626,7 +626,7 @@ export async function testKuveytTurkConnection() {
 }
 
 export async function testPaytrConnection() {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const merchantId = getSettingValue(settings, "paytr_merchant_id");
@@ -641,7 +641,7 @@ export async function testPaytrConnection() {
 }
 
 export async function testSmtpConnection(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const host = getFormValue(formData, "smtp_server") || getSettingValue(settings, "smtp_server");

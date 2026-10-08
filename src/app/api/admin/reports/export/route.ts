@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   getAccountingLedger,
@@ -10,6 +9,7 @@ import {
 } from "@/lib/dal/reports";
 import type { PaymentMethod, Prisma } from "@prisma/client";
 import { add, toNumber, type MoneyInput } from "@/lib/money";
+import { checkApiPermission } from "@/lib/utils/auth-helpers";
 import { forbidden, unauthorized } from "@/lib/utils/api-response";
 import { parseReportRange } from "@/lib/reports/range";
 import { buildRevenueTrend, rangeLabel } from "@/lib/reports/revenue-trend";
@@ -197,11 +197,8 @@ function buildSimplePdf(lines: string[]) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  const userRole = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!session?.user) return unauthorized();
-  if (userRole !== "ADMIN") return forbidden();
+  const access = await checkApiPermission("reports.view");
+  if (!access.ok) return access.status === 401 ? unauthorized() : forbidden();
 
   try {
     const range = parseReportRange(request.nextUrl.searchParams);

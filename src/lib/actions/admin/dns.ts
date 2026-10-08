@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity-log";
 import { DNS_PROVIDERS, saveDnsSettings, type DnsDefaultProvider } from "@/lib/dns/settings";
 import { isIPv4, isIPv6 } from "@/lib/dns/validation";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 function revalidateDns(domainId?: string) {
   revalidatePath("/yonetim/dns");
@@ -16,7 +16,7 @@ function revalidateDns(domainId?: string) {
 
 /** DNS ownership setting + hosting IP fallback (Yönetim → DNS). */
 export async function saveDnsSettingsAction(input: { provider: string; hostingIp: string }) {
-  const session = await requireAdmin();
+  const session = await requirePermission("dns.manage");
   if (!(DNS_PROVIDERS as readonly string[]).includes(input.provider)) {
     return { success: false as const, error: "Geçersiz DNS sağlayıcısı" };
   }
@@ -38,7 +38,7 @@ export async function saveDnsSettingsAction(input: { provider: string; hostingIp
 
 /** "Zone oluştur / senkronize et": ensure the Cloudflare zone, store NS/status, refresh the mirror. */
 export async function adminEnsureDnsZone(domainId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("dns.manage");
   try {
     const { ensureDomainZone } = await import("@/lib/dns/zones");
     const result = await ensureDomainZone(domainId);
@@ -66,7 +66,7 @@ export async function adminEnsureDnsZone(domainId: string) {
 
 /** Admin only: deletes the zone at Cloudflare; the domain falls back to registrar DNS. */
 export async function adminDeleteDnsZone(domainId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("dns.manage");
   try {
     const { deleteDomainZone } = await import("@/lib/dns/zones");
     const result = await deleteDomainZone(domainId);

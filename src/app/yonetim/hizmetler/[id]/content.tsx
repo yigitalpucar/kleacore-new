@@ -100,6 +100,10 @@ interface ServiceDetailContentProps {
   proxmoxView?: ProxmoxAdminView | null;
   /** Show "cPanel'e giriş (müşteri olarak)" (bound to an SSO-capable module, active/suspended). */
   panelLogin?: boolean;
+  /** services.manage: suspend/activate/cancel and quick actions (view-only roles such as SUPPORT get false). */
+  canManage?: boolean;
+  /** invoices.edit: "Fatura oluştur" shortcut. */
+  canCreateInvoice?: boolean;
 }
 
 type BackupRow = ServiceDetailData["backups"][number];
@@ -139,7 +143,14 @@ const backupColumns: ColumnDef<BackupRow>[] = [
   },
 ];
 
-export function ServiceDetailContent({ service, moduleView, proxmoxView, panelLogin = false }: ServiceDetailContentProps) {
+export function ServiceDetailContent({
+  service,
+  moduleView,
+  proxmoxView,
+  panelLogin = false,
+  canManage = true,
+  canCreateInvoice = true,
+}: ServiceDetailContentProps) {
   const router = useRouter();
 
   const handleSuspendService = async () => {
@@ -227,13 +238,17 @@ export function ServiceDetailContent({ service, moduleView, proxmoxView, panelLo
         actions={
           <>
             {panelLogin ? <AdminPanelLoginButtons serviceId={service.id} /> : null}
-            <UnavailableAction label="Düzenle" icon={<Pencil aria-hidden />} reason="Yakında" size="sm" />
-            <UnavailableAction label="Yükselt / düşür" icon={<ArrowUpDown aria-hidden />} reason="Yakında" size="sm" />
-            <Link href="/yonetim/faturalar/olustur" className={appButton({ variant: "outline", size: "sm" })}>
-              <FileText aria-hidden />
-              Fatura oluştur
-            </Link>
-            {service.status === "ACTIVE" ? (
+            {canManage && <UnavailableAction label="Düzenle" icon={<Pencil aria-hidden />} reason="Yakında" size="sm" />}
+            {canManage && (
+              <UnavailableAction label="Yükselt / düşür" icon={<ArrowUpDown aria-hidden />} reason="Yakında" size="sm" />
+            )}
+            {canCreateInvoice && (
+              <Link href="/yonetim/faturalar/olustur" className={appButton({ variant: "outline", size: "sm" })}>
+                <FileText aria-hidden />
+                Fatura oluştur
+              </Link>
+            )}
+            {canManage && service.status === "ACTIVE" ? (
               <button
                 type="button"
                 onClick={() => void handleSuspendService()}
@@ -243,7 +258,7 @@ export function ServiceDetailContent({ service, moduleView, proxmoxView, panelLo
                 Askıya al
               </button>
             ) : null}
-            {service.status === "SUSPENDED" ? (
+            {canManage && service.status === "SUSPENDED" ? (
               <button
                 type="button"
                 onClick={() => void handleActivateService()}
@@ -406,6 +421,7 @@ export function ServiceDetailContent({ service, moduleView, proxmoxView, panelLo
             />
           </SectionCard>
 
+          {canManage && (
           <SectionCard title="Hızlı işlemler" headingLevel={2}>
             <div className="space-y-2">
               <UnavailableAction layout="tile" label="Manuel yenileme" icon={<RefreshCcw aria-hidden />} reason="Yakında" />
@@ -433,6 +449,7 @@ export function ServiceDetailContent({ service, moduleView, proxmoxView, panelLo
               </div>
             </div>
           </SectionCard>
+          )}
         </div>
       </div>
     </>

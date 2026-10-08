@@ -26,11 +26,13 @@ import {
   ShoppingBag,
   ShoppingCart,
   Store,
+  UserCog,
   Users,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
 import type { AppNavGroup, AppSearchItem } from "@/components/app";
+import { canAccessRoute, type StaffRole } from "@/lib/auth/permissions";
 
 /**
  * Admin navigation, in one place:
@@ -40,6 +42,10 @@ import type { AppNavGroup, AppSearchItem } from "@/components/app";
  *   `AdminSectionTabs` inside the shell.
  * - `adminSearchItems` → every sub-route for the ⌘K palette.
  * Client-only (contains lucide components).
+ *
+ * Every builder takes the staff role and drops entries the role cannot open
+ * (src/lib/auth/permissions.ts ADMIN_ROUTE_PERMISSIONS); the pages enforce
+ * the same permissions server-side.
  */
 
 export const ADMIN_ROOT = "/yonetim";
@@ -53,8 +59,8 @@ export type AdminCounts = {
   pendingBankTransfers: number;
 };
 
-export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
-  return [
+export function buildAdminNav(counts: AdminCounts, role: StaffRole): AppNavGroup[] {
+  const groups: AppNavGroup[] = [
     {
       items: [{ title: "Genel bakış", href: ADMIN_ROOT, icon: LayoutDashboard, exact: true }],
     },
@@ -115,12 +121,16 @@ export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
         { title: "Bildirimler", href: `${ADMIN_ROOT}/bildirimler`, icon: Mail },
         { title: "Olaylar", href: `${ADMIN_ROOT}/olaylar`, icon: Radio },
         { title: "Aktivite kayıtları", href: `${ADMIN_ROOT}/aktivite`, icon: ScrollText },
+        { title: "Personel", href: `${ADMIN_ROOT}/personel`, icon: UserCog },
         { title: "Modüller", href: `${ADMIN_ROOT}/moduller`, icon: Blocks },
         { title: "Entegrasyonlar", href: `${ADMIN_ROOT}/entegrasyonlar`, icon: Plug },
         { title: "Ayarlar", href: `${ADMIN_ROOT}/ayarlar`, icon: Settings },
       ],
     },
   ];
+  return groups
+    .map((group) => ({ ...group, items: group.items.filter((item) => canAccessRoute(role, item.href)) }))
+    .filter((group) => group.items.length > 0);
 }
 
 export type AdminSectionTab = {
@@ -226,16 +236,23 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   },
 ];
 
-/** The section whose tab list contains this exact path, if any. */
-export function findAdminSection(pathname: string): AdminSection | undefined {
-  return ADMIN_SECTIONS.find((s) => s.tabs.some((t) => t.href === pathname));
+/** ADMIN_SECTIONS with the tabs this role may open (sections left empty are dropped). */
+export function adminSectionsFor(role: StaffRole): AdminSection[] {
+  return ADMIN_SECTIONS.map((s) => ({ ...s, tabs: s.tabs.filter((t) => canAccessRoute(role, t.href)) })).filter(
+    (s) => s.tabs.length > 0
+  );
+}
+
+/** The section whose tab list contains this exact path, if any (tabs filtered by role). */
+export function findAdminSection(pathname: string, role: StaffRole): AdminSection | undefined {
+  return adminSectionsFor(role).find((s) => s.tabs.some((t) => t.href === pathname));
 }
 
 /** Every sub-route for the ⌘K palette (sidebar items are added by the palette itself). */
-export function adminSearchItems(nav: AppNavGroup[]): AppSearchItem[] {
+export function adminSearchItems(nav: AppNavGroup[], role: StaffRole): AppSearchItem[] {
   const navHrefs = new Set(nav.flatMap((g) => g.items.map((i) => i.href)));
   const items: AppSearchItem[] = [];
-  for (const section of ADMIN_SECTIONS) {
+  for (const section of adminSectionsFor(role)) {
     for (const tab of section.tabs) {
       if (navHrefs.has(tab.href)) continue;
       items.push({
@@ -286,4 +303,5 @@ export const ADMIN_SEGMENT_LABELS: Record<string, string> = {
   durum: "Sistem durumu",
   sablonlar: "Şablonlar",
   hatirlatmalar: "Hatırlatma takvimi",
+  personel: "Personel",
 };

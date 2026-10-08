@@ -12,7 +12,7 @@ import {
 } from "@/lib/ipam";
 import { splitList } from "@/lib/modules/schema-form";
 import { createLogger } from "@/lib/logger";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("actions.admin.ip-pools");
 const POOLS_PATH = "/yonetim/ip-havuzlari";
@@ -38,7 +38,7 @@ export interface CreateIpPoolFormInput {
 }
 
 export async function createIpPoolAction(input: CreateIpPoolFormInput): Promise<ActionResult<{ id: string; addressCount: number }>> {
-  const session = await requireAdmin();
+  const session = await requirePermission("provisioning.manage");
   const vlan = input.vlan.trim() ? Number(input.vlan) : null;
   if (vlan !== null && (!Number.isInteger(vlan) || vlan < 1 || vlan > 4094)) {
     return { success: false, error: "VLAN 1–4094 arası tam sayı olmalı." };
@@ -90,7 +90,7 @@ async function findServiceByReference(reference: string) {
 }
 
 export async function assignIpAddressAction(addressId: string, serviceReference: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("provisioning.manage");
   const service = await findServiceByReference(serviceReference);
   if (!service) return { success: false, error: "Hizmet bulunamadı (hizmet no, alan adı, kullanıcı adı veya uzak kimlik girin)." };
 
@@ -115,7 +115,7 @@ export async function assignIpAddressAction(addressId: string, serviceReference:
 }
 
 export async function releaseIpAddressAction(addressId: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("provisioning.manage");
   try {
     const address = await db.ipAddress.findUnique({ where: { id: addressId }, select: { poolId: true, address: true, serviceId: true } });
     if (!address) return { success: false, error: "Adres bulunamadı." };
@@ -136,7 +136,7 @@ export async function releaseIpAddressAction(addressId: string): Promise<ActionR
 }
 
 export async function reserveIpAddressAction(addressId: string, notes: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("provisioning.manage");
   try {
     const address = await db.ipAddress.findUnique({ where: { id: addressId }, select: { poolId: true, address: true } });
     if (!address) return { success: false, error: "Adres bulunamadı." };
@@ -151,7 +151,7 @@ export async function reserveIpAddressAction(addressId: string, notes: string): 
 }
 
 export async function deleteIpPoolAction(poolId: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("provisioning.manage");
   const assigned = await db.ipAddress.count({ where: { poolId, status: "ASSIGNED" } });
   if (assigned > 0) return { success: false, error: `Havuzda ${assigned} atanmış adres var; önce serbest bırakın.` };
   const pool = await db.ipPool.delete({ where: { id: poolId } }).catch(() => null);

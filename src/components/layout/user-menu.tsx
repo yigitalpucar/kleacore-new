@@ -2,6 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { isStaffRole } from "@/lib/auth/permissions";
 import { ChevronDown, FileText, LayoutDashboard, Package, Settings, User } from "lucide-react";
 import {
   DropdownMenu,
@@ -38,7 +39,7 @@ export function UserMenu({ className }: { className?: string }) {
     );
   }
 
-  const isAdmin = (session.user as { role?: string }).role === "ADMIN";
+  const isAdmin = isStaffRole((session.user as { role?: string }).role);
   const initial = session.user.name?.trim().charAt(0).toLocaleUpperCase("tr-TR") || "K";
 
   return (

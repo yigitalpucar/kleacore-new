@@ -80,7 +80,7 @@ sunucumuzdan geçirir ve PCI kapsamını SAQ D'ye yükseltir.
   Bu yetkiler olmadan tekrarlayan çekim reddedilir.
 - **Hukuki:** otomatik tahsilat için açık onay alınır ve kaydedilir (metin, zaman, IP, tarayıcı). Bkz. §4.
 
-## 3. Veri modeli (migration `20261012170000_saved_cards`)
+## 3. Veri modeli (migration `20261012120000_saved_cards`)
 
 - `SavedCard`: `userId, gateway ("paytr"), gatewayCustomerRef (utoken, şifreli), cardToken (ctoken, şifreli),
   last4, brand, cardProgram, expMonth, expYear, bankName, requireCvv, isDefault, status

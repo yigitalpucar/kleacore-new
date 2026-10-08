@@ -8,6 +8,7 @@ import { subscribersFor } from "@/lib/events/subscribers";
 import { formatDateTime } from "@/lib/format/date";
 import { RedeliverButton } from "../redeliver-button";
 import { DELIVERY_STATUS_META, EVENT_STATE_META, SUBSCRIBER_LABELS } from "../state";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ function aggregateHref(type: string, id: string) {
 }
 
 export default async function OlayDetayPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("activity.view");
   const { id } = await params;
   const event = await getDomainEventById(id);
   if (!event) notFound();

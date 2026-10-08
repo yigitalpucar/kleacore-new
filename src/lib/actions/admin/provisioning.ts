@@ -2,7 +2,7 @@
 
 import { logActivity } from "@/lib/activity-log";
 import { manualRetryProvisioningJob } from "@/lib/provisioning/retry-queue";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { createLogger } from "@/lib/logger";
@@ -17,7 +17,7 @@ const errorMessages: Record<string, string> = {
 };
 
 export async function retryProvisioningJobAction(jobId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("provisioning.manage");
 
   try {
     const job = await db.provisioningJob.findUnique({

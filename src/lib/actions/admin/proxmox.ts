@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity-log";
 import { db } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("actions.admin.proxmox");
 
@@ -14,7 +14,7 @@ const log = createLogger("actions.admin.proxmox");
  * (no second clone) and re-allocates the IP if it was released.
  */
 export async function retryProxmoxProvisioningAction(serviceId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("provisioning.manage");
   const job = await db.provisioningJob.findFirst({
     where: { serviceId, kind: "PROVISION" },
     orderBy: { createdAt: "desc" },
@@ -54,7 +54,7 @@ export async function retryProxmoxProvisioningAction(serviceId: string) {
 }
 
 export async function getProxmoxTaskLogAction(serviceId: string) {
-  await requireAdmin();
+  await requirePermission("provisioning.manage");
   const service = await db.service.findUnique({
     where: { id: serviceId },
     select: { id: true, moduleInstanceId: true, moduleData: true },

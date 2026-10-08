@@ -32,7 +32,7 @@ import type { PaymentMethod } from "@prisma/client";
 import { sum, toNumber } from "@/lib/money";
 import { parseReportRange, rangeSearchParams, toIstanbulDay, type ReportRange } from "@/lib/reports/range";
 import { buildRevenueTrend, rangeLabel } from "@/lib/reports/revenue-trend";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { PeriodFilter } from "./period-filter";
 import { ReportExportButton } from "./report-export-button";
 import { ReportTabs, parseReportTab } from "./_components/report-tabs";
@@ -207,7 +207,7 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdmin();
+  await requirePermission("reports.view");
 
   const sp = await searchParams;
   const now = new Date();

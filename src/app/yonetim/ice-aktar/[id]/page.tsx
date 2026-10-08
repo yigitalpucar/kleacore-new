@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getImportRunView, type ImportRowFilter } from "@/lib/imports/admin";
 import { ImportRunContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function ImportRunPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ page?: string; filter?: string; q?: string }>;
 }) {
+  await requirePermission("imports.run");
   const { id } = await params;
   const query = await searchParams;
   const filter = FILTERS.includes(query.filter as ImportRowFilter) ? (query.filter as ImportRowFilter) : "all";
