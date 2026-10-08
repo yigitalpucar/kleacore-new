@@ -59,6 +59,7 @@ function buildNav({ isReseller, counts }: Pick<CustomerShellProps, "isReseller" 
       label: "Ödeme",
       items: [
         { title: "Faturalarım", href: `${ROOT}/faturalar`, icon: FileText, badge: counts.unpaidInvoices || null },
+        { title: "Kayıtlı kartlarım", href: `${ROOT}/kayitli-kartlar`, icon: CreditCard },
         { title: "Bakiye yükle", href: `${ROOT}/kredi`, icon: Wallet },
         { title: "İstatistikler", href: `${ROOT}/istatistikler`, icon: BarChart3 },
       ],

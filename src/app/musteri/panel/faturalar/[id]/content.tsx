@@ -25,7 +25,9 @@ import { toast } from "@/lib/toast";
 import { PaymentMethodPicker } from "@/components/checkout/payment-method-picker";
 import type { CustomerPaymentOptions } from "@/lib/payments/payment-options";
 import type { BankAccountView, BankTransferNoticeView } from "@/lib/dal/bank-transfer";
+import type { SavedCardView } from "@/lib/payments/saved-cards";
 import { BankTransferPanel } from "./bank-transfer-panel";
+import { SavedCardPayPanel } from "./saved-card-pay-panel";
 
 interface SerializedInvoice {
   id: string;
@@ -97,6 +99,8 @@ interface FaturaDetayContentProps {
   bankAccounts?: BankAccountView[];
   bankTransferNotices?: BankTransferNoticeView[];
   initialMethod?: string | null;
+  /** Chargeable stored cards ("Kayıtlı kartla öde"); empty when saved cards are off. */
+  savedCards?: SavedCardView[];
 }
 
 const money = (n: number) => formatTRY(n, { keepDecimals: true });
@@ -108,6 +112,7 @@ export function FaturaDetayContent({
   bankAccounts = [],
   bankTransferNotices = [],
   initialMethod,
+  savedCards = [],
 }: FaturaDetayContentProps) {
   const router = useRouter();
   const canPay = invoice.status === "PENDING" || invoice.status === "OVERDUE";
@@ -424,6 +429,9 @@ export function FaturaDetayContent({
 
             {canPay && paymentOptions ? (
               <div id="odeme" className="mt-5 scroll-mt-24 space-y-3">
+                {!hasPendingNotice ? (
+                  <SavedCardPayPanel invoiceId={invoice.id} outstanding={outstanding} cards={savedCards} />
+                ) : null}
                 <PaymentMethodPicker
                   options={paymentOptions.options}
                   otherCards={paymentOptions.otherCards}

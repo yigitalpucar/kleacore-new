@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getInvoiceById } from "@/lib/dal/invoices";
 import { getKuveytTurkFailureMessage } from "@/lib/integrations/payment-gateways/providers/kuveytturk-flow";
 import { getCustomerPaymentOptions } from "@/lib/payments/payment-options";
+import { getSavedCardAvailability, listChargeableCards } from "@/lib/payments/saved-cards";
 import { getBankAccounts, getInvoiceBankTransferNotices } from "@/lib/dal/bank-transfer";
 import { FaturaDetayContent, type InvoicePaymentNotice } from "./content";
 
@@ -132,10 +133,15 @@ export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
   );
 
   const canPay = invoice.status === "PENDING" || invoice.status === "OVERDUE";
-  const [paymentOptions, bankAccounts, bankTransferNotices] = await Promise.all([
+  const [paymentOptions, bankAccounts, bankTransferNotices, savedCards] = await Promise.all([
     canPay ? getCustomerPaymentOptions(invoice.customerId) : null,
     canPay ? getBankAccounts({ activeOnly: true }) : [],
     getInvoiceBankTransferNotices(invoice.id),
+    canPay
+      ? getSavedCardAvailability().then((availability) =>
+          availability.available ? listChargeableCards(invoice.customerId) : []
+        )
+      : [],
   ]);
 
   return (
@@ -146,6 +152,7 @@ export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
       bankAccounts={bankAccounts}
       bankTransferNotices={bankTransferNotices}
       initialMethod={odeme === "havale" ? "bank_transfer" : null}
+      savedCards={savedCards}
     />
   );
 }
