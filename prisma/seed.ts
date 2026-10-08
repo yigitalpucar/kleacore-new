@@ -458,6 +458,7 @@ async function main() {
       { group: "billing", key: "tax_rate", value: "20", type: "number", label: "KDV Oranı (%)" },
       { group: "billing", key: "currency", value: "TRY", type: "string", label: "Para Birimi" },
       { group: "billing", key: "invoice_prefix", value: "F", type: "string", label: "Fatura Öneki" },
+      { group: "billing", key: "suspend_grace_days", value: "3", type: "number", label: "Askıya Alma Toleransı (gün)" },
       { group: "notification", key: "email_notifications", value: "true", type: "boolean", label: "E-posta Bildirimleri" },
       { group: "notification", key: "sms_notifications", value: "false", type: "boolean", label: "SMS Bildirimleri" },
       { group: "integration", key: "sms_enabled", value: "false", type: "boolean", label: "SMS Entegrasyonu" },
