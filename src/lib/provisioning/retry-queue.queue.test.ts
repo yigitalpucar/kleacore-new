@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   unsuspendRemoteService: vi.fn(),
   changeRemoteServicePlan: vi.fn(),
+  createRemoteService: vi.fn(),
+  queueServiceDnsSetup: vi.fn(),
+  queueServiceActivatedNotice: vi.fn(),
   queueProvisioningAttempt: vi.fn(),
   dismissFailedQueueEntries: vi.fn(),
   db: {
@@ -13,7 +16,7 @@ const mocks = vi.hoisted(() => ({
       updateMany: vi.fn(),
       create: vi.fn(),
     },
-    service: { findUnique: vi.fn() },
+    service: { findUnique: vi.fn(), update: vi.fn() },
   },
 }));
 
@@ -23,11 +26,16 @@ vi.mock("@/lib/provisioning/queue", () => ({
   dismissFailedQueueEntries: mocks.dismissFailedQueueEntries,
 }));
 vi.mock("@/lib/integrations/provisioning-provider", () => ({
-  createRemoteService: vi.fn(),
+  createRemoteService: mocks.createRemoteService,
   unsuspendRemoteService: mocks.unsuspendRemoteService,
   changeRemoteServicePlan: mocks.changeRemoteServicePlan,
 }));
 vi.mock("@/lib/integrations/ssl", () => ({ mapProductSubTypeToSslType: vi.fn(), provisionSslCertificate: vi.fn() }));
+vi.mock("@/lib/dns/activation", () => ({ queueServiceDnsSetup: mocks.queueServiceDnsSetup }));
+vi.mock("@/lib/provisioning/activation-notice", () => ({
+  activationKindForCategory: () => "hosting",
+  queueServiceActivatedNotice: mocks.queueServiceActivatedNotice,
+}));
 
 import {
   enqueueProvisioningRetry,
@@ -117,6 +125,25 @@ describe("runQueuedProvisioningJob — paid order work moved out of the payment 
     mocks.db.provisioningJob.updateMany.mockResolvedValue({ count: 1 });
     mocks.db.provisioningJob.update.mockResolvedValue({});
     mocks.changeRemoteServicePlan.mockReset();
+  });
+
+  it("queues the DNS setup after a hosting account was created", async () => {
+    const hostingService = { id: "svc-9", status: "ACTIVE", customerId: "c1", domain: "ornek.com.tr", serverName: null, ipAddress: null };
+    mocks.db.provisioningJob.findUnique.mockResolvedValue({
+      ...unsuspendJob,
+      id: "pj-9",
+      kind: "PROVISION",
+      serviceId: "svc-9",
+      lastError: null,
+      order: { id: "ord-9", serviceId: "svc-9", customer: {}, items: [], product: { category: { slug: "hosting" } } },
+    });
+    mocks.db.service.findUnique.mockResolvedValue(hostingService);
+    mocks.db.service.update.mockResolvedValue(hostingService);
+    mocks.createRemoteService.mockResolvedValue({ ok: true, reference: "ornekcom" });
+
+    await expect(runQueuedProvisioningJob("pj-9", ctx(0))).resolves.toMatchObject({ ok: true });
+    expect(mocks.queueServiceActivatedNotice).toHaveBeenCalled();
+    expect(mocks.queueServiceDnsSetup).toHaveBeenCalledWith(undefined, hostingService, "hosting");
   });
 
   it("pushes a paid plan change to WHM with the service's new package", async () => {

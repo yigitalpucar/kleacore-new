@@ -229,3 +229,7 @@ Her `/api/cron/*` çağrısı:
 - pg-boss tabloları: `pgboss.job` (durumlar: created, retry, active, completed,
   failed, cancelled). Sonuçlanan işler (tamamlanan, başarısız, iptal) 7 gün sonra
   pg-boss bakımıyla silinir; ProvisioningJob kaydı kalıcıdır.
+
+## DNS kurulumu (`dns.service-setup`)
+
+Hizmet aktif olunca (otomatik kurulum sonrası ya da manuel aktivasyon transaction'ında) kuyruğa girer; yalnızca alan adının DNS'i bizdeyse (`dns_zones` satırı veya `dns_default_provider = cloudflare`). Cloudflare zone + hosting için `@`/`www`/`mail` A, MX, SPF; VDS için hostname A kaydı. 5 deneme, backoff ≈ 5–40 dk; idempotent. Ayrıntı: `docs/dns-cloudflare.md`.

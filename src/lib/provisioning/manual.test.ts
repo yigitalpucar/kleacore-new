@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   vpsConfigured: false,
   sendNotification: vi.fn(),
   queueServiceActivatedNotice: vi.fn(),
+  queueServiceDnsSetup: vi.fn(),
   tx: {
     provisioningJob: { findUnique: vi.fn(), updateMany: vi.fn(), upsert: vi.fn() },
     service: { findUnique: vi.fn(), update: vi.fn() },
@@ -30,6 +31,7 @@ vi.mock("@/lib/integrations/provisioning/config", () => ({
   isVpsVdsConfigured: () => mocks.vpsConfigured,
 }));
 vi.mock("@/lib/notifications/send", () => ({ sendNotification: mocks.sendNotification }));
+vi.mock("@/lib/dns/activation", () => ({ queueServiceDnsSetup: mocks.queueServiceDnsSetup }));
 vi.mock("./activation-notice", () => ({
   activationKindForCategory: (slug: string) => (slug === "hosting" ? "hosting" : "server"),
   queueServiceActivatedNotice: mocks.queueServiceActivatedNotice,
@@ -165,6 +167,12 @@ describe("activateManualProvisioning", () => {
     expect(mocks.queueServiceActivatedNotice).toHaveBeenCalledWith(
       mocks.tx,
       expect.objectContaining({ kind: "server", password: "S3cret-Pass", passwordDelivery: "included" })
+    );
+    // DNS hook rides the same transaction (VDS hostname → A record when the domain is ours).
+    expect(mocks.queueServiceDnsSetup).toHaveBeenCalledWith(
+      mocks.tx,
+      expect.objectContaining({ id: "s1", ipAddress: "203.0.113.10", serverName: "vds1.kleacore.com" }),
+      "vds"
     );
   });
 

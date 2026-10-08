@@ -121,8 +121,9 @@ export async function getDomainWithDns(id: string) {
         },
       },
       dnsRecords: {
-        orderBy: { type: "asc" },
+        orderBy: [{ type: "asc" }, { name: "asc" }],
       },
+      dnsZone: true,
     },
   });
 }
@@ -165,6 +166,8 @@ export async function getAdminDomainDetail(id: string) {
       notices: { orderBy: { sentAt: "desc" }, take: 20 },
       lifecycleEvents: { orderBy: { createdAt: "desc" }, take: 100 },
       _count: { select: { dnsRecords: true } },
+      dnsZone: { include: { moduleInstance: { select: { id: true, label: true } } } },
+      dnsRecords: { orderBy: [{ type: "asc" }, { name: "asc" }] },
     },
   });
 }

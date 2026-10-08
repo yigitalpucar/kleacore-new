@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Mail,
   Network,
+  Waypoints,
   Newspaper,
   Package,
   Plug,
@@ -90,6 +91,7 @@ export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
         { title: "Ürünler", href: `${ADMIN_ROOT}/urunler`, icon: ShoppingBag },
         { title: "Sunucular", href: `${ADMIN_ROOT}/sunucular`, icon: Server },
         { title: "IP havuzları", href: `${ADMIN_ROOT}/ip-havuzlari`, icon: Network },
+        { title: "DNS bölgeleri", href: `${ADMIN_ROOT}/dns`, icon: Waypoints },
       ],
     },
     {

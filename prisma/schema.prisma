@@ -202,6 +202,7 @@ enum DnsRecordType {
   TXT
   NS
   SRV
+  CAA
 }
 
 enum DomainStatus {
@@ -842,6 +843,8 @@ model Domain {
 
   // DNS
   dnsRecords    DnsRecord[]
+  /// Set when the domain's DNS is hosted by a DNS module (Cloudflare).
+  dnsZone       DnsZone?
   emailAccounts EmailAccount[]
 
   // Lifecycle (renewal invoices, registrar renew, expiry notices, sync)
@@ -928,6 +931,10 @@ model DomainLifecycleEvent {
   @@map("domain_lifecycle_events")
 }
 
+/// DNS records of a domain. Without a DnsZone these rows are the source of
+/// truth (legacy registrar mode). With a DnsZone they are a mirror of the
+/// provider zone (providerRecordId set), refreshed after every change and on
+/// sync — docs/dns-cloudflare.md.
 model DnsRecord {
   id       String        @id @default(cuid())
   domainId String
@@ -938,10 +945,53 @@ model DnsRecord {
   ttl      Int           @default(3600)
   priority Int?
 
+  /// Record id at the DNS provider (Cloudflare) when the domain has a zone.
+  providerRecordId String?
+  /// Cloudflare proxy (A/AAAA/CNAME).
+  proxied          Boolean @default(false)
+  /// Records KLEACORE manages for a service ("service:<id>"): shown as
+  /// protected, customers can't edit or delete them.
+  managedBy        String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([domainId, providerRecordId])
+  @@index([domainId])
   @@map("dns_records")
+}
+
+enum DnsZoneStatus {
+  /// Zone exists at the provider; the domain's nameservers don't point at it yet.
+  PENDING
+  /// Provider reports the zone active (nameservers point at it).
+  ACTIVE
+  /// The last provider call for this zone failed (see lastError).
+  ERROR
+}
+
+/// A domain's zone at a DNS module instance (Cloudflare). One per domain.
+model DnsZone {
+  id               String          @id @default(cuid())
+  domainId         String          @unique
+  domain           Domain          @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  moduleInstanceId String?
+  moduleInstance   ModuleInstance? @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
+  providerZoneId   String
+  /// Nameservers the registrar must point at (shown to the customer).
+  nameservers      String[]        @default([])
+  status           DnsZoneStatus   @default(PENDING)
+  /// Raw provider status ("pending", "active", "moved" …).
+  providerStatus   String?
+  lastSyncedAt     DateTime?
+  lastError        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([moduleInstanceId])
+  @@index([status])
+  @@map("dns_zones")
 }
 
 // =====================
@@ -1861,6 +1911,7 @@ model ModuleInstance {
   services Service[]
   servers  Server[]
   ipPools  IpPool[]
+  dnsZones DnsZone[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

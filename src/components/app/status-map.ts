@@ -36,7 +36,8 @@ export type StatusKind =
   | "content"
   | "promo"
   | "refund"
-  | "bankTransferNotice";
+  | "bankTransferNotice"
+  | "dnsZone";
 
 export type StatusAudience = "customer" | "admin";
 
@@ -242,6 +243,12 @@ const bankTransferNotice: Map = {
   REJECTED: { label: "Reddedildi", tone: "danger" },
 };
 
+const dnsZone: Map = {
+  PENDING: { label: "Nameserver bekleniyor", tone: "warning" },
+  ACTIVE: { label: "Aktif", tone: "success" },
+  ERROR: { label: "Hata", tone: "danger" },
+};
+
 const MAPS: Record<StatusKind, Map> = {
   service,
   invoice,
@@ -270,6 +277,7 @@ const MAPS: Record<StatusKind, Map> = {
   promo,
   refund,
   bankTransferNotice,
+  dnsZone,
 };
 
 /** Label + tone for a status. Unknown values fall back to the raw value. */
@@ -308,7 +316,7 @@ export const ENUM_LABELS = {
     DATABASE: "Veritabanı",
     FILES: "Dosyalar",
   },
-  dnsRecordType: { A: "A", AAAA: "AAAA", CNAME: "CNAME", MX: "MX", TXT: "TXT", NS: "NS", SRV: "SRV" },
+  dnsRecordType: { A: "A", AAAA: "AAAA", CNAME: "CNAME", MX: "MX", TXT: "TXT", NS: "NS", SRV: "SRV", CAA: "CAA" },
   sslType: { DV: "Alan adı doğrulamalı (DV)", OV: "Kurum doğrulamalı (OV)", EV: "Genişletilmiş doğrulama (EV)", WILDCARD: "Wildcard" },
   customerType: { INDIVIDUAL: "Bireysel", CORPORATE: "Kurumsal" },
   userRole: { ADMIN: "Yönetici", CUSTOMER: "Müşteri" },

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getCurrentDomainRenewal, getDomainWithDns } from "@/lib/dal/domains";
+import { getDnsDefaultProvider } from "@/lib/dns/settings";
+import { isRegisteredThroughUs, nameserversMatch, refreshZoneMirrorIfStale } from "@/lib/dns/zones";
 import { DomainDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +17,16 @@ interface DomainDetayPageProps {
 export default async function DomainDetayPage(props: DomainDetayPageProps) {
   const params = await props.params;
   const session = await auth();
-  const domain = await getDomainWithDns(params.id);
+  const owned = await getDomainWithDns(params.id);
 
-  if (!domain || domain.customerId !== session!.user.id) {
+  if (!owned || owned.customerId !== session!.user.id) {
     notFound();
   }
+
+  // Cloudflare zones: re-read the records when the local mirror is stale.
+  const dnsSyncError = owned.dnsZone ? await refreshZoneMirrorIfStale(owned.id) : null;
+  const domain = owned.dnsZone ? ((await getDomainWithDns(owned.id)) ?? owned) : owned;
+  const dnsProvider = await getDnsDefaultProvider();
 
   const renewal = await getCurrentDomainRenewal(domain.id, domain.expiresAt);
 
@@ -44,12 +51,31 @@ export default async function DomainDetayPage(props: DomainDetayPageProps) {
       value: r.value,
       ttl: r.ttl,
       priority: r.priority,
+      proxied: r.proxied,
+      managed: Boolean(r.managedBy),
     })),
+  };
+
+  const zone = domain.dnsZone;
+  const dns = {
+    mode: zone ? ("cloudflare" as const) : ("registrar" as const),
+    canEnableCloudflare: !zone && dnsProvider === "cloudflare",
+    zone: zone
+      ? {
+          status: zone.status,
+          nameservers: zone.nameservers,
+          lastSyncedAt: zone.lastSyncedAt?.toISOString() ?? null,
+          nameserversPointed: nameserversMatch(domain.nameservers, zone.nameservers),
+        }
+      : null,
+    canSwitchNameservers: Boolean(zone) && isRegisteredThroughUs(domain.registrar) && domain.status === "ACTIVE",
+    syncError: dnsSyncError,
   };
 
   return (
     <DomainDetayContent
       domain={serializedDomain}
+      dns={dns}
       renewal={
         renewal
           ? {

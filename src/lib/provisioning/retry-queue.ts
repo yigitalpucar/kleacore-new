@@ -252,6 +252,10 @@ async function retryServiceProvisioning(
       service: { ...service, serverName: provisioning.reference ?? service.serverName },
       kind: activationKindForCategory(order.product.category.slug),
     });
+    // Zone + A/MX/SPF records when the domain's DNS is ours (no-op in registrar mode).
+    const { queueServiceDnsSetup } = await import("@/lib/dns/activation");
+    const current = await db.service.findUnique({ where: { id: service.id } });
+    if (current) await queueServiceDnsSetup(undefined, current, order.product.category.slug);
   }
 
   if (provisioning.ok || provisioning.skipped) {
