@@ -2,16 +2,25 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { AlertTriangle, FileText, Plug, RefreshCw } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BlurFade } from "@/components/magicui/blur-fade";
+import {
+  DataTable,
+  EmptyState,
+  ListRow,
+  PageHeader,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  appButton,
+  type ColumnDef,
+} from "@/components/app";
+import { LinkTabs } from "@/components/admin-b/icerik/link-tabs";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/format/date";
+import { formatTRY } from "@/lib/format/price";
 import { retryEInvoiceRecordAction } from "@/lib/actions/admin/efatura";
 import { toast } from "@/lib/toast";
-import type { EInvoiceStatus } from "@prisma/client";
 import type { getEInvoiceRecordsForAdmin, getEInvoiceStats } from "@/lib/dal/e-invoices";
 
 type EInvoiceRecordItem = Awaited<ReturnType<typeof getEInvoiceRecordsForAdmin>>[number];
@@ -23,47 +32,14 @@ interface EfaturaContentProps {
   statusFilter: string;
 }
 
-const statusLabels: Record<EInvoiceStatus, { label: string; className: string }> = {
-  DRAFT: {
-    label: "Taslak",
-    className: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20",
-  },
-  QUEUED: {
-    label: "Kuyrukta",
-    className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  },
-  SENT: {
-    label: "Gönderildi",
-    className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-  },
-  ACCEPTED: {
-    label: "Kabul Edildi",
-    className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-  },
-  REJECTED: {
-    label: "Reddedildi",
-    className: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-  },
-  FAILED: {
-    label: "Başarısız",
-    className: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-  },
-};
+const money = (n: number) => formatTRY(Number(n), { keepDecimals: true });
+const invoiceHref = (r: EInvoiceRecordItem) => `/yonetim/faturalar/${r.invoiceId}`;
+const typeLabel = (type: string) => (type === "e-fatura" ? "E-Fatura" : "E-Arşiv");
+const canRetry = (status: string) => ["FAILED", "DRAFT", "QUEUED"].includes(status);
 
-const statusTabs = [
-  { value: "all", label: "Tümü", href: "/yonetim/efatura" },
-  { value: "FAILED", label: "Başarısız", href: "/yonetim/efatura?status=FAILED" },
-  { value: "QUEUED", label: "Kuyrukta", href: "/yonetim/efatura?status=QUEUED" },
-  { value: "SENT", label: "Gönderildi", href: "/yonetim/efatura?status=SENT" },
-  { value: "DRAFT", label: "Taslak", href: "/yonetim/efatura?status=DRAFT" },
-];
-
-function formatDate(date: Date | null | undefined) {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("tr-TR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
+function customerName(record: EInvoiceRecordItem) {
+  const c = record.invoice.customer;
+  return c.companyName || `${c.name} ${c.surname}`.trim();
 }
 
 function RetryButton({ recordId }: { recordId: string }) {
@@ -83,177 +59,189 @@ function RetryButton({ recordId }: { recordId: string }) {
   };
 
   return (
-    <Button size="sm" variant="outline" disabled={isPending} onClick={handleRetry}>
-      <RefreshCw className={cn("h-4 w-4 mr-2", isPending && "animate-spin")} />
-      {isPending ? "Gönderiliyor..." : "Yeniden Gönder"}
-    </Button>
+    <button
+      type="button"
+      disabled={isPending}
+      onClick={handleRetry}
+      className={appButton({ variant: "outline", size: "sm" })}
+    >
+      <RefreshCw aria-hidden className={cn(isPending && "animate-spin")} />
+      {isPending ? "Gönderiliyor…" : "Yeniden gönder"}
+    </button>
   );
 }
 
-export function EfaturaContent({ records, stats, statusFilter }: EfaturaContentProps) {
+function ErrorDetails({ message }: { message: string }) {
   return (
-    <div className="p-6 space-y-6">
-      <BlurFade delay={0.05}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">E-Fatura / E-Arşiv</h1>
-            <p className="text-sm text-zinc-500 mt-1">
-              Ödenen faturalar için oluşturulan e-fatura ve e-arşiv kayıtları
-            </p>
-          </div>
-          <Button asChild variant="outline">
-            <Link href="/yonetim/entegrasyonlar?tab=efatura">
-              <Plug className="h-4 w-4 mr-2" />
-              Entegrasyon Ayarları
-            </Link>
-          </Button>
+    <details className="group max-w-xs">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
+        <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
+        <span className="truncate text-[13px]">{message}</span>
+      </summary>
+      <p className="mt-2 whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-2 font-mono text-xs text-muted-foreground">
+        {message}
+      </p>
+    </details>
+  );
+}
+
+const columns: ColumnDef<EInvoiceRecordItem>[] = [
+  {
+    id: "invoice",
+    accessorFn: (r) => r.invoice.invoiceNumber,
+    header: "Fatura",
+    cell: ({ row }) => (
+      <div className="min-w-0">
+        <Link href={invoiceHref(row.original)} className="font-mono text-[13px] font-medium hover:underline">
+          {row.original.invoice.invoiceNumber}
+        </Link>
+        <p className="text-xs tabular-nums text-muted-foreground">{money(row.original.invoice.totalAmount)}</p>
+      </div>
+    ),
+  },
+  {
+    id: "customer",
+    accessorFn: (r) => customerName(r),
+    header: "Müşteri",
+    cell: ({ row }) => <span className="block max-w-[200px] truncate">{customerName(row.original)}</span>,
+  },
+  {
+    accessorKey: "type",
+    header: "Tür",
+    cell: ({ row }) => <span className="text-muted-foreground">{typeLabel(row.original.type)}</span>,
+  },
+  {
+    accessorKey: "status",
+    header: "Durum",
+    enableSorting: false,
+    cell: ({ row }) => <StatusBadge kind="eInvoice" status={row.original.status} />,
+  },
+  {
+    accessorKey: "documentNumber",
+    header: "Belge no",
+    cell: ({ row }) => (
+      <span className="font-mono text-xs text-muted-foreground">{row.original.documentNumber || "—"}</span>
+    ),
+  },
+  {
+    id: "error",
+    header: "Hata",
+    enableSorting: false,
+    cell: ({ row }) =>
+      row.original.errorMessage ? (
+        <ErrorDetails message={row.original.errorMessage} />
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
+    id: "sentAt",
+    accessorFn: (r) => (r.sentAt ? new Date(r.sentAt).getTime() : 0),
+    header: "Gönderim",
+    cell: ({ row }) => (
+      <span className="whitespace-nowrap tabular-nums text-muted-foreground">{formatDateTime(row.original.sentAt)}</span>
+    ),
+  },
+  {
+    id: "action",
+    header: () => <span className="sr-only">İşlem</span>,
+    enableSorting: false,
+    meta: { align: "right", className: "w-px" },
+    cell: ({ row }) => (canRetry(row.original.status) ? <RetryButton recordId={row.original.id} /> : null),
+  },
+];
+
+export function EfaturaContent({ records, stats, statusFilter }: EfaturaContentProps) {
+  const tabs = [
+    { value: "all", label: "Tümü", href: "/yonetim/efatura", count: stats.total },
+    { value: "FAILED", label: "Başarısız", href: "/yonetim/efatura?status=FAILED", count: stats.failed },
+    { value: "QUEUED", label: "Kuyrukta", href: "/yonetim/efatura?status=QUEUED", count: stats.queued },
+    { value: "SENT", label: "Gönderildi", href: "/yonetim/efatura?status=SENT", count: stats.sent },
+    { value: "DRAFT", label: "Taslak", href: "/yonetim/efatura?status=DRAFT", count: stats.draft },
+  ];
+
+  return (
+    <>
+      <PageHeader
+        title="E-Fatura / E-Arşiv"
+        description="Ödenen faturalar için oluşturulan e-fatura ve e-arşiv kayıtları."
+        actions={
+          <Link href="/yonetim/entegrasyonlar?tab=efatura" className={appButton({ variant: "outline" })}>
+            <Plug aria-hidden />
+            Entegrasyon ayarları
+          </Link>
+        }
+      />
+
+      <StatGrid columns={4}>
+        <StatCard
+          label="Gönderildi"
+          value={(stats.sent + stats.accepted).toLocaleString("tr-TR")}
+          hint={`${stats.accepted.toLocaleString("tr-TR")} kabul edildi`}
+          tone={stats.sent + stats.accepted ? "success" : undefined}
+        />
+        <StatCard
+          label="Kuyrukta"
+          value={stats.queued.toLocaleString("tr-TR")}
+          hint="Gönderim sırası bekleyen"
+          tone={stats.queued ? "info" : undefined}
+        />
+        <StatCard
+          label="Başarısız"
+          value={stats.failed.toLocaleString("tr-TR")}
+          hint={stats.failed ? "Yeniden gönderim gerekiyor" : "Hatalı kayıt yok"}
+          tone={stats.failed ? "danger" : undefined}
+        />
+        <StatCard label="Toplam kayıt" value={stats.total.toLocaleString("tr-TR")} icon={FileText} />
+      </StatGrid>
+
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <LinkTabs label="Durum filtresi" tabs={tabs} active={statusFilter} />
+          <p className="shrink-0 text-xs text-muted-foreground">
+            {records.length.toLocaleString("tr-TR")} kayıt listeleniyor (son 100)
+          </p>
         </div>
-      </BlurFade>
 
-      <BlurFade delay={0.08}>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader className="pb-2">
-              <CardDescription>Gönderildi</CardDescription>
-              <CardTitle className="text-2xl text-emerald-600 dark:text-emerald-400">
-                {stats.sent + stats.accepted}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader className="pb-2">
-              <CardDescription>Kuyrukta</CardDescription>
-              <CardTitle className="text-2xl text-blue-600 dark:text-blue-400">{stats.queued}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader className="pb-2">
-              <CardDescription>Başarısız</CardDescription>
-              <CardTitle className="text-2xl text-red-600 dark:text-red-400">{stats.failed}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader className="pb-2">
-              <CardDescription>Toplam Kayıt</CardDescription>
-              <CardTitle className="text-2xl">{stats.total}</CardTitle>
-            </CardHeader>
-          </Card>
-        </div>
-      </BlurFade>
-
-      <BlurFade delay={0.09}>
-        <div className="flex flex-wrap gap-2">
-          {statusTabs.map((tab) => (
-            <Button
-              key={tab.value}
-              asChild
-              size="sm"
-              variant={statusFilter === tab.value ? "default" : "outline"}
-            >
-              <Link href={tab.href}>{tab.label}</Link>
-            </Button>
-          ))}
-        </div>
-      </BlurFade>
-
-      <BlurFade delay={0.1}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardHeader>
-            <CardTitle className="text-zinc-900 dark:text-white">Kayıtlar</CardTitle>
-            <CardDescription>{records.length} kayıt listeleniyor (son 100)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {records.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <FileText className="h-10 w-10 text-zinc-400 mb-3" />
-                <p className="text-sm text-zinc-500">
-                  Bu filtrede e-fatura kaydı yok. Ödeme tamamlandığında taslaklar otomatik oluşturulur.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-200 dark:border-zinc-800 text-left">
-                      <th className="py-3 pr-4 font-medium text-zinc-500">Fatura</th>
-                      <th className="py-3 pr-4 font-medium text-zinc-500">Müşteri</th>
-                      <th className="py-3 pr-4 font-medium text-zinc-500">Tür</th>
-                      <th className="py-3 pr-4 font-medium text-zinc-500">Durum</th>
-                      <th className="py-3 pr-4 font-medium text-zinc-500">Belge No</th>
-                      <th className="py-3 pr-4 font-medium text-zinc-500">Hata</th>
-                      <th className="py-3 pr-4 font-medium text-zinc-500">Gönderim</th>
-                      <th className="py-3 font-medium text-zinc-500">İşlem</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {records.map((record) => {
-                      const status = statusLabels[record.status];
-                      const customerName =
-                        record.invoice.customer.companyName ||
-                        `${record.invoice.customer.name} ${record.invoice.customer.surname}`.trim();
-                      const canRetry = ["FAILED", "DRAFT", "QUEUED"].includes(record.status);
-
-                      return (
-                        <tr
-                          key={record.id}
-                          className="border-b border-zinc-100 dark:border-zinc-800/80 align-top"
-                        >
-                          <td className="py-3 pr-4">
-                            <Link
-                              href={`/yonetim/faturalar/${record.invoiceId}`}
-                              className="font-medium text-primary hover:underline"
-                            >
-                              {record.invoice.invoiceNumber}
-                            </Link>
-                            <p className="text-xs text-zinc-500">
-                              {record.invoice.totalAmount.toLocaleString("tr-TR")} ₺
-                            </p>
-                          </td>
-                          <td className="py-3 pr-4 text-zinc-700 dark:text-zinc-300">{customerName}</td>
-                          <td className="py-3 pr-4">
-                            <Badge variant="outline">
-                              {record.type === "e-fatura" ? "E-Fatura" : "E-Arşiv"}
-                            </Badge>
-                          </td>
-                          <td className="py-3 pr-4">
-                            <Badge variant="outline" className={cn(status.className)}>
-                              {status.label}
-                            </Badge>
-                          </td>
-                          <td className="py-3 pr-4 text-zinc-600 dark:text-zinc-400">
-                            {record.documentNumber || "—"}
-                          </td>
-                          <td className="py-3 pr-4 max-w-xs">
-                            {record.errorMessage ? (
-                              <details>
-                                <summary className="cursor-pointer list-none flex items-center gap-1 text-red-600 dark:text-red-400">
-                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                  <span className="truncate">{record.errorMessage}</span>
-                                </summary>
-                                <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400 break-words">
-                                  {record.errorMessage}
-                                </p>
-                              </details>
-                            ) : (
-                              <span className="text-zinc-500">—</span>
-                            )}
-                          </td>
-                          <td className="py-3 pr-4 text-zinc-600 dark:text-zinc-400">
-                            {formatDate(record.sentAt)}
-                          </td>
-                          <td className="py-3">
-                            {canRetry ? <RetryButton recordId={record.id} /> : <span className="text-zinc-500">—</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+        <DataTable
+          caption="E-fatura kayıtları"
+          columns={columns}
+          data={records}
+          getRowId={(r) => r.id}
+          searchFn={(r, q) =>
+            r.invoice.invoiceNumber.toLocaleLowerCase("tr-TR").includes(q) ||
+            customerName(r).toLocaleLowerCase("tr-TR").includes(q) ||
+            (r.documentNumber ?? "").toLocaleLowerCase("tr-TR").includes(q)
+          }
+          searchPlaceholder="Fatura, müşteri, belge no ara…"
+          rowHref={invoiceHref}
+          mobileCard={(r) => (
+            <div className="space-y-3">
+              <ListRow
+                title={<span className="font-mono">{r.invoice.invoiceNumber}</span>}
+                subtitle={`${customerName(r)} · ${typeLabel(r.type)}`}
+                trailing={money(r.invoice.totalAmount)}
+                meta={
+                  <>
+                    <StatusBadge kind="eInvoice" status={r.status} />
+                    {r.documentNumber ? <span className="font-mono">{r.documentNumber}</span> : null}
+                    {r.sentAt ? <span className="tabular-nums">{formatDateTime(r.sentAt)}</span> : null}
+                  </>
+                }
+              />
+              {r.errorMessage ? <ErrorDetails message={r.errorMessage} /> : null}
+              {canRetry(r.status) ? <RetryButton recordId={r.id} /> : null}
+            </div>
+          )}
+          emptyState={
+            <EmptyState
+              icon={FileText}
+              title="Bu filtrede e-fatura kaydı yok"
+              description="Ödeme tamamlandığında taslaklar otomatik oluşturulur."
+            />
+          }
+        />
+      </div>
+    </>
   );
 }

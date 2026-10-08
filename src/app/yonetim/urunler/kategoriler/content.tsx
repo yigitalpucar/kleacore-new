@@ -2,39 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  Plus,
-  Search,
-  Edit,
-  MoreVertical,
-  Eye,
-  EyeOff,
-  Package,
-  Layers,
-  Trash2,
-  ArrowUp,
-  ArrowDown,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
+import { Edit, Eye, EyeOff, Layers, Package, Plus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -42,10 +13,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
-import { BlurFade } from "@/components/magicui/blur-fade";
+import {
+  DataTable,
+  EmptyState,
+  FormField,
+  IconTile,
+  ListRow,
+  PageHeader,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  appButton,
+  type ColumnDef,
+} from "@/components/app";
+import { CatalogDialog, OrderControls, SwitchField } from "@/components/admin-b/katalog";
 import { categoryConfig } from "@/lib/products/constants";
 import {
   createCategory,
@@ -83,7 +64,6 @@ const categoryOptions = Object.entries(categoryConfig).map(([slug, config]) => (
 
 export function CategoriesContent({ categories: initialCategories }: CategoriesContentProps) {
   const [categories, setCategories] = useState(initialCategories);
-  const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<DialogMode>("edit");
   const [editingCategory, setEditingCategory] = useState<CategoryData | null>(null);
@@ -92,14 +72,6 @@ export function CategoriesContent({ categories: initialCategories }: CategoriesC
     () => [...categories].sort((a, b) => a.displayOrder - b.displayOrder),
     [categories]
   );
-
-  const filteredCategories = sortedCategories.filter((category) => {
-    return (
-      category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      category.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      category.description.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  });
 
   const usedSlugs = useMemo(
     () => new Set(categories.map((category) => category.slug)),
@@ -299,284 +271,210 @@ export function CategoriesContent({ categories: initialCategories }: CategoriesC
 
   const activeCount = categories.filter((cat) => cat.isActive).length;
   const totalProducts = categories.reduce((sum, cat) => sum + cat.productCount, 0);
+  const lastIndex = sortedCategories.length - 1;
+  const indexOf = (id: string) => sortedCategories.findIndex((cat) => cat.id === id);
+
+  const productsHref = (slug: string) => `/yonetim/urunler/paketler?kategori=${slug}`;
+
+  const renderOrder = (category: CategoryData) => {
+    const index = indexOf(category.id);
+    return (
+      <OrderControls
+        value={category.displayOrder}
+        itemLabel={category.name}
+        onUp={() => handleMove(category.id, "up")}
+        onDown={() => handleMove(category.id, "down")}
+        upDisabled={index <= 0}
+        downDisabled={index === -1 || index === lastIndex}
+      />
+    );
+  };
+
+  const renderIcon = (category: CategoryData) => {
+    const Icon = categoryConfig[category.slug as keyof typeof categoryConfig]?.icon ?? Layers;
+    return (
+      <IconTile size="sm">
+        <Icon />
+      </IconTile>
+    );
+  };
+
+  const statusBadge = (category: CategoryData) =>
+    category.isActive ? <StatusBadge tone="success" label="Aktif" /> : <StatusBadge tone="muted" label="Pasif" />;
+
+  const columns: ColumnDef<CategoryData>[] = [
+    {
+      id: "order",
+      accessorFn: (c) => c.displayOrder,
+      header: "Sıra",
+      enableSorting: false,
+      meta: { className: "w-px" },
+      cell: ({ row }) => renderOrder(row.original),
+    },
+    {
+      accessorKey: "name",
+      header: "Kategori",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const c = row.original;
+        return (
+          <div className="flex min-w-0 items-center gap-3">
+            {renderIcon(c)}
+            <div className="min-w-0">
+              <p className="truncate font-medium">{c.name}</p>
+              <p className="font-mono text-xs text-muted-foreground">{c.slug}</p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "description",
+      header: "Açıklama",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <p className="max-w-xs truncate text-muted-foreground" title={row.original.description}>
+          {row.original.description || "—"}
+        </p>
+      ),
+    },
+    {
+      accessorKey: "productCount",
+      header: "Ürün",
+      enableSorting: false,
+      meta: { align: "right" },
+      cell: ({ row }) => (
+        <Link
+          href={productsHref(row.original.slug)}
+          className="inline-flex items-center gap-1.5 tabular-nums underline-offset-4 hover:underline"
+          aria-label={`${row.original.name}: ${row.original.productCount} ürünü görüntüle`}
+        >
+          <Package aria-hidden className="size-3.5 text-muted-foreground" />
+          {row.original.productCount}
+        </Link>
+      ),
+    },
+    {
+      id: "status",
+      header: "Durum",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const c = row.original;
+        return (
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={c.isActive}
+              onCheckedChange={() => handleToggleActive(c.id)}
+              aria-label={`${c.name} kategorisini ${c.isActive ? "pasife al" : "aktif et"}`}
+            />
+            {statusBadge(c)}
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      <BlurFade delay={0}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Kategoriler</h1>
-            <p className="text-zinc-600 dark:text-zinc-400">Ürün kategorilerini yönetin</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10">
-              <Layers className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium text-primary">{categories.length} Kategori</span>
-            </div>
-            <Button
-              className="bg-primary hover:bg-primary/90"
-              onClick={handleNewCategory}
-              disabled={availableSlugOptions.length === 0}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Kategori Ekle
-            </Button>
-          </div>
-        </div>
-      </BlurFade>
+      <PageHeader
+        title="Kategoriler"
+        description="Ürün kategorilerini, sıralarını ve görünürlüklerini yönetin."
+        actions={
+          <button
+            type="button"
+            className={appButton()}
+            onClick={handleNewCategory}
+            disabled={availableSlugOptions.length === 0}
+            title={availableSlugOptions.length === 0 ? "Eklenebilir yeni kategori kalmadı" : undefined}
+          >
+            <Plus aria-hidden />
+            Kategori ekle
+          </button>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <BlurFade delay={0.05}>
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <Layers className="h-5 w-5 text-zinc-500" />
-                <span className="text-xs text-zinc-500">Tümü</span>
-              </div>
-              <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">{categories.length}</p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">Toplam Kategori</p>
-            </CardContent>
-          </Card>
-        </BlurFade>
-        <BlurFade delay={0.1}>
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <Eye className="h-5 w-5 text-green-500" />
-                <span className="text-xs text-green-500">
-                  %{categories.length > 0 ? ((activeCount / categories.length) * 100).toFixed(0) : 0}
-                </span>
-              </div>
-              <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">{activeCount}</p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">Aktif Kategori</p>
-            </CardContent>
-          </Card>
-        </BlurFade>
-        <BlurFade delay={0.15}>
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <Package className="h-5 w-5 text-blue-500" />
-                <span className="text-xs text-zinc-500">Tüm kategorilerde</span>
-              </div>
-              <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">{totalProducts}</p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">Toplam Ürün</p>
-            </CardContent>
-          </Card>
-        </BlurFade>
-      </div>
+      <StatGrid columns={3} className="grid-cols-1 sm:grid-cols-3">
+        <StatCard label="Toplam kategori" value={categories.length} icon={Layers} />
+        <StatCard
+          label="Aktif kategori"
+          value={activeCount}
+          icon={Eye}
+          hint={
+            categories.length > 0
+              ? `%${Math.round((activeCount / categories.length) * 100)} yayında`
+              : "Henüz kategori yok"
+          }
+        />
+        <StatCard label="Toplam ürün" value={totalProducts} icon={Package} hint="Tüm kategorilerde" />
+      </StatGrid>
 
-      <BlurFade delay={0.2}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardContent className="p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-              <Input
-                type="search"
-                placeholder="Kategori adı, slug veya açıklama ara..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
+      <DataTable
+        caption="Kategoriler"
+        columns={columns}
+        data={sortedCategories}
+        getRowId={(c) => c.id}
+        pageSize={0}
+        searchFn={(c, q) =>
+          c.name.toLocaleLowerCase("tr-TR").includes(q) ||
+          c.slug.toLocaleLowerCase("tr-TR").includes(q) ||
+          c.description.toLocaleLowerCase("tr-TR").includes(q)
+        }
+        searchPlaceholder="Kategori adı, slug veya açıklama ara…"
+        noResultsText="Aramanızla eşleşen kategori bulunamadı."
+        rowActions={(c) => [
+          { label: "Düzenle", icon: <Edit aria-hidden />, onSelect: () => handleEditCategory(c) },
+          { label: "Ürünleri gör", icon: <Package aria-hidden />, href: productsHref(c.slug) },
+          {
+            label: c.isActive ? "Pasif yap" : "Aktif yap",
+            icon: c.isActive ? <EyeOff aria-hidden /> : <Eye aria-hidden />,
+            onSelect: () => handleToggleActive(c.id),
+            separator: true,
+          },
+          {
+            label: "Sil",
+            icon: <Trash2 aria-hidden />,
+            destructive: true,
+            separator: true,
+            ...(c.productCount > 0
+              ? { disabledReason: "Önce bu kategoriye bağlı ürünleri kaldırın" }
+              : { onSelect: () => handleDeleteCategory(c) }),
+          },
+        ]}
+        mobileCard={(c) => (
+          <ListRow
+            leading={renderIcon(c)}
+            title={c.name}
+            subtitle={<span className="font-mono text-xs">{c.slug}</span>}
+            trailing={
+              <span className="inline-flex items-center gap-1 text-muted-foreground">
+                <Package aria-hidden className="size-3.5" />
+                {c.productCount}
+              </span>
+            }
+            meta={
+              <>
+                {statusBadge(c)}
+                {renderOrder(c)}
+              </>
+            }
+          />
+        )}
+        emptyState={
+          <EmptyState
+            icon={Layers}
+            title="Henüz kategori yok"
+            description="İlk ürün kategorinizi ekleyerek başlayın."
+            action={
+              <button type="button" className={appButton()} onClick={handleNewCategory}>
+                <Plus aria-hidden />
+                Kategori ekle
+              </button>
+            }
+          />
+        }
+      />
 
-      <BlurFade delay={0.25}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400 w-20">Sıra</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Kategori</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Açıklama</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Ürün</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Durum</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Aktif</th>
-                    <th className="text-right p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">İşlemler</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCategories.map((category) => {
-                    const config = categoryConfig[category.slug as keyof typeof categoryConfig];
-                    const IconComponent = config?.icon;
-                    const sortedIndex = sortedCategories.findIndex((cat) => cat.id === category.id);
-
-                    return (
-                      <tr
-                        key={category.id}
-                        className={cn(
-                          "border-b border-zinc-200 dark:border-zinc-800 last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors",
-                          !category.isActive && "opacity-60"
-                        )}
-                      >
-                        <td className="p-4">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                              onClick={() => handleMove(category.id, "up")}
-                              disabled={sortedIndex <= 0}
-                            >
-                              <ArrowUp className="h-3 w-3" />
-                            </Button>
-                            <span className="text-sm font-medium text-zinc-500 w-4 text-center">
-                              {category.displayOrder}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                              onClick={() => handleMove(category.id, "down")}
-                              disabled={sortedIndex === -1 || sortedIndex === sortedCategories.length - 1}
-                            >
-                              <ArrowDown className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={cn(
-                                "p-2 rounded-lg",
-                                config?.color || "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                              )}
-                            >
-                              {IconComponent && <IconComponent className="h-4 w-4" />}
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-zinc-900 dark:text-white">
-                                {category.name}
-                              </p>
-                              <p className="text-xs text-zinc-500 font-mono">{category.slug}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <p className="text-sm text-zinc-600 dark:text-zinc-400 max-w-xs truncate">
-                            {category.description}
-                          </p>
-                        </td>
-                        <td className="p-4">
-                          <Link
-                            href={`/yonetim/urunler/paketler?kategori=${category.slug}`}
-                            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                          >
-                            <Package className="h-3 w-3" />
-                            {category.productCount}
-                          </Link>
-                        </td>
-                        <td className="p-4">
-                          <Badge
-                            className={cn(
-                              category.isActive
-                                ? "bg-green-500/10 text-green-600 dark:text-green-500 hover:bg-green-500/20"
-                                : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-500"
-                            )}
-                          >
-                            {category.isActive ? "Aktif" : "Pasif"}
-                          </Badge>
-                        </td>
-                        <td className="p-4">
-                          <Switch
-                            checked={category.isActive}
-                            onCheckedChange={() => handleToggleActive(category.id)}
-                            className="data-[state=checked]:bg-primary"
-                          />
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
-                              onClick={() => handleEditCategory(category)}
-                              title="Düzenle"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-                                >
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="end"
-                                className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
-                              >
-                                <DropdownMenuItem
-                                  className="cursor-pointer"
-                                  onClick={() => handleEditCategory(category)}
-                                >
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Düzenle
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild className="cursor-pointer">
-                                  <Link href={`/yonetim/urunler/paketler?kategori=${category.slug}`}>
-                                    <Package className="mr-2 h-4 w-4" />
-                                    Ürünleri Gör
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-zinc-200 dark:bg-zinc-800" />
-                                <DropdownMenuItem
-                                  className="cursor-pointer"
-                                  onClick={() => handleToggleActive(category.id)}
-                                >
-                                  {category.isActive ? (
-                                    <>
-                                      <EyeOff className="mr-2 h-4 w-4" />
-                                      Pasif Yap
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Eye className="mr-2 h-4 w-4" />
-                                      Aktif Yap
-                                    </>
-                                  )}
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-zinc-200 dark:bg-zinc-800" />
-                                <DropdownMenuItem
-                                  className={cn(
-                                    "cursor-pointer text-red-500 focus:text-red-500",
-                                    category.productCount > 0 && "opacity-50 cursor-not-allowed"
-                                  )}
-                                  onClick={() => handleDeleteCategory(category)}
-                                  disabled={category.productCount > 0}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Sil
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {filteredCategories.length === 0 && (
-              <div className="p-8 text-center">
-                <Layers className="h-12 w-12 text-zinc-400 mx-auto mb-4" />
-                <p className="text-zinc-600 dark:text-zinc-400">Kategori bulunamadı</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </BlurFade>
-
-      <Dialog
+      <CatalogDialog
         open={dialogOpen}
         onOpenChange={(open) => {
           if (!open) {
@@ -585,154 +483,98 @@ export function CategoriesContent({ categories: initialCategories }: CategoriesC
           }
           setDialogOpen(open);
         }}
-      >
-        <DialogContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-zinc-900 dark:text-white">
-              {dialogMode === "create" ? "Kategori Ekle" : "Kategori Düzenle"}
-            </DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
-              {dialogMode === "create"
-                ? "Yeni kategori bilgilerini girin."
-                : "Kategori bilgilerini güncelleyin."}
-            </DialogDescription>
-          </DialogHeader>
-          {editingCategory && (
-            <div className="grid gap-4 py-4">
-              {dialogMode === "create" ? (
-                <div className="grid gap-2">
-                  <Label htmlFor="slug" className="text-zinc-700 dark:text-zinc-300">
-                    Slug
-                  </Label>
-                  <Select
-                    value={editingCategory.slug}
-                    onValueChange={(value) => {
-                      const slug = value as ProductCategorySlug;
-                      const config = categoryConfig[slug];
-                      setEditingCategory({
-                        ...editingCategory,
-                        slug,
-                        name: config.name,
-                        description: config.description,
-                      });
-                    }}
-                  >
-                    <SelectTrigger className="bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white">
-                      <SelectValue placeholder="Kategori slug seçin" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-                      {availableSlugOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label} ({option.value})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div className="grid gap-2">
-                  <Label htmlFor="slug" className="text-zinc-700 dark:text-zinc-300">
-                    Slug
-                  </Label>
-                  <Input
-                    id="slug"
-                    value={editingCategory.slug}
-                    disabled
-                    className="bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-500"
-                  />
-                  <p className="text-xs text-zinc-500">Slug değiştirilemez.</p>
-                </div>
-              )}
-
-              <div className="grid gap-2">
-                <Label htmlFor="name" className="text-zinc-700 dark:text-zinc-300">
-                  Kategori Adı
-                </Label>
-                <Input
-                  id="name"
-                  value={editingCategory.name}
-                  onChange={(e) =>
-                    setEditingCategory({
-                      ...editingCategory,
-                      name: e.target.value,
-                    })
-                  }
-                  className="bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="description" className="text-zinc-700 dark:text-zinc-300">
-                  Açıklama
-                </Label>
-                <Textarea
-                  id="description"
-                  value={editingCategory.description}
-                  onChange={(e) =>
-                    setEditingCategory({
-                      ...editingCategory,
-                      description: e.target.value,
-                    })
-                  }
-                  className="bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white resize-none"
-                  rows={3}
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="displayOrder" className="text-zinc-700 dark:text-zinc-300">
-                  Sıralama
-                </Label>
-                <Input
-                  id="displayOrder"
-                  type="number"
-                  min={0}
-                  value={editingCategory.displayOrder}
-                  onChange={(e) =>
-                    setEditingCategory({
-                      ...editingCategory,
-                      displayOrder: parseInt(e.target.value, 10) || 0,
-                    })
-                  }
-                  className="bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                />
-              </div>
-
-              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-                <div className="flex items-center gap-2">
-                  <Eye className="h-4 w-4 text-zinc-500" />
-                  <Label htmlFor="isActive" className="text-zinc-700 dark:text-zinc-300">
-                    Aktif
-                  </Label>
-                </div>
-                <Switch
-                  id="isActive"
-                  checked={editingCategory.isActive}
-                  onCheckedChange={(checked) =>
-                    setEditingCategory({
-                      ...editingCategory,
-                      isActive: checked,
-                    })
-                  }
-                  className="data-[state=checked]:bg-primary"
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={closeDialog}
-              className="border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            >
+        title={dialogMode === "create" ? "Kategori ekle" : "Kategoriyi düzenle"}
+        description={
+          dialogMode === "create" ? "Yeni kategori bilgilerini girin." : "Kategori bilgilerini güncelleyin."
+        }
+        footer={
+          <>
+            <button type="button" className={appButton({ variant: "outline" })} onClick={closeDialog}>
               İptal
-            </Button>
-            <Button onClick={handleSaveCategory} className="bg-primary hover:bg-primary/90">
+            </button>
+            <button type="button" className={appButton()} onClick={handleSaveCategory}>
               {dialogMode === "create" ? "Oluştur" : "Kaydet"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </button>
+          </>
+        }
+      >
+        {editingCategory ? (
+          <>
+            {dialogMode === "create" ? (
+              <FormField label="Slug" htmlFor="slug" hint="Kategori türünü belirler; sonradan değiştirilemez.">
+                <Select
+                  value={editingCategory.slug}
+                  onValueChange={(value) => {
+                    const slug = value as ProductCategorySlug;
+                    const config = categoryConfig[slug];
+                    setEditingCategory({
+                      ...editingCategory,
+                      slug,
+                      name: config.name,
+                      description: config.description,
+                    });
+                  }}
+                >
+                  <SelectTrigger id="slug">
+                    <SelectValue placeholder="Kategori slug seçin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSlugOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label} ({option.value})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+            ) : (
+              <FormField label="Slug" htmlFor="slug" hint="Slug değiştirilemez.">
+                <Input id="slug" value={editingCategory.slug} disabled className="font-mono" />
+              </FormField>
+            )}
+
+            <FormField label="Kategori adı" htmlFor="name" required>
+              <Input
+                id="name"
+                value={editingCategory.name}
+                onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+              />
+            </FormField>
+
+            <FormField label="Açıklama" htmlFor="description">
+              <Textarea
+                id="description"
+                value={editingCategory.description}
+                onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
+                className="resize-none"
+                rows={3}
+              />
+            </FormField>
+
+            <FormField label="Sıralama" htmlFor="displayOrder" hint="Küçük sayı listede önce gösterilir.">
+              <Input
+                id="displayOrder"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={editingCategory.displayOrder}
+                onChange={(e) =>
+                  setEditingCategory({ ...editingCategory, displayOrder: parseInt(e.target.value, 10) || 0 })
+                }
+                className="sm:max-w-[160px]"
+              />
+            </FormField>
+
+            <SwitchField
+              id="isActive"
+              label="Aktif"
+              description="Pasif kategoriler sitede ve sipariş akışında gösterilmez."
+              checked={editingCategory.isActive}
+              onCheckedChange={(checked) => setEditingCategory({ ...editingCategory, isActive: checked })}
+            />
+          </>
+        ) : null}
+      </CatalogDialog>
     </div>
   );
 }

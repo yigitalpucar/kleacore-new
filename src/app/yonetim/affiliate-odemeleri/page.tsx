@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { AffiliateOdemeleriContent } from "./content";
 import {
   getAffiliatePayoutStats,
@@ -7,6 +8,8 @@ import { requireAdmin } from "@/lib/utils/auth-helpers";
 import type { AffiliatePaymentStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Affiliate ödemeleri" };
 
 function readStatusFilter(
   searchParams: Record<string, string | string[] | undefined>

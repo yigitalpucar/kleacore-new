@@ -1,26 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  Package,
-  ShoppingCart,
-  Tag,
-  TrendingUp,
-  ArrowUpRight,
-  CheckCircle,
-  Clock,
-  Layers,
-  Box,
-  Percent,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { BlurFade } from "@/components/magicui/blur-fade";
+import { ArrowUpRight, Box, Layers, Package, Percent, Plus, ShoppingCart, Tag } from "lucide-react";
+import { IconTile, PageHeader, SectionCard, StatCard, StatGrid, appButton } from "@/components/app";
 import { categoryConfig } from "@/lib/products/constants";
 import { getProductStats, getProductCategoryCounts } from "@/lib/dal/products";
 import { getPromotions } from "@/lib/dal/promotions";
-import type { ProductCategorySlug } from "@/types/products";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Ürün yönetimi" };
 
 export default async function ProductsDashboardPage() {
   const [stats, categoryCounts, promotions] = await Promise.all([
@@ -30,159 +18,144 @@ export default async function ProductsDashboardPage() {
   ]);
 
   const quickLinks = [
-    { title: "Kategoriler", href: "/yonetim/urunler/kategoriler", icon: Layers, count: stats.totalCategories },
-    { title: "Paketler", href: "/yonetim/urunler/paketler", icon: Box, count: stats.totalProducts },
-    { title: "Özellikler", href: "/yonetim/urunler/ozellikler", icon: Tag, count: 0 },
-    { title: "Promosyonlar", href: "/yonetim/urunler/promosyonlar", icon: Percent, count: promotions.length },
-    { title: "Siparisler", href: "/yonetim/siparisler", icon: ShoppingCart, count: 0 },
-  ];
-
-  const statCards = [
     {
-      title: "Toplam Ürün",
-      value: stats.totalProducts.toString(),
-      description: `${stats.activeProducts} aktif, ${stats.draftProducts} taslak`,
-      icon: Package,
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-    },
-    {
-      title: "Aktif Ürün",
-      value: stats.activeProducts.toString(),
-      description: "Yayında",
-      icon: CheckCircle,
-      color: "text-green-500",
-      bgColor: "bg-green-500/10",
-    },
-    {
-      title: "Taslak",
-      value: stats.draftProducts.toString(),
-      description: "Yayınlanmadı",
-      icon: Clock,
-      color: "text-yellow-500",
-      bgColor: "bg-yellow-500/10",
-    },
-    {
-      title: "Kategori",
-      value: stats.totalCategories.toString(),
-      description: "Aktif kategori",
+      title: "Kategoriler",
+      description: "Kategori adları, sıralama ve görünürlük",
+      href: "/yonetim/urunler/kategoriler",
       icon: Layers,
-      color: "text-primary",
-      bgColor: "bg-primary/10",
+      count: `${stats.totalCategories} kategori`,
+    },
+    {
+      title: "Paketler",
+      description: "Ürünler, fiyat dönemleri ve stok",
+      href: "/yonetim/urunler/paketler",
+      icon: Box,
+      count: `${stats.totalProducts} paket`,
+    },
+    {
+      title: "Özellikler",
+      description: "Paketlerde kullanılan özellik tanımları",
+      href: "/yonetim/urunler/ozellikler",
+      icon: Tag,
+      count: null,
+    },
+    {
+      title: "Promosyonlar",
+      description: "İndirim kodları ve kampanyalar",
+      href: "/yonetim/urunler/promosyonlar",
+      icon: Percent,
+      count: `${promotions.length} aktif kod`,
+    },
+    {
+      title: "Siparişler",
+      description: "Paketlerden oluşan siparişler",
+      href: "/yonetim/siparisler",
+      icon: ShoppingCart,
+      count: null,
     },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <BlurFade delay={0}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Ürün Yönetimi</h1>
-            <p className="text-zinc-600 dark:text-zinc-400">Ürünler, kategoriler ve promosyonlar</p>
-          </div>
-          <Button asChild className="bg-primary hover:bg-primary/90">
-            <Link href="/yonetim/urunler/paketler/yeni">
-              <Package className="mr-2 h-4 w-4" />
-              Yeni Paket
-            </Link>
-          </Button>
-        </div>
-      </BlurFade>
+    <>
+      <PageHeader
+        title="Ürün yönetimi"
+        description="Paketler, kategoriler, özellikler ve promosyonlar."
+        actions={
+          <Link href="/yonetim/urunler/paketler/yeni" className={appButton()}>
+            <Plus aria-hidden />
+            Yeni paket
+          </Link>
+        }
+      />
 
-      {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {statCards.map((stat, index) => (
-          <BlurFade key={stat.title} delay={0.1 + index * 0.05}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className={cn("p-2 rounded-lg", stat.bgColor)}>
-                    <stat.icon className={cn("h-5 w-5", stat.color)} />
-                  </div>
-                </div>
-                <p className="mt-3 text-2xl font-bold text-zinc-900 dark:text-white">{stat.value}</p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">{stat.title}</p>
-                <p className="text-xs text-zinc-500 mt-1">{stat.description}</p>
-              </CardContent>
-            </Card>
-          </BlurFade>
-        ))}
-      </div>
+      <StatGrid columns={4}>
+        <StatCard
+          label="Toplam ürün"
+          value={stats.totalProducts}
+          hint={`${stats.activeProducts} aktif, ${stats.draftProducts} taslak`}
+          href="/yonetim/urunler/paketler"
+        />
+        <StatCard
+          label="Aktif ürün"
+          value={stats.activeProducts}
+          hint="Yayında"
+          tone={stats.activeProducts ? "success" : undefined}
+        />
+        <StatCard label="Taslak" value={stats.draftProducts} hint="Yayınlanmadı" />
+        <StatCard
+          label="Kategori"
+          value={stats.totalCategories}
+          hint="Aktif kategori"
+          href="/yonetim/urunler/kategoriler"
+        />
+      </StatGrid>
 
-      {/* Quick Links */}
-      <BlurFade delay={0.3}>
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+      <SectionCard title="Katalog" description="Ürün kataloğunun bölümlerine hızlı erişim." flush>
+        <ul className="grid divide-y sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-5">
           {quickLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="flex items-center gap-3 p-4 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all group"
-            >
-              <div className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700 transition-colors">
-                <link.icon className="h-5 w-5 text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-zinc-900 dark:text-white">{link.title}</p>
-                <p className="text-xs text-zinc-500">{link.count} kayıt</p>
-              </div>
-              <ArrowUpRight className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
-            </Link>
-          ))}
-        </div>
-      </BlurFade>
-
-      {/* Categories Overview */}
-      <BlurFade delay={0.5}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div>
-              <CardTitle className="text-zinc-900 dark:text-white">Kategoriler</CardTitle>
-              <CardDescription className="text-zinc-400">
-                Kategori bazlı ürün dağılımı
-              </CardDescription>
-            </div>
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-            >
-              <Link href="/yonetim/urunler/kategoriler">
-                Tümünü Gör
-                <ArrowUpRight className="ml-1 h-4 w-4" />
+            <li key={link.href} className="sm:border-b lg:border-b-0 lg:border-r lg:last:border-r-0">
+              <Link
+                href={link.href}
+                className="group flex h-full items-start gap-3 p-4 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                <IconTile size="sm">
+                  <link.icon aria-hidden className="size-4" />
+                </IconTile>
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1 text-sm font-medium">
+                    {link.title}
+                    <ArrowUpRight
+                      aria-hidden
+                      className="size-3.5 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                    />
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{link.description}</p>
+                  {link.count ? (
+                    <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                      {link.count}
+                    </p>
+                  ) : null}
+                </div>
               </Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-4 lg:grid-cols-7">
-              {categoryCounts.map((cat) => {
-                const config = categoryConfig[cat.slug as keyof typeof categoryConfig];
-                if (!config) return null;
-                const Icon = config.icon;
+            </li>
+          ))}
+        </ul>
+      </SectionCard>
 
-                return (
-                  <Link
-                    key={cat.slug}
-                    href={`/yonetim/urunler/paketler?kategori=${cat.slug}`}
-                    className="flex flex-col items-center p-4 rounded-lg bg-zinc-100 dark:bg-zinc-800/50 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 transition-all text-center group"
-                  >
-                    <div className={cn("p-3 rounded-lg mb-2", config.color)}>
-                      <Icon className="h-6 w-6" />
-                    </div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-white group-hover:text-primary transition-colors">
-                      {config.name}
-                    </p>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      {cat.productCount} ürün
-                    </p>
-                  </Link>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+      <SectionCard
+        title="Kategoriler"
+        description="Kategori bazlı ürün dağılımı. Bir kategoriye tıklayarak paketlerini listeleyin."
+        actions={
+          <Link href="/yonetim/urunler/kategoriler" className={appButton({ variant: "ghost", size: "sm" })}>
+            Tümünü gör
+            <ArrowUpRight aria-hidden />
+          </Link>
+        }
+      >
+        <ul className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5">
+          {categoryCounts.map((cat) => {
+            const config = categoryConfig[cat.slug as keyof typeof categoryConfig];
+            if (!config) return null;
+            const Icon = config.icon ?? Package;
+            return (
+              <li key={cat.slug}>
+                <Link
+                  href={`/yonetim/urunler/paketler?kategori=${cat.slug}`}
+                  className="group flex h-full items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <IconTile size="sm">
+                    <Icon aria-hidden className="size-4" />
+                  </IconTile>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{config.name}</p>
+                    <p className="text-xs tabular-nums text-muted-foreground">{cat.productCount} ürün</p>
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </SectionCard>
+    </>
   );
 }

@@ -1,18 +1,31 @@
+import type { Metadata } from "next";
 import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Users,
-  Package,
-  BarChart3,
-  FileText,
+  Banknote,
   Calculator,
+  FileText,
+  Package,
   Receipt,
+  Repeat,
+  TrendingUp,
+  UserMinus,
+  UserPlus,
+  Users,
+  Wallet,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
-import { BlurFade } from "@/components/magicui/blur-fade";
+import {
+  ChartCard,
+  DetailList,
+  PageHeader,
+  SectionCard,
+  StatCard,
+  StatGrid,
+  enumLabel,
+  getStatusMeta,
+} from "@/components/app";
+import { BreakdownBars, StackedShareBar } from "@/components/admin-b/raporlar/breakdown";
+import { LedgerTable, TaxBreakdownTable } from "@/components/admin-b/raporlar/accounting-tables";
+import { formatTRY } from "@/lib/format/price";
 import {
   getRevenueReport,
   getCustomerReport,
@@ -26,25 +39,13 @@ import { ReportExportButton } from "./report-export-button";
 
 export const dynamic = "force-dynamic";
 
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-  }).format(price);
-};
+export const metadata: Metadata = { title: "Raporlar" };
 
-// Hizmet renk paleti
-const serviceColors = [
-  "bg-blue-500",
-  "bg-green-500",
-  "bg-purple-500",
-  "bg-orange-500",
-  "bg-cyan-500",
-  "bg-pink-500",
-  "bg-yellow-500",
-  "bg-red-500",
-];
+const formatPrice = (price: number) => formatTRY(price, { keepDecimals: true });
+const count = (n: number) => n.toLocaleString("tr-TR");
+
+const tabTrigger =
+  "-mb-px h-11 shrink-0 gap-2 rounded-none border-b-2 border-transparent px-3 text-sm text-muted-foreground shadow-none hover:text-foreground data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none md:h-10 [&_svg]:size-4";
 
 const reportPeriods = ["7days", "30days", "3months", "6months", "1year"] as const;
 type ReportPeriod = (typeof reportPeriods)[number];
@@ -178,12 +179,6 @@ function periodLabel(period: ReportPeriod) {
   return "Son 6 Ay";
 }
 
-const paymentMethodLabels: Record<PaymentMethod, string> = {
-  CREDIT_CARD: "Kredi Kartı",
-  BANK_TRANSFER: "Banka Havalesi",
-  BALANCE: "Bakiye",
-};
-
 export default async function ReportsPage({
   searchParams,
 }: {
@@ -204,530 +199,180 @@ export default async function ReportsPage({
   ]);
 
   const chart = buildRevenueChartData(revenueData.paidInvoices, period, now);
-  const monthlyData = chart.points;
+  const chartData = chart.points.map((p) => ({ label: p.month, value: p.revenue }));
+  const chartTotal = chart.points.reduce((sum, p) => sum + p.revenue, 0);
 
-  const maxRevenue = Math.max(...monthlyData.map((d) => d.revenue), 1);
-
-  // Hizmet dagilimi: servicesByStatus'u kullan
   const totalActiveServices = serviceData.servicesByStatus.find((s) => s.status === "ACTIVE")?._count.id ?? 0;
-  const totalSuspendedServices = serviceData.servicesByStatus.find((s) => s.status === "SUSPENDED")?._count.id ?? 0;
-  const totalCancelledServices = serviceData.servicesByStatus.find((s) => s.status === "CANCELLED")?._count.id ?? 0;
-  const totalExpiredServices = serviceData.servicesByStatus.find((s) => s.status === "EXPIRED")?._count.id ?? 0;
 
   const totalRevenueNum = Number(revenueData.totalRevenue);
   const avgInvoiceNum = Number(revenueData.avgInvoiceAmount);
   const monthlyRecurringNum = Number(serviceData.monthlyRecurring);
 
-  // Inactive musteri orani
   const inactiveCustomers = customerData.totalCustomers - customerData.activeCustomers;
 
   const accountingSummary = accountingData.summary;
-  const paymentMethodRows = (
+  const paymentMethodItems = (
     Object.entries(accountingSummary.collectedByMethod) as Array<[PaymentMethod, number]>
   ).map(([method, amount]) => ({
-    method,
-    label: paymentMethodLabels[method],
-    amount,
+    key: method,
+    label: enumLabel("paymentMethod", method),
+    value: amount,
+    display: formatPrice(amount),
   }));
 
+  const customerTypeItems = customerData.customersByType.map((item) => ({
+    key: item.customerType ?? "unknown",
+    label: item.customerType ? enumLabel("customerType", item.customerType) : "Belirtilmemiş",
+    value: item._count.id,
+  }));
+
+  const serviceStatusItems = [...serviceData.servicesByStatus]
+    .sort((a, b) => b._count.id - a._count.id)
+    .map((service) => {
+      const meta = getStatusMeta("service", service.status);
+      return { key: service.status, label: meta.label, value: service._count.id, tone: meta.tone };
+    });
+
+  const taxRows = accountingData.taxBreakdown.map((row) => ({
+    month: row.month,
+    label: row.label,
+    subtotal: row.subtotal,
+    tax: row.tax,
+    total: row.total,
+  }));
+
+  const ledgerRows = accountingData.ledgerPreview.map((entry, index) => ({
+    key: `${entry.invoiceNumber}-${entry.date.toISOString()}-${index}`,
+    date: entry.date.toISOString(),
+    invoiceNumber: entry.invoiceNumber,
+    customerName: entry.customerName,
+    subtotal: entry.subtotal,
+    taxAmount: entry.taxAmount,
+    totalAmount: entry.totalAmount,
+    paymentMethod: entry.paymentMethod,
+  }));
+
+  const label = periodLabel(period);
+
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <BlurFade delay={0}>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Raporlar</h1>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
-              İş performansınızı analiz edin ve detaylı raporlar görüntüleyin
-            </p>
-          </div>
-          <ReportExportButton period={period} />
-        </div>
-      </BlurFade>
+    <>
+      <PageHeader
+        title="Raporlar"
+        description="Gelir, müşteri, hizmet ve muhasebe verilerini seçtiğiniz döneme göre inceleyin."
+        meta={<span className="font-mono text-[11px] uppercase tracking-[0.12em]">Dönem · {label}</span>}
+        actions={<ReportExportButton period={period} />}
+      />
 
-      {/* Period Filter */}
-      <BlurFade delay={0.05}>
-        <PeriodFilter currentPeriod={period} />
-      </BlurFade>
+      <PeriodFilter currentPeriod={period} />
 
-      <BlurFade delay={0.1}>
-      <Tabs defaultValue="revenue" className="w-full">
-        <TabsList className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 p-1">
-          <TabsTrigger
-            value="revenue"
-            className="data-[state=active]:bg-white data-[state=active]:dark:bg-zinc-800 data-[state=active]:shadow-sm"
-          >
-            <DollarSign className="mr-2 h-4 w-4" />
+      <Tabs defaultValue="revenue" className="w-full space-y-6">
+        <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0 [scrollbar-width:none]">
+          <TabsTrigger value="revenue" className={tabTrigger}>
+            <Banknote aria-hidden />
             Gelir
           </TabsTrigger>
-          <TabsTrigger
-            value="customers"
-            className="data-[state=active]:bg-white data-[state=active]:dark:bg-zinc-800 data-[state=active]:shadow-sm"
-          >
-            <Users className="mr-2 h-4 w-4" />
+          <TabsTrigger value="customers" className={tabTrigger}>
+            <Users aria-hidden />
             Müşteriler
           </TabsTrigger>
-          <TabsTrigger
-            value="services"
-            className="data-[state=active]:bg-white data-[state=active]:dark:bg-zinc-800 data-[state=active]:shadow-sm"
-          >
-            <Package className="mr-2 h-4 w-4" />
+          <TabsTrigger value="services" className={tabTrigger}>
+            <Package aria-hidden />
             Hizmetler
           </TabsTrigger>
-          <TabsTrigger
-            value="accounting"
-            className="data-[state=active]:bg-white data-[state=active]:dark:bg-zinc-800 data-[state=active]:shadow-sm"
-          >
-            <Calculator className="mr-2 h-4 w-4" />
+          <TabsTrigger value="accounting" className={tabTrigger}>
+            <Calculator aria-hidden />
             Muhasebe
           </TabsTrigger>
         </TabsList>
 
-        {/* Revenue Tab */}
-        <TabsContent value="revenue" className="mt-6 space-y-6">
-          {/* Summary Cards */}
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="p-3 rounded-lg bg-green-500/10">
-                    <DollarSign className="h-6 w-6 text-green-500" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Toplam Gelir</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{formatPrice(totalRevenueNum)}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="p-3 rounded-lg bg-blue-500/10">
-                    <BarChart3 className="h-6 w-6 text-blue-500" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Fatura Sayısı</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{revenueData.invoiceCount.toLocaleString("tr-TR")}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="p-3 rounded-lg bg-purple-500/10">
-                    <FileText className="h-6 w-6 text-purple-500" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Ort. Fatura Tutarı</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{formatPrice(avgInvoiceNum)}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="p-3 rounded-lg bg-orange-500/10">
-                    <TrendingUp className="h-6 w-6 text-orange-500" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Aylık Tekrarlayan Gelir</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{formatPrice(monthlyRecurringNum)}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        <TabsContent value="revenue" className="mt-0 space-y-6">
+          <StatGrid columns={4}>
+            <StatCard label="Toplam gelir" value={formatPrice(totalRevenueNum)} icon={Wallet} hint={label} />
+            <StatCard label="Fatura sayısı" value={count(revenueData.invoiceCount)} icon={FileText} hint="Dönemde ödenen" />
+            <StatCard label="Ort. fatura" value={formatPrice(avgInvoiceNum)} icon={Receipt} hint="Ödenen fatura başına" />
+            <StatCard label="Aylık tekrarlayan" value={formatPrice(monthlyRecurringNum)} icon={Repeat} hint="Aktif hizmet tutarlarının toplamı" />
+          </StatGrid>
 
-          {/* Revenue Chart */}
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">{chart.title}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-4 h-64">
-                {monthlyData.map((data) => (
-                  <div key={data.month} className="flex-1 flex flex-col items-center gap-2">
-                    <div className="w-full flex gap-1 items-end" style={{ height: "200px" }}>
-                      <div
-                        className="flex-1 bg-primary rounded-t hover:bg-primary/80 transition-colors relative group"
-                        style={{ height: `${(data.revenue / maxRevenue) * 100}%` }}
-                      >
-                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-zinc-200 dark:bg-zinc-800 px-2 py-1 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                          {formatPrice(data.revenue)}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-xs text-zinc-500">{data.month}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded bg-primary" />
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">Gelir</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <ChartCard
+            title={chart.title}
+            description={`Dönem toplamı ${formatPrice(chartTotal)} · ödeme tarihine göre`}
+            data={chartData}
+            formatValue={formatPrice}
+            height={220}
+            emptyText="Seçilen dönemde ödenmiş fatura yok."
+          />
         </TabsContent>
 
-        {/* Customers Tab */}
-        <TabsContent value="customers" className="mt-6 space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-4">
-                <Users className="h-5 w-5 text-zinc-500 mb-2" />
-                <p className="text-2xl font-bold text-zinc-900 dark:text-white">{customerData.totalCustomers.toLocaleString("tr-TR")}</p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">Toplam Müşteri</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-4">
-                <TrendingUp className="h-5 w-5 text-green-500 mb-2" />
-                <p className="text-2xl font-bold text-zinc-900 dark:text-white">+{customerData.newInPeriod.toLocaleString("tr-TR")}</p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">{periodLabel(period)} yeni kayıt</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-4">
-                <TrendingDown className="h-5 w-5 text-red-500 mb-2" />
-                <p className="text-2xl font-bold text-zinc-900 dark:text-white">{inactiveCustomers.toLocaleString("tr-TR")}</p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">Pasif Müşteri</p>
-              </CardContent>
-            </Card>
-          </div>
+        <TabsContent value="customers" className="mt-0 space-y-6">
+          <StatGrid columns={3} className="grid-cols-1 sm:grid-cols-3">
+            <StatCard label="Toplam müşteri" value={count(customerData.totalCustomers)} icon={Users} />
+            <StatCard label="Yeni kayıt" value={`+${count(customerData.newInPeriod)}`} icon={UserPlus} hint={label} />
+            <StatCard label="Pasif müşteri" value={count(inactiveCustomers)} icon={UserMinus} hint="Aktif olmayan hesaplar" />
+          </StatGrid>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Müşteri Metrikleri</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">Aktif Müşteri</span>
-                  <span className="text-sm font-medium text-green-500">{customerData.activeCustomers.toLocaleString("tr-TR")}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">{periodLabel(period)} yeni</span>
-                  <span className="text-sm font-medium text-zinc-900 dark:text-white">+{customerData.newInPeriod.toLocaleString("tr-TR")}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">Toplam Müşteri</span>
-                  <span className="text-sm font-medium text-zinc-900 dark:text-white">{customerData.totalCustomers.toLocaleString("tr-TR")}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Müşteri Türleri</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {customerData.customersByType.map((item) => {
-                    const percentage = customerData.totalCustomers > 0
-                      ? Math.round((item._count.id / customerData.totalCustomers) * 100)
-                      : 0;
-                    const label = item.customerType === "INDIVIDUAL" ? "Bireysel" : "Kurumsal";
-                    return (
-                      <div key={item.customerType ?? "unknown"}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm text-zinc-600 dark:text-zinc-400">{label}</span>
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300">{percentage}%</span>
-                        </div>
-                        <div className="h-2 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full"
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+          <div className="grid items-start gap-6 lg:grid-cols-2">
+            <SectionCard title="Müşteri metrikleri">
+              <DetailList
+                items={[
+                  { label: "Aktif müşteri", value: count(customerData.activeCustomers) },
+                  { label: `${label} yeni`, value: `+${count(customerData.newInPeriod)}` },
+                  { label: "Pasif müşteri", value: count(inactiveCustomers) },
+                  { label: "Toplam müşteri", value: count(customerData.totalCustomers) },
+                ]}
+              />
+            </SectionCard>
+            <SectionCard title="Müşteri türleri" description="Bireysel ve kurumsal hesap dağılımı">
+              <BreakdownBars items={customerTypeItems} total={customerData.totalCustomers} emptyText="Henüz müşteri yok." />
+            </SectionCard>
           </div>
         </TabsContent>
 
-        {/* Services Tab */}
-        <TabsContent value="services" className="mt-6 space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Hizmet Durumları</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {serviceData.servicesByStatus.map((service, index) => {
-                    const percentage = serviceData.totalServices > 0
-                      ? Math.round((service._count.id / serviceData.totalServices) * 100)
-                      : 0;
-                    const statusLabels: Record<string, string> = {
-                      ACTIVE: "Aktif",
-                      SUSPENDED: "Askıya Alınmış",
-                      CANCELLED: "İptal",
-                      EXPIRED: "Süresi Dolmuş",
-                    };
-                    return (
-                      <div key={service.status}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className={cn("h-3 w-3 rounded", serviceColors[index % serviceColors.length])} />
-                            <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                              {statusLabels[service.status] ?? service.status}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm text-zinc-600 dark:text-zinc-400">{service._count.id.toLocaleString("tr-TR")}</span>
-                            <span className="text-sm font-medium text-zinc-900 dark:text-white">{percentage}%</span>
-                          </div>
-                        </div>
-                        <div className="h-2 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                          <div
-                            className={cn("h-full rounded-full", serviceColors[index % serviceColors.length])}
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Hizmet İstatistikleri</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">Toplam Hizmet</span>
-                  <span className="text-sm font-medium text-zinc-900 dark:text-white">{serviceData.totalServices.toLocaleString("tr-TR")}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">Aktif Hizmet</span>
-                  <span className="text-sm font-medium text-green-500">{totalActiveServices.toLocaleString("tr-TR")}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">Aylık Tekrarlayan Gelir</span>
-                  <span className="text-sm font-medium text-zinc-900 dark:text-white">{formatPrice(monthlyRecurringNum)}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">Süresi Yaklaşan</span>
-                  <span className="text-sm font-medium text-red-500">{serviceData.expiringServices.length.toLocaleString("tr-TR")}</span>
-                </div>
-              </CardContent>
-            </Card>
+        <TabsContent value="services" className="mt-0 space-y-6">
+          <div className="grid items-start gap-6 lg:grid-cols-2">
+            <SectionCard title="Hizmet durumları" description={`Toplam ${count(serviceData.totalServices)} hizmet`}>
+              <StackedShareBar items={serviceStatusItems} emptyText="Henüz hizmet yok." />
+            </SectionCard>
+            <SectionCard title="Hizmet istatistikleri">
+              <DetailList
+                items={[
+                  { label: "Toplam hizmet", value: count(serviceData.totalServices) },
+                  { label: "Aktif hizmet", value: count(totalActiveServices) },
+                  { label: "Aylık tekrarlayan gelir", value: formatPrice(monthlyRecurringNum) },
+                  { label: "30 gün içinde sona erecek", value: count(serviceData.expiringServices.length) },
+                ]}
+              />
+            </SectionCard>
           </div>
         </TabsContent>
 
-        {/* Accounting Tab */}
-        <TabsContent value="accounting" className="mt-6 space-y-6">
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="p-3 rounded-lg bg-green-500/10">
-                    <DollarSign className="h-6 w-6 text-green-500" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Brüt Gelir</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
-                    {formatPrice(accountingSummary.grossRevenue)}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="p-3 rounded-lg bg-orange-500/10">
-                    <Receipt className="h-6 w-6 text-orange-500" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">KDV Toplamı</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
-                    {formatPrice(accountingSummary.totalTax)}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="p-3 rounded-lg bg-blue-500/10">
-                    <BarChart3 className="h-6 w-6 text-blue-500" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Net Gelir</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
-                    {formatPrice(accountingSummary.netRevenue)}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="p-3 rounded-lg bg-red-500/10">
-                    <FileText className="h-6 w-6 text-red-500" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">Tahsil Edilecek</p>
-                  <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
-                    {formatPrice(accountingSummary.outstanding)}
-                  </p>
-                  <p className="text-xs text-zinc-500 mt-1">
-                    {accountingSummary.pendingCount} bekleyen, {accountingSummary.overdueCount} gecikmiş
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+        <TabsContent value="accounting" className="mt-0 space-y-6">
+          <StatGrid columns={4}>
+            <StatCard label="Brüt gelir" value={formatPrice(accountingSummary.grossRevenue)} icon={Wallet} />
+            <StatCard label="KDV toplamı" value={formatPrice(accountingSummary.totalTax)} icon={Receipt} />
+            <StatCard label="Net gelir" value={formatPrice(accountingSummary.netRevenue)} icon={TrendingUp} />
+            <StatCard
+              label="Tahsil edilecek"
+              value={formatPrice(accountingSummary.outstanding)}
+              icon={FileText}
+              hint={`${accountingSummary.pendingCount} bekleyen, ${accountingSummary.overdueCount} gecikmiş`}
+              tone={accountingSummary.overdueCount > 0 ? "danger" : accountingSummary.pendingCount > 0 ? "warning" : undefined}
+            />
+          </StatGrid>
+
+          <div className="grid items-start gap-6 lg:grid-cols-2">
+            <SectionCard title="Ödeme yöntemi dağılımı" description="Dönemde tahsil edilen tutarlar">
+              <BreakdownBars items={paymentMethodItems} emptyText="Seçilen dönemde tahsilat yok." />
+            </SectionCard>
+            <SectionCard title="Aylık KDV dağılımı" flush>
+              <TaxBreakdownTable rows={taxRows} />
+            </SectionCard>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Ödeme Yöntemi Dağılımı</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                        <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Yöntem</th>
-                        <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">Tutar</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paymentMethodRows.map((row) => (
-                        <tr key={row.method} className="border-b border-zinc-100 dark:border-zinc-800/50">
-                          <td className="py-3 text-zinc-700 dark:text-zinc-300">{row.label}</td>
-                          <td className="py-3 text-right font-medium text-zinc-900 dark:text-white">
-                            {formatPrice(row.amount)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Aylık KDV Dağılımı</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                        <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Ay</th>
-                        <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">Net</th>
-                        <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">KDV</th>
-                        <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">Toplam</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {accountingData.taxBreakdown.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="py-4 text-center text-zinc-500">
-                            Seçilen dönemde kayıt bulunamadı
-                          </td>
-                        </tr>
-                      ) : (
-                        accountingData.taxBreakdown.map((row) => (
-                          <tr key={row.month} className="border-b border-zinc-100 dark:border-zinc-800/50">
-                            <td className="py-3 text-zinc-700 dark:text-zinc-300">{row.label}</td>
-                            <td className="py-3 text-right text-zinc-700 dark:text-zinc-300">
-                              {formatPrice(row.subtotal)}
-                            </td>
-                            <td className="py-3 text-right text-zinc-700 dark:text-zinc-300">
-                              {formatPrice(row.tax)}
-                            </td>
-                            <td className="py-3 text-right font-medium text-zinc-900 dark:text-white">
-                              {formatPrice(row.total)}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">Son Defter Kayıtları</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                      <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Tarih</th>
-                      <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Fatura No</th>
-                      <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Müşteri</th>
-                      <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">Net</th>
-                      <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">KDV</th>
-                      <th className="text-right py-2 text-zinc-600 dark:text-zinc-400 font-medium">Toplam</th>
-                      <th className="text-left py-2 text-zinc-600 dark:text-zinc-400 font-medium">Ödeme</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {accountingData.ledgerPreview.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-4 text-center text-zinc-500">
-                          Seçilen dönemde kayıt bulunamadı
-                        </td>
-                      </tr>
-                    ) : (
-                      accountingData.ledgerPreview.map((entry) => (
-                        <tr
-                          key={`${entry.invoiceNumber}-${entry.date.toISOString()}`}
-                          className="border-b border-zinc-100 dark:border-zinc-800/50"
-                        >
-                          <td className="py-3 text-zinc-700 dark:text-zinc-300">
-                            {entry.date.toLocaleDateString("tr-TR")}
-                          </td>
-                          <td className="py-3 text-zinc-700 dark:text-zinc-300">{entry.invoiceNumber}</td>
-                          <td className="py-3 text-zinc-700 dark:text-zinc-300">{entry.customerName}</td>
-                          <td className="py-3 text-right text-zinc-700 dark:text-zinc-300">
-                            {formatPrice(entry.subtotal)}
-                          </td>
-                          <td className="py-3 text-right text-zinc-700 dark:text-zinc-300">
-                            {formatPrice(entry.taxAmount)}
-                          </td>
-                          <td className="py-3 text-right font-medium text-zinc-900 dark:text-white">
-                            {formatPrice(entry.totalAmount)}
-                          </td>
-                          <td className="py-3 text-zinc-700 dark:text-zinc-300">
-                            {entry.paymentMethod
-                              ? paymentMethodLabels[entry.paymentMethod]
-                              : "-"}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <SectionCard title="Son defter kayıtları" description="Dönemdeki en yeni 20 kayıt" flush>
+            <LedgerTable rows={ledgerRows} />
+          </SectionCard>
         </TabsContent>
       </Tabs>
-      </BlurFade>
-    </div>
+    </>
   );
 }

@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { getPromotions } from "@/lib/dal/promotions";
 import { PromotionsContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Promosyonlar" };
 
 export default async function PromotionsPage() {
   const promotions = await getPromotions();
