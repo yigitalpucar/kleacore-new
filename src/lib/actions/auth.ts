@@ -1,13 +1,12 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { signIn, signOut } from "@/lib/auth";
+import { auth, signIn, signOut } from "@/lib/auth";
 import { findUserByEmail } from "@/lib/auth/email";
 import { createLoginTwoFactorChallenge } from "@/lib/auth/two-factor-settings";
-import {
-  AFFILIATE_REF_COOKIE,
-  createCustomerUser,
-} from "@/lib/affiliate";
+import { AFFILIATE_REF_COOKIE } from "@/lib/affiliate";
+import { isEmailVerified, sendVerificationEmail } from "@/lib/auth/email-verification";
+import { registerCustomerAccount } from "@/lib/auth/registration";
 import { db } from "@/lib/db";
 import {
   loginSchema,
@@ -20,6 +19,19 @@ import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
 import { compare, hash } from "bcryptjs";
 import { AuthError } from "next-auth";
 import { createHash, randomBytes } from "node:crypto";
+import {
+  LOGIN_CAPTCHA_ACTION,
+  clearFailedLogins,
+  createLoginCaptchaProof,
+  isLoginCaptchaRequired,
+  recordFailedLogin,
+} from "@/lib/auth/login-captcha";
+import {
+  TURNSTILE_ERROR_MESSAGE,
+  readTurnstileToken,
+  verifyTurnstileToken,
+} from "@/lib/security/turnstile";
+import { getRequestMeta } from "@/lib/request-meta";
 
 const PASSWORD_RESET_TTL_MINUTES = 30;
 
@@ -71,17 +83,47 @@ export async function loginAction(formData: FormData) {
     return { success: false, error: "Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin." };
   }
 
+  const { ip } = await getRequestMeta();
+  const email = parsed.data.email;
+
+  if (await isLoginCaptchaRequired(email, ip)) {
+    const token = readTurnstileToken(formData);
+    const captcha = await verifyTurnstileToken(token, {
+      remoteIp: ip,
+      action: LOGIN_CAPTCHA_ACTION,
+    });
+    if (!captcha.success) {
+      return {
+        success: false,
+        requiresCaptcha: true,
+        error: token
+          ? TURNSTILE_ERROR_MESSAGE
+          : "Çok sayıda hatalı deneme yapıldı. Devam etmek için güvenlik doğrulamasını tamamlayın.",
+      };
+    }
+  }
+
+  const failedLogin = async () => {
+    await recordFailedLogin(email, ip);
+    return {
+      success: false,
+      error: "E-posta veya şifre hatalı",
+      requiresCaptcha: await isLoginCaptchaRequired(email, ip),
+    };
+  };
+
   try {
-    const user = await findUserByEmail(parsed.data.email);
+    const user = await findUserByEmail(email);
 
     if (!user || user.status !== "ACTIVE") {
-      return { success: false, error: "E-posta veya şifre hatalı" };
+      return await failedLogin();
     }
 
     const passwordValid = await compare(parsed.data.password, user.password);
     if (!passwordValid) {
-      return { success: false, error: "E-posta veya şifre hatalı" };
+      return await failedLogin();
     }
+    await clearFailedLogins(email);
 
     const challengeToken = await createLoginTwoFactorChallenge(
       user.email,
@@ -99,6 +141,9 @@ export async function loginAction(formData: FormData) {
     await signIn("credentials", {
       email: user.email,
       password: parsed.data.password,
+      // This action already enforced the captcha policy; the proof keeps the
+      // provider from asking for the (single-use) Turnstile token again.
+      captchaProof: createLoginCaptchaProof(user.email),
       redirect: false,
     });
   } catch (err) {
@@ -143,37 +188,58 @@ export async function registerAction(formData: FormData) {
     return { success: false, error: "Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar deneyin." };
   }
 
-  try {
-    const existing = await findUserByEmail(parsed.data.email);
+  const cookieStore = await cookies();
+  const { ip, userAgent } = await getRequestMeta();
+  const result = await registerCustomerAccount({
+    name: parsed.data.name,
+    surname: parsed.data.surname,
+    email: parsed.data.email,
+    phone: parsed.data.phone ?? null,
+    password: parsed.data.password,
+    kvkkAccepted: formData.get("kvkkAccepted") === "true",
+    turnstileToken: readTurnstileToken(formData),
+    refCode: cookieStore.get(AFFILIATE_REF_COOKIE)?.value,
+    ipAddress: ip,
+    userAgent,
+  });
 
-    if (existing) {
-      return { success: false, error: "Bu e-posta adresi zaten kayıtlı" };
-    }
-
-    const hashedPassword = await hash(parsed.data.password, 12);
-    const cookieStore = await cookies();
-    const refCode = cookieStore.get(AFFILIATE_REF_COOKIE)?.value;
-
-    await db.$transaction(async (tx) => {
-      await createCustomerUser(
-        tx,
-        {
-          name: parsed.data.name,
-          surname: parsed.data.surname,
-          email: parsed.data.email,
-          phone: parsed.data.phone ?? null,
-          password: hashedPassword,
-        },
-        refCode
-      );
-    });
-
-    cookieStore.delete(AFFILIATE_REF_COOKIE);
-
-    return { success: true };
-  } catch {
-    return { success: false, error: "Kayıt sırasında bir hata oluştu" };
+  if (!result.success) {
+    return { success: false, error: result.error };
   }
+
+  cookieStore.delete(AFFILIATE_REF_COOKIE);
+  return { success: true };
+}
+
+/** Sends a fresh verification link to the signed-in, still unverified user. */
+export async function resendVerificationEmailAction() {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) {
+    return { success: false, error: "Oturumunuz sona erdi. Lütfen tekrar giriş yapın." };
+  }
+
+  if (await isEmailVerified(userId)) {
+    return { success: true, alreadyVerified: true };
+  }
+
+  const limit = await checkRateLimit({
+    key: `verify-email-resend:${userId}`,
+    limit: 3,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    return {
+      success: false,
+      error: "Çok fazla doğrulama e-postası istendi. Lütfen bir süre sonra tekrar deneyin.",
+    };
+  }
+
+  const sent = await sendVerificationEmail(userId);
+  if (!sent.sent) {
+    return { success: false, error: "Doğrulama e-postası gönderilemedi. Lütfen daha sonra tekrar deneyin." };
+  }
+  return { success: true };
 }
 
 export async function logoutAction() {
@@ -193,6 +259,15 @@ export async function requestPasswordReset(formData: FormData) {
   const parsed = passwordResetRequestSchema.safeParse(raw);
   if (!parsed.success) {
     return { success: false, error: "Gecerli bir e-posta adresi girin" };
+  }
+
+  const { ip } = await getRequestMeta();
+  const captcha = await verifyTurnstileToken(readTurnstileToken(formData), {
+    remoteIp: ip,
+    action: "password-reset",
+  });
+  if (!captcha.success) {
+    return { success: false, error: TURNSTILE_ERROR_MESSAGE };
   }
 
   const resetLimit = await checkRateLimit({

@@ -13,6 +13,7 @@ import {
   enumLabel,
 } from "@/components/app";
 import { getOrderById } from "@/lib/dal/orders";
+import { getOrderConsentRecords } from "@/lib/legal/documents";
 import { formatTRY } from "@/lib/format/price";
 import { billingPeriodLabel, formatDate, formatDateTime } from "@/lib/format/date";
 import { OrderDetailActions } from "./content";
@@ -29,7 +30,7 @@ export default async function OrderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const order = await getOrderById(id);
+  const [order, consents] = await Promise.all([getOrderById(id), getOrderConsentRecords(id)]);
 
   if (!order) return notFound();
 
@@ -108,6 +109,53 @@ export default async function OrderDetailPage({
               <span className="font-medium">Toplam</span>
               <span className="text-lg font-semibold tabular-nums">{money(order.totalAmount)}</span>
             </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Yasal onaylar"
+            description="Müşterinin sipariş anında onayladığı metinler (sürüm, zaman, IP ve metnin SHA-256 özeti)."
+          >
+            {consents.length > 0 ? (
+              <ul className="divide-y divide-dashed rounded-md border">
+                {consents.map((consent) => (
+                  <li key={consent.id} className="space-y-1 px-3 py-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">
+                        {consent.document.title}{" "}
+                        <span className="text-xs font-normal text-muted-foreground">v{consent.documentVersion}</span>
+                        {consent.document.isPlaceholder ? (
+                          <span className="ml-2 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-normal">
+                            taslak metin
+                          </span>
+                        ) : null}
+                      </span>
+                      <time className="text-xs tabular-nums text-muted-foreground" dateTime={consent.acceptedAt.toISOString()}>
+                        {formatDateTime(consent.acceptedAt)}
+                      </time>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      IP: <span className="font-mono">{consent.ipAddress || "—"}</span>
+                      {consent.userAgent ? <span className="block truncate">{consent.userAgent}</span> : null}
+                    </p>
+                    <p className="break-all font-mono text-[11px] text-muted-foreground">sha256: {consent.snapshotHash}</p>
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Onaylanan metni göster</summary>
+                      <div
+                        className="mt-2 max-h-96 overflow-y-auto rounded-md border bg-muted/30 p-3 [&_h2]:mt-3 [&_h2]:font-semibold [&_table]:w-full [&_td]:border [&_td]:px-1.5 [&_th]:border [&_th]:px-1.5"
+                        // Stored snapshot rendered by renderLegalTemplate (variables escaped).
+                        dangerouslySetInnerHTML={{ __html: consent.snapshot }}
+                      />
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState
+                compact
+                title="Onay kaydı yok"
+                description="Bu sipariş sözleşme onayı zorunlu hale gelmeden önce veya yönetim panelinden oluşturulmuş."
+              />
+            )}
           </SectionCard>
 
           <SectionCard title="Sipariş geçmişi">

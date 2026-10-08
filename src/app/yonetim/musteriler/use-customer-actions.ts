@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import {
   activateCustomer,
   deleteCustomer,
+  markCustomerEmailVerified,
   suspendCustomer,
 } from "@/lib/actions/admin/customers";
 import { toast } from "@/lib/toast";
@@ -54,7 +55,24 @@ export function useCustomerActions() {
     router.refresh();
   };
 
+  const handleMarkEmailVerified = async (customerId: string) => {
+    const confirmed = window.confirm(
+      "Müşterinin e-posta adresini doğrulanmış olarak işaretlemek istediğinize emin misiniz? Müşteri sipariş verebilir ve ödeme yapabilir hale gelir."
+    );
+    if (!confirmed) return;
+
+    const result = await markCustomerEmailVerified(customerId);
+    if (!result.success) {
+      toast.error(result.error ?? "E-posta doğrulaması kaydedilemedi");
+      return;
+    }
+
+    toast.success("E-posta adresi doğrulanmış olarak işaretlendi");
+    router.refresh();
+  };
+
   return {
+    handleMarkEmailVerified,
     handleSuspendCustomer,
     handleActivateCustomer,
     handleCloseCustomer,

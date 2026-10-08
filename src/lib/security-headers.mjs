@@ -10,6 +10,9 @@ const STRIPE_JS = "https://js.stripe.com";
 // Kuveyt Türk's 3-D page (served from our origin by /api/payments/kuveytturk/start)
 // auto-posts to the bank / BKM 3-D Secure server.
 const KUVEYTTURK_3DS = ["https://*.kuveytturk.com.tr", "https://*.bkm.com.tr", "https://*.bkmtest.com.tr"];
+// Cloudflare Turnstile: api.js is loaded from here and the challenge runs in an
+// iframe from the same origin (register, login, password reset, contact).
+const TURNSTILE = "https://challenges.cloudflare.com";
 
 /**
  * Full Content-Security-Policy for the app.
@@ -28,12 +31,12 @@ export function buildContentSecurityPolicy({ dev = false, reportUri } = {}) {
     "object-src": ["'none'"],
     "frame-ancestors": ["'self'"],
     "form-action": ["'self'", ...IYZICO, PAYTR, "https://checkout.stripe.com", ...KUVEYTTURK_3DS],
-    "script-src": ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...IYZICO, PAYTR, STRIPE_JS],
+    "script-src": ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...IYZICO, PAYTR, STRIPE_JS, TURNSTILE],
     "style-src": ["'self'", "'unsafe-inline'", ...IYZICO],
     "img-src": ["'self'", "data:", "blob:", "https:"],
     "font-src": ["'self'", "data:", ...IYZICO],
-    "connect-src": ["'self'", ...IYZICO, IYZICO_TELEMETRY, ...(dev ? ["ws:"] : [])],
-    "frame-src": ["'self'", ...IYZICO, PAYTR, STRIPE_JS],
+    "connect-src": ["'self'", ...IYZICO, IYZICO_TELEMETRY, TURNSTILE, ...(dev ? ["ws:"] : [])],
+    "frame-src": ["'self'", ...IYZICO, PAYTR, STRIPE_JS, TURNSTILE],
     "worker-src": ["'self'", "blob:"],
     "manifest-src": ["'self'"],
   };

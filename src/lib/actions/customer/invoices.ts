@@ -1,5 +1,6 @@
 "use server";
 
+import { getPurchaseBlock } from "@/lib/auth/email-verification";
 import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
@@ -38,6 +39,11 @@ function revalidateInvoicePaths(invoiceId: string) {
 
 export async function payInvoice(input: PayInvoiceInput) {
   const session = await requireCustomer();
+
+  const purchaseBlock = await getPurchaseBlock(session.user.id);
+  if (purchaseBlock) {
+    return purchaseBlock;
+  }
 
   if (!input?.invoiceId) {
     return { success: false, error: "Fatura seçilmedi" };

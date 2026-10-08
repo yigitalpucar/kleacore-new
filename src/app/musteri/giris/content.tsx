@@ -28,7 +28,13 @@ const twoFactorCopy = {
   description: "Hesabınızda iki faktörlü doğrulama açık. Devam etmek için kodu girin.",
 };
 
-export function GirisContent({ initialMode }: { initialMode: AuthMode }) {
+export function GirisContent({
+  initialMode,
+  turnstileSiteKey,
+}: {
+  initialMode: AuthMode;
+  turnstileSiteKey: string | null;
+}) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [twoFactor, setTwoFactor] = useState(false);
 
@@ -98,9 +104,13 @@ export function GirisContent({ initialMode }: { initialMode: AuthMode }) {
           fallback={<div className="py-8 text-center text-sm text-muted-foreground">Yükleniyor…</div>}
         >
           {mode === "login" ? (
-            <LoginForm onSwitch={() => switchTo("register")} onTwoFactorChange={setTwoFactor} />
+            <LoginForm
+              onSwitch={() => switchTo("register")}
+              onTwoFactorChange={setTwoFactor}
+              turnstileSiteKey={turnstileSiteKey}
+            />
           ) : (
-            <RegisterForm onSwitch={() => switchTo("login")} />
+            <RegisterForm onSwitch={() => switchTo("login")} turnstileSiteKey={turnstileSiteKey} />
           )}
         </Suspense>
       </div>

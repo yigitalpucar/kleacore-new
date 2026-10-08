@@ -1,5 +1,6 @@
 "use server";
 
+import { getPurchaseBlock } from "@/lib/auth/email-verification";
 import { db } from "@/lib/db";
 import { getAppBaseUrl, getStripe } from "@/lib/stripe";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
@@ -8,6 +9,11 @@ import { compare, parseMoney, roundHalfUp, toFixed2, toKurus, toNumber } from "@
 
 export async function initiateBalanceTopUp(amount: number | string) {
   const session = await requireCustomer();
+
+  const purchaseBlock = await getPurchaseBlock(session.user.id);
+  if (purchaseBlock) {
+    return purchaseBlock;
+  }
 
   try {
     const parsed = parseMoney(amount);

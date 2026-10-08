@@ -31,11 +31,14 @@ import { cartTotals } from "@/lib/billing/cart-totals";
 import { validateCartItems } from "@/lib/checkout/validate-cart";
 import { PaymentMethodPicker } from "@/components/checkout/payment-method-picker";
 import type { CustomerPaymentOptions } from "@/lib/payments/payment-options";
+import { isPaymentMethodId, paymentRecordMethod } from "@/lib/integrations/payment-gateways/methods-config";
+import { CheckoutLegalConsent, type CheckoutLegalDocument } from "@/components/checkout/legal-consent";
+import { EmailVerificationBanner } from "@/components/auth/email-verification-banner";
+import type { LegalBuyer, LegalSeller } from "@/lib/legal/render";
 
 function formatPrice(value: number) {
   return formatTRY(value, { keepDecimals: true });
 }
-
 
 const typeLabels: Record<CartItem["type"], string> = {
   domain: "Alan adı",
@@ -54,9 +57,15 @@ function itemPeriod(item: CartItem): "monthly" | "yearly" {
 export function SepetContent({
   taxRate,
   paymentOptions,
+  emailVerified,
+  userEmail,
+  legal,
 }: {
   taxRate: number;
   paymentOptions: CustomerPaymentOptions;
+  emailVerified: boolean;
+  userEmail: string | null;
+  legal: { documents: CheckoutLegalDocument[]; seller: LegalSeller; buyer: LegalBuyer | null };
 }) {
   const router = useRouter();
   const items = useCartStore((state) => state.items);
@@ -81,6 +90,8 @@ export function SepetContent({
   // provisioned is fixed here, before payment.
   const cartErrors = validateCartItems(items);
   const errorsByItem = new Map(cartErrors.map((error) => [error.itemId, error.message]));
+  const [acceptedDocuments, setAcceptedDocuments] = useState<Record<string, boolean>>({});
+  const allDocumentsAccepted = legal.documents.every((document) => acceptedDocuments[document.id]);
 
   const handleRemove = (id: string, title: string) => {
     removeItem(id);
@@ -101,10 +112,18 @@ export function SepetContent({
       toast.error("Lütfen bir ödeme yöntemi seçin.");
       return;
     }
+    if (!allDocumentsAccepted) {
+      toast.error("Devam etmek için Ön Bilgilendirme Formu'nu ve Mesafeli Satış Sözleşmesi'ni onaylayın.");
+      return;
+    }
     startTransition(async () => {
       const result = await checkoutCart({
         paymentMethod,
         promoCode,
+        consents: legal.documents.map((document) => ({
+          documentId: document.id,
+          version: document.version,
+        })),
         items: items.map((item) => ({
           id: item.id,
           type: item.type,
@@ -117,6 +136,12 @@ export function SepetContent({
         if (result.code === "LOGIN_REQUIRED") {
           toast.info("Ödeme için giriş yapmalısınız.");
           router.push("/musteri/giris?callbackUrl=%2Fsepet");
+          return;
+        }
+        if (result.code === "LEGAL_CONSENT_OUTDATED") {
+          toast.error(result.error);
+          router.refresh();
+          setAcceptedDocuments({});
           return;
         }
 
@@ -405,10 +430,30 @@ export function SepetContent({
                     name="payment-method"
                   />
 
+                  <CheckoutLegalConsent
+                    documents={legal.documents}
+                    seller={legal.seller}
+                    buyer={legal.buyer}
+                    items={items}
+                    taxRate={taxRate}
+                    paymentMethod={
+                      paymentMethod && isPaymentMethodId(paymentMethod) ? paymentRecordMethod(paymentMethod) : ""
+                    }
+                    accepted={acceptedDocuments}
+                    onAcceptedChange={(documentId, value) =>
+                      setAcceptedDocuments((current) => ({ ...current, [documentId]: value }))
+                    }
+                    disabled={isPending}
+                  />
+
+                  {emailVerified ? null : <EmailVerificationBanner email={userEmail} compact />}
+
                   <button
                     type="button"
                     onClick={handleCheckout}
-                    disabled={isPending || cartErrors.length > 0 || !paymentMethod}
+                    disabled={
+                      isPending || cartErrors.length > 0 || !paymentMethod || !emailVerified || !allDocumentsAccepted
+                    }
                     className={buttonClasses({ size: "lg", className: "w-full disabled:opacity-60" })}
                   >
                     {isPending ? (

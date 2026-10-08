@@ -5,6 +5,7 @@ import { toNumber } from "@/lib/money";
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
+import { getRequestMeta } from "@/lib/request-meta";
 const DOMAIN_SEARCH_EXTENSIONS = [
   ".com",
   ".net",
@@ -25,6 +26,18 @@ import {
   processAutomatedDomainTransfer,
 } from "@/lib/domains/transfer";
 import type { DomainStatus } from "@prisma/client";
+
+/** Per-IP rate limit (10 minute window); passes when the IP is unknown. */
+async function allowedForClient(scope: string, limit: number) {
+  const { ip } = await getRequestMeta();
+  if (!ip) return true;
+  const result = await checkRateLimit({
+    key: `${scope}:ip:${normalizeRateLimitKey(ip)}`,
+    limit,
+    windowMs: 10 * 60 * 1000,
+  });
+  return result.allowed;
+}
 
 const DOMAIN_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const FULL_DOMAIN_REGEX =
@@ -218,7 +231,10 @@ export async function searchDomainAvailability(
     limit: 30,
     windowMs: 10 * 60 * 1000,
   });
-  if (!limit.allowed) {
+  // Per-client cap: the query-keyed limit alone is bypassed by varying the
+  // query, and every search fans out to the registrar/RDAP. (No Turnstile here:
+  // search-as-you-go UX on four entry points; the IP cap covers the abuse.)
+  if (!limit.allowed || !(await allowedForClient("domain-search", 60))) {
     return { success: false, error: "Çok fazla domain sorgusu yapıldı. Lütfen biraz sonra tekrar deneyin." as const };
   }
 
@@ -334,7 +350,7 @@ export async function lookupWhois(domainInput: string) {
     limit: 20,
     windowMs: 10 * 60 * 1000,
   });
-  if (!limit.allowed) {
+  if (!limit.allowed || !(await allowedForClient("whois", 30))) {
     return { success: false, error: "Çok fazla WHOIS sorgusu yapıldı. Lütfen biraz sonra tekrar deneyin." as const };
   }
 

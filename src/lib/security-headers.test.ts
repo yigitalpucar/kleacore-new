@@ -37,6 +37,15 @@ describe("buildContentSecurityPolicy", () => {
     expect(directive("object-src")).toBe("object-src 'none'");
   });
 
+  it("allows the Cloudflare Turnstile script and challenge iframe", () => {
+    const csp = buildContentSecurityPolicy();
+    const directive = (name: string) =>
+      csp.split("; ").find((d) => d.startsWith(`${name} `)) ?? "";
+
+    expect(directive("script-src")).toContain("https://challenges.cloudflare.com");
+    expect(directive("frame-src")).toContain("https://challenges.cloudflare.com");
+  });
+
   it("only allows eval and websockets in development", () => {
     expect(buildContentSecurityPolicy()).not.toContain("'unsafe-eval'");
     expect(buildContentSecurityPolicy({ dev: true })).toContain("'unsafe-eval'");

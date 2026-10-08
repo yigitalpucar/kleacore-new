@@ -19,6 +19,20 @@ import { getAppBaseUrl, getStripe } from "@/lib/stripe";
 import { persistGatewayCheckout } from "@/lib/integrations/payment-gateways/persist";
 import { getPaymentGatewayProvider } from "@/lib/integrations/payment-gateways";
 import { loadCheckoutCustomer } from "@/lib/payments/orchestrator";
+import { getPurchaseBlock } from "@/lib/auth/email-verification";
+import {
+  LEGAL_CONSENT_OUTDATED_MESSAGE,
+  LEGAL_CONSENT_REQUIRED_MESSAGE,
+  assertCheckoutConsents,
+  getCheckoutLegalDocuments,
+  getLegalBuyer,
+  getLegalSeller,
+  legalPaymentMethodLabel,
+  recordCheckoutConsents,
+  type AcceptedLegalDocument,
+} from "@/lib/legal/documents";
+import type { LegalOrderItem } from "@/lib/legal/render";
+import { getRequestMeta } from "@/lib/request-meta";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod, Prisma } from "@prisma/client";
 import { resolveCustomerPaymentMethod } from "@/lib/payments/payment-options";
@@ -92,6 +106,8 @@ interface CheckoutInput {
   paymentMethod: string;
   items: CheckoutItemInput[];
   promoCode?: string;
+  /** Ön bilgilendirme formu + mesafeli satış sözleşmesi versions the buyer accepted. */
+  consents?: AcceptedLegalDocument[];
 }
 
 function normalizeBillingPeriod(value: string | undefined): BillingPeriod {
@@ -353,6 +369,11 @@ export async function checkoutCart(input: CheckoutInput) {
     return { success: false, error: "Sepetiniz boş" };
   }
 
+  const purchaseBlock = await getPurchaseBlock(customerId);
+  if (purchaseBlock) {
+    return purchaseBlock;
+  }
+
   // Bad carts (SSL without a domain, invalid domain names, hosting pointing at
   // a domain that isn't bought) are rejected here, before anything is
   // written or charged: a paid order must never fail provisioning on its data.
@@ -377,6 +398,17 @@ export async function checkoutCart(input: CheckoutInput) {
   const recordMethod = paymentRecordMethod(methodId);
 
   try {
+    const legalDocuments = await getCheckoutLegalDocuments();
+    assertCheckoutConsents(legalDocuments, input.consents);
+    const [legalSeller, legalBuyer, requestMeta] = await Promise.all([
+      getLegalSeller(),
+      getLegalBuyer(customerId),
+      getRequestMeta(),
+    ]);
+    if (!legalBuyer) {
+      throw new Error("CUSTOMER_NOT_FOUND");
+    }
+
     // Card payments go through the gateway the customer picked (the default
     // card gateway unless "Diğer kart ödeme seçenekleri" was used); Stripe
     // keeps its own session flow below.
@@ -498,6 +530,10 @@ export async function checkoutCart(input: CheckoutInput) {
       const orderIds: string[] = [];
       const invoiceIds: string[] = [];
       let checkoutTotalAmount = money(0);
+      let checkoutTaxAmount = money(0);
+      let checkoutLineTotal = money(0);
+      let checkoutDiscount = money(0);
+      const legalItems: LegalOrderItem[] = [];
       let totalResellerDiscount = money(0);
       let remainingDiscount = discountAmount;
       const applicableIndexes = promotion
@@ -527,6 +563,15 @@ export async function checkoutCart(input: CheckoutInput) {
         const payableLineTotal = max(0, sub(lineTotal, lineDiscount));
         const taxed = calculateTax(payableLineTotal, taxRate);
         checkoutTotalAmount = add(checkoutTotalAmount, taxed.totalAmount);
+        checkoutTaxAmount = add(checkoutTaxAmount, taxed.taxAmount);
+        checkoutLineTotal = add(checkoutLineTotal, lineTotal);
+        checkoutDiscount = add(checkoutDiscount, sub(lineTotal, payableLineTotal));
+        legalItems.push({
+          name: item.productName,
+          quantity: item.quantity,
+          period: item.billingPeriod === "yearly" ? "Yıllık" : "Aylık",
+          lineTotal: toNumber(lineTotal),
+        });
         const isStripe = recordMethod === "CREDIT_CARD";
         const isPaid = false;
         const waitingNote = isStripe
@@ -659,6 +704,27 @@ export async function checkoutCart(input: CheckoutInput) {
         select: { orderNumber: true },
       });
 
+      await recordCheckoutConsents(tx, {
+        userId: customerId,
+        orderIds,
+        documents: legalDocuments,
+        seller: legalSeller,
+        buyer: legalBuyer,
+        order: {
+          date: new Intl.DateTimeFormat("tr-TR", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Istanbul" }).format(now),
+          numbers: orderNumbers.map((order) => order.orderNumber).join(", "),
+          items: legalItems,
+          subtotal: toNumber(checkoutLineTotal),
+          discount: toNumber(checkoutDiscount),
+          taxRate,
+          tax: toNumber(checkoutTaxAmount),
+          total: toNumber(checkoutTotalAmount),
+          paymentMethod: legalPaymentMethodLabel(recordMethod),
+        },
+        ipAddress: requestMeta.ip,
+        userAgent: requestMeta.userAgent,
+      });
+
       return {
         orderIds,
         invoiceIds,
@@ -784,6 +850,12 @@ export async function checkoutCart(input: CheckoutInput) {
     return { success: true, data: { ...result, paymentMethod: methodId, paidWithBalance } };
   } catch (error) {
     if (error instanceof Error) {
+      if (error.message === "LEGAL_CONSENT_MISSING") {
+        return { success: false, error: LEGAL_CONSENT_REQUIRED_MESSAGE, code: "LEGAL_CONSENT_REQUIRED" as const };
+      }
+      if (error.message === "LEGAL_CONSENT_OUTDATED") {
+        return { success: false, error: LEGAL_CONSENT_OUTDATED_MESSAGE, code: "LEGAL_CONSENT_OUTDATED" as const };
+      }
       if (error.message === "INSUFFICIENT_BALANCE") {
         return { success: false, error: "Bakiyeniz bu sipariş için yeterli değil" };
       }

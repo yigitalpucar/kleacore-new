@@ -298,7 +298,8 @@ const transactionColumns: ColumnDef<TransactionRow>[] = [
 /* ------------------------------------------------------------------ page */
 
 export function CustomerDetailContent({ customer }: { customer: CustomerDetail }) {
-  const { handleSuspendCustomer, handleActivateCustomer, handleCloseCustomer } = useCustomerActions();
+  const { handleSuspendCustomer, handleActivateCustomer, handleCloseCustomer, handleMarkEmailVerified } =
+    useCustomerActions();
   const fullName = `${customer.name} ${customer.surname}`.trim() || customer.email;
   const activeServices = customer.services.filter((s) => s.status === "ACTIVE").length;
   const unpaid = customer.invoices.filter((i) => i.status === "PENDING" || i.status === "OVERDUE");
@@ -551,7 +552,24 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
                 { label: "Firma", value: customer.companyName },
                 { label: "Vergi no", value: customer.taxNumber, mono: true },
                 { label: "Vergi dairesi", value: customer.taxOffice },
-                { label: "E-posta doğrulama", value: customer.emailVerifiedAt ? formatDate(customer.emailVerifiedAt) : "Doğrulanmadı", hideEmpty: false },
+                {
+                  label: "E-posta doğrulama",
+                  value: customer.emailVerifiedAt ? (
+                    formatDate(customer.emailVerifiedAt)
+                  ) : (
+                    <span className="flex flex-wrap items-center gap-2">
+                      Doğrulanmadı
+                      <button
+                        type="button"
+                        className={appButton({ variant: "outline", size: "sm" })}
+                        onClick={() => void handleMarkEmailVerified(customer.id)}
+                      >
+                        Doğrulanmış işaretle
+                      </button>
+                    </span>
+                  ),
+                  hideEmpty: false,
+                },
                 { label: "İki adımlı doğrulama", value: customer.twoFactorEnabled ? "Açık" : "Kapalı", hideEmpty: false },
                 { label: "Kayıt", value: formatDateTime(customer.createdAt) },
                 { label: "Son güncelleme", value: formatDateTime(customer.updatedAt) },

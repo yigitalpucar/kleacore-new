@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hash } from "bcryptjs";
-import {
-  AFFILIATE_REF_COOKIE,
-  createCustomerUser,
-} from "@/lib/affiliate";
-import { findUserByEmail } from "@/lib/auth/email";
-import { db } from "@/lib/db";
+import { AFFILIATE_REF_COOKIE } from "@/lib/affiliate";
+import { getClientIp } from "@/lib/auth/credentials";
+import { registerCustomerAccount } from "@/lib/auth/registration";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
 import { registerApiSchema } from "@/lib/validations/auth";
 
@@ -39,29 +35,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existing = await findUserByEmail(email);
-  if (existing) {
-    return NextResponse.json(
-      { error: "Bu e-posta adresi zaten kayıtlı" },
-      { status: 400 }
-    );
-  }
-
-  const hashedPassword = await hash(password, 12);
-  const refCode = req.cookies.get(AFFILIATE_REF_COOKIE)?.value;
-
-  await db.$transaction(async (tx) => {
-    await createCustomerUser(
-      tx,
-      {
-        name,
-        surname,
-        email,
-        password: hashedPassword,
-      },
-      refCode
-    );
+  // Same rules as the register form: Turnstile, KVKK acknowledgement and
+  // e-mail verification (this endpoint must not be a way around them).
+  const result = await registerCustomerAccount({
+    name,
+    surname,
+    email,
+    password,
+    kvkkAccepted: parsed.data.kvkkAccepted === true,
+    turnstileToken: parsed.data.turnstileToken ?? null,
+    refCode: req.cookies.get(AFFILIATE_REF_COOKIE)?.value,
+    ipAddress: getClientIp(req),
+    userAgent: req.headers.get("user-agent")?.slice(0, 512) ?? null,
   });
+
+  if (!result.success) {
+    return NextResponse.json({ error: result.error }, { status: result.status === 409 ? 400 : result.status });
+  }
 
   const response = NextResponse.json({ success: true });
   response.cookies.delete(AFFILIATE_REF_COOKIE);

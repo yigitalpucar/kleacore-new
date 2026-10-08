@@ -8,7 +8,11 @@ import { SectionHeading } from "@/components/site/section-heading";
 import { Eyebrow } from "@/components/site/eyebrow";
 import { buttonClasses } from "@/components/site/button-classes";
 import { SiteShell } from "@/components/site/kurumsal/site-shell";
+import { getTurnstileSiteKey } from "@/lib/security/turnstile";
 import { IletisimForm } from "./content";
+
+// Turnstile keys are runtime configuration (env / admin settings).
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "İletişim",
@@ -47,7 +51,8 @@ const details = [
   },
 ];
 
-export default function IletisimPage() {
+export default async function IletisimPage() {
+  const turnstileSiteKey = await getTurnstileSiteKey();
   return (
     <SiteShell>
       <PageHeader
@@ -102,7 +107,7 @@ export default function IletisimPage() {
           </div>
 
           <Suspense fallback={<div className="min-h-[34rem] rounded-2xl border bg-muted/30" />}>
-            <IletisimForm />
+            <IletisimForm turnstileSiteKey={turnstileSiteKey} />
           </Suspense>
         </div>
       </Section>

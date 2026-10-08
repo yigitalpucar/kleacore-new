@@ -152,6 +152,40 @@ describe("authorizeCredentials", () => {
     expect(mocks.db.user.findFirst).toHaveBeenCalledTimes(10);
   });
 
+  it("requires a Turnstile token after 3 failed passwords and resets after a success", async () => {
+    vi.stubEnv("TURNSTILE_SITE_KEY", "site-key");
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "secret-key");
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => new Response(JSON.stringify({ success: true, action: "login" })));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const user = makeUser();
+      mocks.db.user.findFirst.mockResolvedValue(user);
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        expect(await authorizeCredentials({ email: user.email, password: "wrong" })).toBeNull();
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      // Correct password, but no captcha: refused without even checking it.
+      expect(await authorizeCredentials({ email: user.email, password: PASSWORD })).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      expect(
+        await authorizeCredentials({ email: user.email, password: PASSWORD, turnstileToken: "tok" })
+      ).not.toBeNull();
+      expect(fetchMock).toHaveBeenCalledOnce();
+
+      // The success cleared the failure counter.
+      expect(await authorizeCredentials({ email: user.email, password: PASSWORD })).not.toBeNull();
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("rate limits attempts per client IP across emails", async () => {
     const request = ipRequest("203.0.113.7");
     mocks.db.user.findFirst.mockResolvedValue(null);
