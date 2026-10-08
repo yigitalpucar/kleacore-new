@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getInvoiceById } from "@/lib/dal/invoices";
 import { getKuveytTurkFailureMessage } from "@/lib/integrations/payment-gateways/providers/kuveytturk-flow";
+import { getCustomerPaymentOptions } from "@/lib/payments/payment-options";
+import { getBankAccounts, getInvoiceBankTransferNotices } from "@/lib/dal/bank-transfer";
 import { FaturaDetayContent, type InvoicePaymentNotice } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +13,7 @@ export const metadata: Metadata = { title: "Fatura detayı" };
 
 interface FaturaDetayPageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ payment?: string }>;
+  searchParams: Promise<{ payment?: string; odeme?: string }>;
 }
 
 async function buildPaymentNotice(
@@ -46,7 +48,7 @@ async function buildPaymentNotice(
 
 export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
   const params = await props.params;
-  const { payment: paymentOutcome } = await props.searchParams;
+  const { payment: paymentOutcome, odeme } = await props.searchParams;
   const session = await auth();
   const invoice = await getInvoiceById(params.id);
 
@@ -68,6 +70,7 @@ export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
     taxAmount: Number(invoice.taxAmount),
     totalAmount: Number(invoice.totalAmount),
     paidAmount: Number(invoice.paidAmount),
+    refundedAmount: Number(invoice.refundedAmount),
     issuedAt: invoice.issuedAt.toISOString(),
     dueDate: invoice.dueDate.toISOString(),
     paidAt: invoice.paidAt ? invoice.paidAt.toISOString() : null,
@@ -127,5 +130,21 @@ export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
     invoice.customerId
   );
 
-  return <FaturaDetayContent invoice={serializedInvoice} paymentNotice={paymentNotice} />;
+  const canPay = invoice.status === "PENDING" || invoice.status === "OVERDUE";
+  const [paymentOptions, bankAccounts, bankTransferNotices] = await Promise.all([
+    canPay ? getCustomerPaymentOptions(invoice.customerId) : null,
+    canPay ? getBankAccounts({ activeOnly: true }) : [],
+    getInvoiceBankTransferNotices(invoice.id),
+  ]);
+
+  return (
+    <FaturaDetayContent
+      invoice={serializedInvoice}
+      paymentNotice={paymentNotice}
+      paymentOptions={paymentOptions}
+      bankAccounts={bankAccounts}
+      bankTransferNotices={bankTransferNotices}
+      initialMethod={odeme === "havale" ? "bank_transfer" : null}
+    />
+  );
 }

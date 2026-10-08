@@ -41,6 +41,7 @@ export type AdminCounts = {
   openTickets: number;
   overdueInvoices: number;
   pendingCancellations: number;
+  pendingBankTransfers: number;
 };
 
 export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
@@ -166,6 +167,11 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { title: "Genel bakış", href: `${ADMIN_ROOT}/faturalar` },
       { title: "Tüm faturalar", href: `${ADMIN_ROOT}/faturalar/tum-faturalar` },
       { title: "Bekleyen", href: `${ADMIN_ROOT}/faturalar/bekleyen` },
+      {
+        title: "Havale bildirimleri",
+        href: `${ADMIN_ROOT}/faturalar/havale-bildirimleri`,
+        countKey: "pendingBankTransfers",
+      },
       { title: "Gecikmiş", href: `${ADMIN_ROOT}/faturalar/gecikmis`, countKey: "overdueInvoices" },
       { title: "Ödendi", href: `${ADMIN_ROOT}/faturalar/odendi` },
       { title: "İptal edilen", href: `${ADMIN_ROOT}/faturalar/iptal` },

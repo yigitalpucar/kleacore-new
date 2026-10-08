@@ -22,7 +22,10 @@ import { formatDate, formatDateTime } from "@/lib/format/date";
 import { handleCreditCardCheckoutRedirect } from "@/lib/payments/checkout-redirect";
 import { payInvoice, sendInvoiceCopy } from "@/lib/actions/customer/invoices";
 import { toast } from "@/lib/toast";
-import { CUSTOMER_PAYMENT_METHOD_OPTIONS, type CustomerPaymentMethod } from "@/lib/payments/methods";
+import { PaymentMethodPicker } from "@/components/checkout/payment-method-picker";
+import type { CustomerPaymentOptions } from "@/lib/payments/payment-options";
+import type { BankAccountView, BankTransferNoticeView } from "@/lib/dal/bank-transfer";
+import { BankTransferPanel } from "./bank-transfer-panel";
 
 interface SerializedInvoice {
   id: string;
@@ -33,6 +36,7 @@ interface SerializedInvoice {
   taxAmount: number;
   totalAmount: number;
   paidAmount: number;
+  refundedAmount: number;
   issuedAt: string;
   dueDate: string;
   paidAt: string | null;
@@ -88,11 +92,22 @@ export interface InvoicePaymentNotice {
 interface FaturaDetayContentProps {
   invoice: SerializedInvoice;
   paymentNotice?: InvoicePaymentNotice | null;
+  paymentOptions?: CustomerPaymentOptions | null;
+  bankAccounts?: BankAccountView[];
+  bankTransferNotices?: BankTransferNoticeView[];
+  initialMethod?: string | null;
 }
 
 const money = (n: number) => formatTRY(n, { keepDecimals: true });
 
-export function FaturaDetayContent({ invoice, paymentNotice }: FaturaDetayContentProps) {
+export function FaturaDetayContent({
+  invoice,
+  paymentNotice,
+  paymentOptions,
+  bankAccounts = [],
+  bankTransferNotices = [],
+  initialMethod,
+}: FaturaDetayContentProps) {
   const router = useRouter();
   const canPay = invoice.status === "PENDING" || invoice.status === "OVERDUE";
   const description = invoice.items[0]?.description ?? invoice.invoiceNumber;
@@ -103,12 +118,23 @@ export function FaturaDetayContent({ invoice, paymentNotice }: FaturaDetayConten
   const outstanding = Math.max(invoice.totalAmount - invoice.paidAmount, 0);
   const [isPaying, setIsPaying] = useState(false);
   const [isSendingCopy, setIsSendingCopy] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<CustomerPaymentMethod>("CREDIT_CARD");
-
-  const payLabel = paymentMethod === "BANK_TRANSFER" ? "Havale bildir" : "Şimdi öde";
+  const allOptions = [...(paymentOptions?.options ?? []), ...(paymentOptions?.otherCards ?? [])];
+  const [paymentMethod, setPaymentMethod] = useState<string | null>(
+    initialMethod && allOptions.some((option) => option.id === initialMethod)
+      ? initialMethod
+      : (paymentOptions?.defaultMethod ?? null)
+  );
+  const selectedKind = allOptions.find((option) => option.id === paymentMethod)?.kind;
+  const isBankTransfer = selectedKind === "bank_transfer";
+  const hasPendingNotice = bankTransferNotices.some((notice) => notice.status === "PENDING");
+  const payLabel = selectedKind === "balance" ? "Bakiyeden öde" : "Şimdi öde";
 
   const handlePayInvoice = async () => {
-    if (isPaying) return;
+    if (isBankTransfer) {
+      document.getElementById("odeme")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (isPaying || !paymentMethod) return;
     setIsPaying(true);
 
     const result = await payInvoice({
@@ -202,10 +228,10 @@ export function FaturaDetayContent({ invoice, paymentNotice }: FaturaDetayConten
             >
               <Printer aria-hidden />
             </button>
-            {canPay ? (
+            {canPay && paymentMethod && !hasPendingNotice ? (
               <button type="button" onClick={handlePayInvoice} disabled={isPaying} className={appButton()}>
                 {isPaying ? <Loader2 aria-hidden className="animate-spin" /> : <CreditCard aria-hidden />}
-                {isPaying ? "İşleniyor…" : payLabel}
+                {isPaying ? "İşleniyor…" : isBankTransfer ? "Havale bilgileri" : payLabel}
               </button>
             ) : null}
           </>
@@ -301,7 +327,7 @@ export function FaturaDetayContent({ invoice, paymentNotice }: FaturaDetayConten
                   <dt>Toplam</dt>
                   <dd className="tabular-nums">{money(invoice.totalAmount)}</dd>
                 </div>
-                {invoice.paidAmount > 0 && invoice.status !== "PAID" ? (
+                {invoice.paidAmount > 0 && canPay ? (
                   <div className="flex justify-between gap-4 text-muted-foreground">
                     <dt>Kalan</dt>
                     <dd className="tabular-nums">{money(outstanding)}</dd>
@@ -385,52 +411,44 @@ export function FaturaDetayContent({ invoice, paymentNotice }: FaturaDetayConten
               </span>
             </div>
 
-            {canPay ? (
-              <div className="mt-5 space-y-3">
-                <p id="payment-method-label" className="text-sm font-medium">
-                  Ödeme yöntemi
-                </p>
-                <div role="radiogroup" aria-labelledby="payment-method-label" className="grid gap-2">
-                  {CUSTOMER_PAYMENT_METHOD_OPTIONS.map((option) => {
-                    const selected = paymentMethod === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        onClick={() => setPaymentMethod(option.value)}
-                        className={cn(
-                          "flex min-h-[52px] items-start gap-3 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          selected ? "border-foreground bg-muted/50" : "hover:bg-muted/40"
-                        )}
-                      >
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
-                            selected && "border-foreground bg-foreground text-background"
-                          )}
-                        >
-                          {selected ? <Check className="size-3" /> : null}
-                        </span>
-                        <span>
-                          <span className="block text-sm font-medium">{option.label}</span>
-                          <span className="block text-xs text-muted-foreground">{option.description}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  onClick={handlePayInvoice}
-                  disabled={isPaying}
-                  className={appButton({ className: "w-full md:h-10" })}
-                >
-                  {isPaying ? <Loader2 aria-hidden className="animate-spin" /> : <CreditCard aria-hidden />}
-                  {isPaying ? "İşleniyor…" : paymentMethod === "BANK_TRANSFER" ? "Havale bildir" : "Ödeme yap"}
-                </button>
+            {invoice.refundedAmount > 0 ? (
+              <div className="mt-3 flex items-baseline justify-between gap-3 text-sm text-muted-foreground">
+                <span>İade edilen</span>
+                <span className="tabular-nums">{money(invoice.refundedAmount)}</span>
+              </div>
+            ) : null}
+
+            {canPay && paymentOptions ? (
+              <div id="odeme" className="mt-5 scroll-mt-24 space-y-3">
+                <PaymentMethodPicker
+                  options={paymentOptions.options}
+                  otherCards={paymentOptions.otherCards}
+                  value={paymentMethod}
+                  onChange={setPaymentMethod}
+                  payableAmount={outstanding}
+                  balance={paymentOptions.balance}
+                  name="invoice-payment-method"
+                />
+                {isBankTransfer ? (
+                  <BankTransferPanel
+                    invoiceId={invoice.id}
+                    invoiceNumber={invoice.invoiceNumber}
+                    outstanding={outstanding}
+                    defaultSenderName={invoice.customer.companyName || customerName}
+                    bankAccounts={bankAccounts}
+                    notices={bankTransferNotices}
+                  />
+                ) : paymentMethod ? (
+                  <button
+                    type="button"
+                    onClick={handlePayInvoice}
+                    disabled={isPaying}
+                    className={appButton({ className: "w-full md:h-10" })}
+                  >
+                    {isPaying ? <Loader2 aria-hidden className="animate-spin" /> : <CreditCard aria-hidden />}
+                    {isPaying ? "İşleniyor…" : selectedKind === "balance" ? "Bakiyeden öde" : "Ödeme yap"}
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </SectionCard>

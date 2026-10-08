@@ -83,6 +83,7 @@ export async function getInvoiceById(id: string) {
         select: {
           id: true,
           orderNumber: true,
+          serviceId: true,
         },
       },
       items: true,

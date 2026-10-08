@@ -32,7 +32,9 @@ export type StatusKind =
   | "incident"
   | "affiliatePayment"
   | "content"
-  | "promo";
+  | "promo"
+  | "refund"
+  | "bankTransferNotice";
 
 export type StatusAudience = "customer" | "admin";
 
@@ -52,6 +54,8 @@ const invoice: Map = {
   PAID: { label: "Ödendi", tone: "success" },
   OVERDUE: { label: "Gecikmiş", tone: "danger" },
   CANCELLED: { label: "İptal edildi", tone: "muted" },
+  REFUNDED: { label: "İade edildi", tone: "neutral" },
+  PARTIALLY_REFUNDED: { label: "Kısmen iade edildi", tone: "info" },
 };
 
 const order: Map = {
@@ -207,6 +211,18 @@ const promo: Map = {
   EXPIRED: { label: "Süresi doldu", tone: "danger" },
 };
 
+const refund: Map = {
+  PENDING: { label: "Sonuç bekleniyor", tone: "warning" },
+  COMPLETED: { label: "Tamamlandı", tone: "success" },
+  FAILED: { label: "Başarısız", tone: "danger" },
+};
+
+const bankTransferNotice: Map = {
+  PENDING: { label: "Onay bekliyor", tone: "warning" },
+  APPROVED: { label: "Onaylandı", tone: "success" },
+  REJECTED: { label: "Reddedildi", tone: "danger" },
+};
+
 const MAPS: Record<StatusKind, Map> = {
   service,
   invoice,
@@ -231,6 +247,8 @@ const MAPS: Record<StatusKind, Map> = {
   affiliatePayment,
   content,
   promo,
+  refund,
+  bankTransferNotice,
 };
 
 /** Label + tone for a status. Unknown values fall back to the raw value. */
@@ -273,6 +291,7 @@ export const ENUM_LABELS = {
   sslType: { DV: "Alan adı doğrulamalı (DV)", OV: "Kurum doğrulamalı (OV)", EV: "Genişletilmiş doğrulama (EV)", WILDCARD: "Wildcard" },
   customerType: { INDIVIDUAL: "Bireysel", CORPORATE: "Kurumsal" },
   userRole: { ADMIN: "Yönetici", CUSTOMER: "Müşteri" },
+  refundMethod: { GATEWAY: "Karta iade", BALANCE: "Bakiyeye aktarım", MANUAL: "Manuel iade" },
   transactionType: { DEPOSIT: "Yükleme", PAYMENT: "Ödeme", REFUND: "İade", ADJUSTMENT: "Düzeltme" },
   discountType: { PERCENTAGE: "Yüzde", FIXED: "Sabit tutar" },
   planChangeType: { UPGRADE: "Yükseltme", DOWNGRADE: "Düşürme" },

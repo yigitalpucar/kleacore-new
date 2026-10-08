@@ -13,6 +13,7 @@ import {
 } from "@/lib/notifications/email";
 import { fulfillInvoicePayment, notifyInvoicePaymentReceived } from "@/lib/payments/fulfillment";
 import { runUnsuspendJobsForInvoices } from "@/lib/payments/service-lifecycle";
+import { approveBankTransferNotice } from "@/lib/payments/bank-transfer/service";
 import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import { createLogger } from "@/lib/logger";
@@ -221,6 +222,22 @@ export async function approveBankTransfer(id: string) {
         success: false,
         error: "Bu fatura için onay bekleyen banka transferi ödemesi bulunamadı",
       };
+    }
+
+    // A customer "ödeme bildirimi" is approved through the havale module so
+    // the notice is closed together with the invoice.
+    const notice = await db.bankTransferNotice.findFirst({
+      where: { invoiceId: id, status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (notice) {
+      await approveBankTransferNotice(notice.id, session.user.id);
+      revalidatePath("/yonetim/faturalar");
+      revalidatePath(`/yonetim/faturalar/${id}`);
+      revalidatePath("/yonetim/faturalar/havale-bildirimleri");
+      revalidatePath(`/musteri/panel/faturalar/${id}`);
+      return { success: true as const };
     }
 
     return await fulfillInvoiceAsAdmin(
