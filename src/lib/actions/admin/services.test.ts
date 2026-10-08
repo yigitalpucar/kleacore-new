@@ -16,7 +16,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 vi.mock("@/lib/utils/auth-helpers", () => ({
-  requireAdmin: vi.fn().mockResolvedValue({ user: { id: "admin-1" } }),
+  requirePermission: vi.fn().mockResolvedValue({ user: { id: "admin-1" } }),
 }));
 vi.mock("@/lib/integrations/provisioning-provider", () => ({
   createRemoteService: mocks.createRemoteService,

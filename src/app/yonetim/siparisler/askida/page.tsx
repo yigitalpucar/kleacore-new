@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getSuspendedOrders } from "@/lib/dal/order-views";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { parsePagination } from "@/lib/utils/pagination";
 import { serializeOrder, withDefaultPerPage } from "../_components/serialize";
 import { SuspendedOrdersContent } from "./content";
@@ -14,7 +14,7 @@ export default async function SuspendedOrdersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdmin();
+  await requirePermission("orders.view");
 
   const sp = await searchParams;
   const params = parsePagination(withDefaultPerPage(sp));

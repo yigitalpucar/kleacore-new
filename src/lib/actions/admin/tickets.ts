@@ -2,11 +2,12 @@
 
 import { db } from "@/lib/db";
 import { dispatchNotification, sendTicketReplyEmail } from "@/lib/notifications/email";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { STAFF_ROLES } from "@/lib/auth/permissions";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 
 export async function replyToTicket(ticketId: string, message: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("tickets.reply");
 
   try {
     if (!message || message.trim().length === 0) {
@@ -84,7 +85,7 @@ export async function replyToTicket(ticketId: string, message: string) {
 }
 
 export async function assignTicket(ticketId: string, adminId: string) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
 
   try {
     const ticket = await db.supportTicket.findUnique({
@@ -95,7 +96,7 @@ export async function assignTicket(ticketId: string, adminId: string) {
     }
 
     const admin = await db.user.findUnique({
-      where: { id: adminId, role: "ADMIN" },
+      where: { id: adminId, role: { in: [...STAFF_ROLES] }, status: "ACTIVE" },
     });
     if (!admin) {
       return { success: false, error: "Geçersiz admin kullanıcı" };
@@ -115,7 +116,7 @@ export async function assignTicket(ticketId: string, adminId: string) {
 }
 
 export async function closeTicket(ticketId: string) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
 
   try {
     const ticket = await db.supportTicket.findUnique({
@@ -148,7 +149,7 @@ export async function closeTicket(ticketId: string) {
 }
 
 export async function reopenTicket(ticketId: string) {
-  await requireAdmin();
+  await requirePermission("tickets.reply");
 
   try {
     const ticket = await db.supportTicket.findUnique({

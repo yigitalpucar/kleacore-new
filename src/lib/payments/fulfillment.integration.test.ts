@@ -45,7 +45,7 @@ vi.mock("@/lib/stripe", () => ({
   getAppBaseUrl: () => "http://localhost:3000",
 }));
 vi.mock("@/lib/utils/auth-helpers", () => ({
-  requireAdmin: async () => ({ user: { id: admin.id } }),
+  requirePermission: async () => ({ user: { id: admin.id } }),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 

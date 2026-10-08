@@ -9,7 +9,7 @@ import {
   ManualProvisioningError,
   type ManualActivationInput,
 } from "@/lib/provisioning/manual";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("admin.manual-provisioning");
 
@@ -22,7 +22,7 @@ const errorMessages: Record<ManualProvisioningError["code"], string> = {
 
 /** "Aktifleştir" on /yonetim/kurulumlar/[id]. The password is never logged. */
 export async function activateManualProvisioningAction(taskId: string, input: ManualActivationInput) {
-  const session = await requireAdmin();
+  const session = await requirePermission("provisioning.manage");
 
   try {
     const result = await activateManualProvisioning(taskId, input, session.user.id);

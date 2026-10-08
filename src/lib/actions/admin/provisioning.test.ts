@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  requireAdmin: vi.fn(),
+  requirePermission: vi.fn(),
   manualRetryProvisioningJob: vi.fn(),
   findUnique: vi.fn(),
 }));
 
-vi.mock("@/lib/utils/auth-helpers", () => ({ requireAdmin: mocks.requireAdmin }));
+vi.mock("@/lib/utils/auth-helpers", () => ({ requirePermission: mocks.requirePermission }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/activity-log", () => ({ logActivity: vi.fn() }));
 vi.mock("@/lib/provisioning/retry-queue", () => ({
@@ -18,7 +18,7 @@ import { retryProvisioningJobAction } from "./provisioning";
 
 describe("retryProvisioningJobAction", () => {
   beforeEach(() => {
-    mocks.requireAdmin.mockResolvedValue({ user: { id: "admin_1" } });
+    mocks.requirePermission.mockResolvedValue({ user: { id: "admin_1" } });
     mocks.findUnique.mockResolvedValue({ id: "job_1", order: { orderNumber: "ORD-1" } });
   });
 

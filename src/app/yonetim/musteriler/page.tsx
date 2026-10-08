@@ -8,6 +8,7 @@ import { formatTRY } from "@/lib/format/price";
 import { parsePagination } from "@/lib/utils/pagination";
 import { listPerPage, toCustomerRow } from "./_components/customer-row";
 import { CustomersTable } from "./_components/customers-table";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ export default async function CustomersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("customers.view");
   const sp = await searchParams;
   const params = parsePagination(sp);
 

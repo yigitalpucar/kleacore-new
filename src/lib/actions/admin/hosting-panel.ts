@@ -8,13 +8,13 @@
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity-log";
 import { createPanelLoginUrl, isPanelLink, type PanelLink } from "@/lib/services/panel-access";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export async function openServicePanelAsAdmin(
   serviceId: string,
   link: PanelLink
 ): Promise<{ success: true; url: string } | { success: false; error: string }> {
-  const session = await requireAdmin();
+  const session = await requirePermission("services.manage");
   if (!isPanelLink(link)) return { success: false, error: "Geçersiz bağlantı." };
 
   const result = await createPanelLoginUrl(serviceId, link, { kind: "admin", userId: session.user.id });

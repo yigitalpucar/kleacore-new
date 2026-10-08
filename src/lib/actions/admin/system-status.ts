@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { logActivity } from "@/lib/activity-log";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import {
   appendIncidentUpdate,
   firstIssue,
@@ -40,7 +40,7 @@ async function log(userId: string, action: string, entity: string, entityId: str
 /* ------------------------------------------------------------------ */
 
 export async function createStatusComponent(input: StatusComponentInput): Promise<ActionResult<{ id: string }>> {
-  const session = await requireAdmin();
+  const session = await requirePermission("status.manage");
   const parsed = statusComponentSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: firstIssue(parsed.error, "Geçersiz bileşen bilgileri") };
 
@@ -64,7 +64,7 @@ export async function createStatusComponent(input: StatusComponentInput): Promis
 }
 
 export async function updateStatusComponent(id: string, input: StatusComponentInput): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("status.manage");
   const parsed = statusComponentSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: firstIssue(parsed.error, "Geçersiz bileşen bilgileri") };
 
@@ -106,7 +106,7 @@ export async function scheduleComponentMaintenance(
   id: string,
   input: { start: string; end: string; note?: string }
 ): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("status.manage");
   const parsed = maintenanceWindowSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: firstIssue(parsed.error, "Geçersiz bakım penceresi") };
 
@@ -129,7 +129,7 @@ export async function scheduleComponentMaintenance(
 }
 
 export async function deleteStatusComponent(id: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("status.manage");
   try {
     const existing = await db.systemStatus.findUnique({ where: { id } });
     if (!existing) return { success: false, error: "Bileşen bulunamadı" };
@@ -155,7 +155,7 @@ export async function deleteStatusComponent(id: string): Promise<ActionResult> {
 /* ------------------------------------------------------------------ */
 
 export async function createIncident(input: IncidentCreateInput): Promise<ActionResult<{ id: string }>> {
-  const session = await requireAdmin();
+  const session = await requirePermission("status.manage");
   const parsed = incidentCreateSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: firstIssue(parsed.error, "Geçersiz olay bilgileri") };
 
@@ -186,7 +186,7 @@ export async function createIncident(input: IncidentCreateInput): Promise<Action
 }
 
 export async function updateIncident(id: string, input: IncidentInput): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("status.manage");
   const parsed = incidentSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: firstIssue(parsed.error, "Geçersiz olay bilgileri") };
 
@@ -209,7 +209,7 @@ export async function updateIncident(id: string, input: IncidentInput): Promise<
 
 /** Appends a timeline entry and moves the incident to the entry's status. */
 export async function addIncidentUpdate(id: string, input: IncidentUpdateInput): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("status.manage");
   const parsed = incidentUpdateSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: firstIssue(parsed.error, "Geçersiz güncelleme") };
 
@@ -238,7 +238,7 @@ export async function addIncidentUpdate(id: string, input: IncidentUpdateInput):
 }
 
 export async function deleteIncident(id: string): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("status.manage");
   try {
     const existing = await db.systemIncident.findUnique({ where: { id }, select: { id: true, title: true } });
     if (!existing) return { success: false, error: "Olay bulunamadı" };

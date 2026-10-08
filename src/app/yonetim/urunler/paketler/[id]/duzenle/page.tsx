@@ -5,6 +5,7 @@ import { getAdminProductConfigOptions } from "@/lib/actions/admin/product-config
 import { EditPackageContent } from "./content";
 import { serializeMoney } from "@/lib/money";
 import { getProductBindingOptions } from "@/lib/modules/admin-view";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function EditPackagePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePermission("products.manage");
   const { id } = await params;
   const [product, configOptions] = await Promise.all([
     getProductById(id),

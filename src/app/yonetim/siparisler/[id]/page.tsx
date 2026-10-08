@@ -17,6 +17,7 @@ import { getOrderConsentRecords } from "@/lib/legal/documents";
 import { formatTRY } from "@/lib/format/price";
 import { billingPeriodLabel, formatDate, formatDateTime } from "@/lib/format/date";
 import { OrderDetailActions } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ export default async function OrderDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePermission("orders.view");
   const { id } = await params;
   const [order, consents] = await Promise.all([getOrderById(id), getOrderConsentRecords(id)]);
 

@@ -13,7 +13,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 vi.mock("@/lib/utils/auth-helpers", () => ({
-  requireAdmin: vi.fn().mockResolvedValue({ user: { id: "admin-1" } }),
+  requirePermission: vi.fn().mockResolvedValue({ user: { id: "admin-1" } }),
 }));
 vi.mock("@/lib/utils/number-generators", () => ({
   generateInvoiceNumber: vi.fn().mockResolvedValue("KC-2026-0001"),

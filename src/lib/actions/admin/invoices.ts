@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { generateInvoiceNumber } from "@/lib/utils/number-generators";
 import { sendNotification } from "@/lib/notifications/send";
 import {
@@ -43,7 +43,7 @@ interface InvoiceInput {
 }
 
 export async function createInvoice(data: InvoiceInput) {
-  await requireAdmin();
+  await requirePermission("invoices.edit");
 
   try {
     const customer = await db.user.findUnique({
@@ -184,7 +184,7 @@ async function fulfillInvoiceAsAdmin(
 }
 
 export async function markPaid(id: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("invoices.edit");
 
   try {
     return await fulfillInvoiceAsAdmin(id, session.user.id, "Admin ödeme onayı");
@@ -195,7 +195,7 @@ export async function markPaid(id: string) {
 }
 
 export async function approveBankTransfer(id: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("bank_transfers.approve");
 
   try {
     const invoice = await db.invoice.findUnique({
@@ -249,11 +249,12 @@ export async function approveBankTransfer(id: string) {
 }
 
 export async function markInvoicePaid(id: string) {
+  await requirePermission("bank_transfers.approve");
   return approveBankTransfer(id);
 }
 
 export async function cancelInvoice(id: string) {
-  await requireAdmin();
+  await requirePermission("invoices.edit");
 
   try {
     const invoice = await db.invoice.findUnique({ where: { id } });
@@ -279,7 +280,7 @@ export async function cancelInvoice(id: string) {
 }
 
 export async function sendInvoiceReminder(id: string) {
-  await requireAdmin();
+  await requirePermission("invoices.edit");
 
   try {
     const invoice = await db.invoice.findUnique({
@@ -352,7 +353,7 @@ export async function sendInvoiceReminder(id: string) {
 }
 
 export async function sendInvoiceReceipt(id: string) {
-  await requireAdmin();
+  await requirePermission("invoices.edit");
 
   try {
     const invoice = await db.invoice.findUnique({

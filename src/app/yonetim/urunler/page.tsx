@@ -5,12 +5,14 @@ import { IconTile, PageHeader, SectionCard, StatCard, StatGrid, appButton } from
 import { categoryConfig } from "@/lib/products/constants";
 import { getProductStats, getProductCategoryCounts } from "@/lib/dal/products";
 import { getPromotions } from "@/lib/dal/promotions";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Ürün yönetimi" };
 
 export default async function ProductsDashboardPage() {
+  await requirePermission("products.manage");
   const [stats, categoryCounts, promotions] = await Promise.all([
     getProductStats(),
     getProductCategoryCounts(),

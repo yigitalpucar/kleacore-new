@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { hasPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { getEInvoicePdf } from "@/lib/integrations/efatura";
 import { createLogger } from "@/lib/logger";
@@ -23,7 +24,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   });
   if (!invoice) return notFound("Fatura bulunamadı");
 
-  const isAdmin = user.role === "ADMIN";
+  const isAdmin = hasPermission(user.role, "invoices.view");
   const isOwner = user.role === "CUSTOMER" && invoice.customerId === user.id;
   if (!isAdmin && !isOwner) return forbidden();
 

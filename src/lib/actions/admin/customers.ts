@@ -3,13 +3,13 @@
 import { generateUniqueAffiliateCode } from "@/lib/affiliate";
 import { findUserByEmail, normalizeEmail } from "@/lib/auth/email";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { logActivity } from "@/lib/activity-log";
 import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 
 export async function createCustomer(formData: FormData) {
-  const session = await requireAdmin();
+  const session = await requirePermission("customers.edit");
 
   try {
     const email = normalizeEmail((formData.get("email") as string | null) ?? "");
@@ -82,7 +82,7 @@ export async function createCustomer(formData: FormData) {
 }
 
 export async function updateCustomer(id: string, formData: FormData) {
-  await requireAdmin();
+  await requirePermission("customers.edit");
 
   try {
     const name = formData.get("name") as string;
@@ -123,7 +123,7 @@ export async function updateCustomer(id: string, formData: FormData) {
 }
 
 export async function suspendCustomer(id: string) {
-  await requireAdmin();
+  await requirePermission("customers.edit");
 
   try {
     const user = await db.user.findUnique({ where: { id } });
@@ -144,7 +144,7 @@ export async function suspendCustomer(id: string) {
 }
 
 export async function activateCustomer(id: string) {
-  await requireAdmin();
+  await requirePermission("customers.edit");
 
   try {
     const user = await db.user.findUnique({ where: { id } });
@@ -166,7 +166,7 @@ export async function activateCustomer(id: string) {
 
 /** Marks a customer's e-mail as verified (e.g. verified by phone/support). */
 export async function markCustomerEmailVerified(id: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("customers.edit");
 
   try {
     const user = await db.user.findUnique({
@@ -201,7 +201,7 @@ export async function markCustomerEmailVerified(id: string) {
 }
 
 export async function deleteCustomer(id: string) {
-  await requireAdmin();
+  await requirePermission("customers.edit");
 
   try {
     const user = await db.user.findUnique({ where: { id } });

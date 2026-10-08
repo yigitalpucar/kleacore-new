@@ -4,6 +4,7 @@ import {
 } from "@/lib/dal/provisioning-jobs";
 import type { ProvisioningJobStatus } from "@prisma/client";
 import { ProvisioningContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export default async function ProvisioningPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("provisioning.manage");
   const sp = await searchParams;
   const statusFilter = readStatusFilter(sp);
 

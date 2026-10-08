@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getServerById } from "@/lib/dal/servers";
 import { notFound } from "next/navigation";
 import { ServerDetailContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export default async function ServerDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePermission("provisioning.manage");
   const { id } = await params;
   const server = await getServerById(id);
 

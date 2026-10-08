@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 
 function revalidateSuspendedOrderPaths(orderId: string) {
@@ -15,7 +15,7 @@ function revalidateSuspendedOrderPaths(orderId: string) {
 }
 
 export async function activateSuspendedOrder(orderId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("orders.manage");
 
   try {
     const order = await db.order.findUnique({
@@ -80,7 +80,7 @@ export async function activateSuspendedOrder(orderId: string) {
 }
 
 export async function cancelSuspendedOrder(orderId: string, reason?: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("orders.manage");
 
   try {
     const order = await db.order.findUnique({

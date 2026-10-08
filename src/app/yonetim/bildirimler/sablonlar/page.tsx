@@ -5,6 +5,7 @@ import { loadRenderContext, renderNotification } from "@/lib/notifications/rende
 import { listTemplates } from "@/lib/notifications/templates";
 import { cn } from "@/lib/utils";
 import { EmailPreview } from "../email-preview";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function SablonlarPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("settings.manage");
   const sp = await searchParams;
   const templates = listTemplates();
   const selectedKey = typeof sp.t === "string" ? sp.t : templates[0]?.key;

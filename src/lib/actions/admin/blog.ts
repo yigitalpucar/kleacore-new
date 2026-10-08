@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { blogCategorySchema, blogPostSchema } from "@/lib/validations/content";
 import { revalidatePath } from "next/cache";
 import type { BlogPostStatus, Prisma } from "@prisma/client";
@@ -32,7 +32,7 @@ function revalidateBlogPaths() {
 }
 
 export async function createBlogCategory(data: BlogCategoryInput) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const parsed = blogCategorySchema.safeParse(data);
@@ -66,7 +66,7 @@ export async function createBlogCategory(data: BlogCategoryInput) {
 }
 
 export async function updateBlogCategory(id: string, data: Partial<BlogCategoryInput>) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const category = await db.blogCategory.findUnique({ where: { id } });
@@ -100,7 +100,7 @@ export async function updateBlogCategory(id: string, data: Partial<BlogCategoryI
 }
 
 export async function deleteBlogCategory(id: string) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const category = await db.blogCategory.findUnique({
@@ -130,7 +130,7 @@ export async function deleteBlogCategory(id: string) {
 }
 
 export async function createBlogPost(data: BlogPostInput) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const parsed = blogPostSchema.safeParse(data);
@@ -181,7 +181,7 @@ export async function createBlogPost(data: BlogPostInput) {
 }
 
 export async function updateBlogPost(id: string, data: Partial<BlogPostInput>) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const post = await db.blogPost.findUnique({ where: { id } });
@@ -246,7 +246,7 @@ export async function updateBlogPost(id: string, data: Partial<BlogPostInput>) {
 }
 
 export async function publishBlogPost(id: string) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const post = await db.blogPost.findUnique({ where: { id } });
@@ -270,7 +270,7 @@ export async function publishBlogPost(id: string) {
 }
 
 export async function archiveBlogPost(id: string) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const post = await db.blogPost.findUnique({ where: { id } });
@@ -291,7 +291,7 @@ export async function archiveBlogPost(id: string) {
 }
 
 export async function deleteBlogPost(id: string) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const post = await db.blogPost.findUnique({ where: { id } });

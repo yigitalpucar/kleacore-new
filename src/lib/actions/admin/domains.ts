@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { formatDate } from "@/lib/format/date";
 
 function revalidateAdminDomain(domainId: string) {
@@ -25,7 +25,7 @@ function renewErrorMessage(error: string) {
 
 /** "Registrar'da yenile": runs the registrar renew now (paid renewal, or a no-invoice admin renewal). */
 export async function renewDomainAtRegistrar(domainId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("domains.manage");
   const { manualRegistrarRenew } = await import("@/lib/domains/renew");
 
   try {
@@ -41,7 +41,7 @@ export async function renewDomainAtRegistrar(domainId: string) {
 
 /** "Senkronize et": pulls status/expiry/nameservers from the registrar now. */
 export async function syncDomainNow(domainId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("domains.manage");
   const { syncDomainWithRegistrar } = await import("@/lib/domains/sync");
 
   try {

@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { kbArticleSchema, kbCategorySchema } from "@/lib/validations/content";
 import { revalidatePath } from "next/cache";
 import type { KbArticleStatus, Prisma } from "@prisma/client";
@@ -30,7 +30,7 @@ function revalidateKbPaths() {
 }
 
 export async function createKbCategory(data: KbCategoryInput) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const parsed = kbCategorySchema.safeParse(data);
@@ -66,7 +66,7 @@ export async function createKbCategory(data: KbCategoryInput) {
 }
 
 export async function updateKbCategory(id: string, data: Partial<KbCategoryInput>) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const category = await db.knowledgeBaseCategory.findUnique({ where: { id } });
@@ -102,7 +102,7 @@ export async function updateKbCategory(id: string, data: Partial<KbCategoryInput
 }
 
 export async function deleteKbCategory(id: string) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const category = await db.knowledgeBaseCategory.findUnique({
@@ -132,7 +132,7 @@ export async function deleteKbCategory(id: string) {
 }
 
 export async function createKbArticle(data: KbArticleInput) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const parsed = kbArticleSchema.safeParse(data);
@@ -179,7 +179,7 @@ export async function createKbArticle(data: KbArticleInput) {
 }
 
 export async function updateKbArticle(id: string, data: Partial<KbArticleInput>) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const article = await db.knowledgeBaseArticle.findUnique({ where: { id } });
@@ -238,7 +238,7 @@ export async function updateKbArticle(id: string, data: Partial<KbArticleInput>)
 }
 
 export async function publishKbArticle(id: string) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const article = await db.knowledgeBaseArticle.findUnique({ where: { id } });
@@ -262,7 +262,7 @@ export async function publishKbArticle(id: string) {
 }
 
 export async function archiveKbArticle(id: string) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const article = await db.knowledgeBaseArticle.findUnique({ where: { id } });
@@ -283,7 +283,7 @@ export async function archiveKbArticle(id: string) {
 }
 
 export async function deleteKbArticle(id: string) {
-  await requireAdmin();
+  await requirePermission("content.manage");
 
   try {
     const article = await db.knowledgeBaseArticle.findUnique({ where: { id } });

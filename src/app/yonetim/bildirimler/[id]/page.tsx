@@ -7,6 +7,7 @@ import { loadRenderContext, redactSensitive, renderNotification } from "@/lib/no
 import { getTemplate, hasTemplate } from "@/lib/notifications/templates";
 import { EmailPreview } from "../email-preview";
 import { ResendButton } from "../resend-button";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ function renderStored(templateKey: string, data: unknown) {
 }
 
 export default async function BildirimDetayPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("settings.manage");
   const { id } = await params;
   const log = await getNotificationLogById(id);
   if (!log) notFound();

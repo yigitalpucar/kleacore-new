@@ -10,6 +10,7 @@ import { getBankAccounts } from "@/lib/dal/bank-transfer";
 import { getPaymentGatewayConfig } from "@/lib/integrations/payment-gateways";
 import { isCardGatewayConfigured } from "@/lib/integrations/payment-gateways/config";
 import { EntegrasyonlarContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,7 @@ interface EntegrasyonlarPageProps {
 }
 
 export default async function EntegrasyonlarPage({ searchParams }: EntegrasyonlarPageProps) {
+  await requirePermission("settings.manage");
   const sp = await searchParams;
   const activeTab = readSearchParam(sp, "tab");
 

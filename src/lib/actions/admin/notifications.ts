@@ -7,7 +7,7 @@ import { createLogger } from "@/lib/logger";
 import { revealSensitive } from "@/lib/notifications/render";
 import { sendNotification } from "@/lib/notifications/send";
 import { getTemplate, hasTemplate, type TemplateKey } from "@/lib/notifications/templates";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("admin.notifications");
 
@@ -17,7 +17,7 @@ const log = createLogger("admin.notifications");
  * fields are decrypted only to be re-encrypted by sendNotification.
  */
 export async function resendNotificationAction(logId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("settings.manage");
 
   try {
     const original = await db.notificationLog.findUnique({ where: { id: logId } });

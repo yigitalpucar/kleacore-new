@@ -6,7 +6,7 @@ import {
   assignCustomerToReseller,
   listResellers,
 } from "@/lib/reseller";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 import { max, min, roundHalfUp, serializeMoney, toNumber } from "@/lib/money";
 
@@ -19,12 +19,12 @@ function normalizeDiscountPercent(value: number) {
 }
 
 export async function getAdminResellers() {
-  await requireAdmin();
+  await requirePermission("customers.view");
   return serializeMoney(await listResellers());
 }
 
 export async function enableReseller(userId: string, enabled: boolean) {
-  const session = await requireAdmin();
+  const session = await requirePermission("customers.edit");
 
   try {
     const user = await db.user.findUnique({
@@ -98,7 +98,7 @@ export async function enableReseller(userId: string, enabled: boolean) {
 }
 
 export async function updateResellerDiscount(userId: string, discountPercent: number) {
-  const session = await requireAdmin();
+  const session = await requirePermission("customers.edit");
 
   try {
     const user = await db.user.findUnique({
@@ -142,7 +142,7 @@ export async function updateResellerDiscount(userId: string, discountPercent: nu
 }
 
 export async function assignCustomer(customerId: string, resellerId: string) {
-  const session = await requireAdmin();
+  const session = await requirePermission("customers.edit");
 
   try {
     const result = await assignCustomerToReseller(customerId, resellerId);

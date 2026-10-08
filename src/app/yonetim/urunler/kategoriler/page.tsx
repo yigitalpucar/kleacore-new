@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getAllCategories } from "@/lib/dal/categories";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { CategoriesContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Kategoriler" };
 
 export default async function CategoriesPage() {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   const categories = await getAllCategories();
 

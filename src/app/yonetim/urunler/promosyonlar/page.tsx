@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { getPromotions } from "@/lib/dal/promotions";
 import { PromotionsContent } from "./content";
 import { toNumber, toNumberOrNull } from "@/lib/money";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Promosyonlar" };
 
 export default async function PromotionsPage() {
+  await requirePermission("products.manage");
   const promotions = await getPromotions();
 
   const serialized = promotions.map((promo) => ({

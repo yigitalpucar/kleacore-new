@@ -25,6 +25,8 @@ import { updateSettings } from "@/lib/actions/admin/settings";
 import { revokeApiKeyByAdmin } from "@/lib/actions/admin/api-keys";
 import { NotificationSwitches, SecuritySwitch } from "./settings-switches";
 import { SettingsFeedbackToast } from "./settings-feedback-toast";
+import { requirePermission } from "@/lib/utils/auth-helpers";
+import { ROLE_LABELS, type StaffRole } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +65,7 @@ function getFormValue(formData: FormData, key: string, fallback = "") {
 
 async function saveGeneralSettings(formData: FormData) {
   "use server";
+  await requirePermission("settings.manage");
 
   const result = await updateSettings([
     { key: "company_name", value: getFormValue(formData, "company_name") },
@@ -84,6 +87,7 @@ async function saveGeneralSettings(formData: FormData) {
 
 async function saveEmailSettings(formData: FormData) {
   "use server";
+  await requirePermission("settings.manage");
 
   const settings = await getSettings();
   const currentSmtpPassword = getSettingValue(settings, "smtp_password", "");
@@ -112,6 +116,7 @@ async function saveEmailSettings(formData: FormData) {
 
 async function saveNotificationSettings(formData: FormData) {
   "use server";
+  await requirePermission("settings.manage");
 
   const result = await updateSettings([
     {
@@ -140,6 +145,7 @@ async function saveNotificationSettings(formData: FormData) {
 
 async function saveSecuritySettings(formData: FormData) {
   "use server";
+  await requirePermission("settings.manage");
 
   const result = await updateSettings([
     { key: "two_factor", value: getFormValue(formData, "two_factor", "false") },
@@ -160,6 +166,7 @@ async function saveSecuritySettings(formData: FormData) {
 
 async function revokeAdminApiKey(formData: FormData) {
   "use server";
+  await requirePermission("settings.manage");
 
   const result = await revokeApiKeyByAdmin(formData);
 
@@ -190,6 +197,7 @@ interface SettingsPageProps {
 }
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
+  await requirePermission("settings.manage");
   const sp = await searchParams;
   const activeTab = readSearchParam(sp, "tab");
 
@@ -486,9 +494,14 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         {/* Users */}
         <TabsContent value="users" className={tabPanel}>
           <SectionCard
-            title="Yönetici kullanıcıları"
-            description="Yönetim paneline erişimi olan kullanıcılar."
-            actions={<UnavailableAction label="Kullanıcı ekle" icon={<UserPlus aria-hidden />} size="sm" />}
+            title="Personel"
+            description="Yönetim paneline erişimi olan kullanıcılar. Davet, rol ve erişim Personel sayfasından yönetilir."
+            actions={
+              <Link href="/yonetim/personel" className={appButton({ variant: "outline", size: "sm" })}>
+                <UserPlus aria-hidden />
+                Personel yönetimi
+              </Link>
+            }
             flush
           >
             {adminUsers.length === 0 ? (
@@ -514,14 +527,13 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right">
-                        <StatusBadge tone="neutral" label="Yönetici" />
+                        <StatusBadge tone="neutral" label={ROLE_LABELS[user.role as StaffRole] ?? user.role} />
                         {user.lastLoginAt && (
                           <p className="mt-1 text-xs tabular-nums text-muted-foreground">
                             Son giriş: {formatDate(user.lastLoginAt)}
                           </p>
                         )}
                       </div>
-                      <UnavailableAction label="Düzenle" variant="ghost" size="sm" />
                     </div>
                   </li>
                 ))}

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { AddServiceContent } from "./content";
 import type { BillingPeriod, ProductCategorySlug } from "@prisma/client";
 import { toNumber } from "@/lib/money";
@@ -15,7 +15,7 @@ function toStringArray(value: unknown): string[] {
 }
 
 export default async function AddServicePage() {
-  await requireAdmin();
+  await requirePermission("services.manage");
 
   const [customers, products, servers] = await Promise.all([
     db.user.findMany({

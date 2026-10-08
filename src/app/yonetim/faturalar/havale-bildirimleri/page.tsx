@@ -7,6 +7,7 @@ import { getBankTransferNoticeQueue } from "@/lib/dal/bank-transfer";
 import { formatDate, formatDateTime } from "@/lib/format/date";
 import { formatTRY } from "@/lib/format/price";
 import { cn } from "@/lib/utils";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export default async function BankTransferNoticesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("invoices.view");
   const sp = await searchParams;
   const requested = typeof sp.durum === "string" ? sp.durum.toUpperCase() : "PENDING";
   const status: TabValue = TABS.some((tab) => tab.value === requested) ? (requested as TabValue) : "PENDING";

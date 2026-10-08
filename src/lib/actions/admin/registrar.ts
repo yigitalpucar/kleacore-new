@@ -2,11 +2,11 @@
 
 import { db } from "@/lib/db";
 import { syncRegistrarTldPricing } from "@/lib/integrations/registrar";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 
 export async function syncRegistrarTldsFromProvider() {
-  await requireAdmin();
+  await requirePermission("domains.manage");
 
   const result = await syncRegistrarTldPricing();
   if (!result.ok || !result.data) {

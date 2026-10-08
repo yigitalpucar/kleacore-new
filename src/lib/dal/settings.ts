@@ -1,3 +1,4 @@
+import { STAFF_ROLES } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { resolveSettingValue } from "@/lib/secrets/crypto";
 
@@ -37,14 +38,16 @@ export async function getSettingByKey(key: string) {
   return mapSettingValue(setting);
 }
 
+/** Active staff (ADMIN, SUPPORT, BILLING): settings list and ticket assignment. */
 export async function getAdminUsers() {
   return db.user.findMany({
-    where: { role: "ADMIN" },
+    where: { role: { in: [...STAFF_ROLES] }, status: "ACTIVE" },
     select: {
       id: true,
       name: true,
       surname: true,
       email: true,
+      role: true,
       lastLoginAt: true,
     },
     orderBy: { createdAt: "asc" },

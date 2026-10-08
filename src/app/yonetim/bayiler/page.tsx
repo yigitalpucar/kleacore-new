@@ -3,12 +3,14 @@ import { getAdminResellers } from "@/lib/actions/admin/resellers";
 import { db } from "@/lib/db";
 import { BayilerContent } from "./content";
 import { toNumber } from "@/lib/money";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Bayiler" };
 
 export default async function BayilerPage() {
+  await requirePermission("customers.view");
   const [resellers, customers] = await Promise.all([
     getAdminResellers(),
     db.user.findMany({

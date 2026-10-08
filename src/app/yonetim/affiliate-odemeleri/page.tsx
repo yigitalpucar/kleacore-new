@@ -4,7 +4,7 @@ import {
   getAffiliatePayoutStats,
   listAffiliatePayouts,
 } from "@/lib/affiliate/payouts";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import type { AffiliatePaymentStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +29,7 @@ export default async function AffiliateOdemeleriPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdmin();
+  await requirePermission("invoices.edit");
 
   const sp = await searchParams;
   const status = readStatusFilter(sp);

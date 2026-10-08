@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getAllProductFeatures } from "@/lib/dal/product-features";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { FeaturesContent } from "./content";
 import type { ProductCategorySlug } from "@prisma/client";
 
@@ -23,7 +23,7 @@ interface ProductFeatureData {
 export const metadata: Metadata = { title: "Özellikler" };
 
 export default async function FeaturesPage() {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   const features = await getAllProductFeatures();
 

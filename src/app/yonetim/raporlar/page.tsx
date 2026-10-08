@@ -34,7 +34,7 @@ import {
 } from "@/lib/dal/reports";
 import type { PaymentMethod, Prisma } from "@prisma/client";
 import { add, sum, toNumber, type MoneyInput } from "@/lib/money";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { PeriodFilter } from "./period-filter";
 import { ReportExportButton } from "./report-export-button";
 
@@ -185,7 +185,7 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdmin();
+  await requirePermission("reports.view");
 
   const sp = await searchParams;
   const period = parseReportPeriod(sp.period);

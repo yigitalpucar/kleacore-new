@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { categoryCreateSchema } from "@/lib/validations/product";
 import { revalidatePath } from "next/cache";
 import type { ProductCategorySlug } from "@prisma/client";
@@ -22,7 +22,7 @@ function revalidateCategoryPaths() {
 }
 
 export async function createCategory(data: CategoryInput) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const parsed = categoryCreateSchema.safeParse(data);
@@ -59,7 +59,7 @@ export async function createCategory(data: CategoryInput) {
 }
 
 export async function updateCategory(id: string, data: Partial<CategoryInput>) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const category = await db.productCategory.findUnique({ where: { id } });
@@ -86,7 +86,7 @@ export async function updateCategory(id: string, data: Partial<CategoryInput>) {
 }
 
 export async function deleteCategory(id: string) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const category = await db.productCategory.findUnique({
@@ -122,7 +122,7 @@ export async function moveCategory(
   id: string,
   direction: "up" | "down"
 ) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const current = await db.productCategory.findUnique({ where: { id } });

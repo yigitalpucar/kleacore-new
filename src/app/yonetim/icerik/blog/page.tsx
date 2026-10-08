@@ -2,6 +2,7 @@ import { getPosts, getBlogCategories } from "@/lib/dal/blog";
 import { parsePagination } from "@/lib/utils/pagination";
 import { BlogContent } from "./content";
 import type { BlogPostStatus } from "@prisma/client";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ export default async function BlogAdminPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("content.manage");
   const sp = await searchParams;
   const params = parsePagination(sp);
 

@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils/auth-helpers";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 import { promotionCreateSchema } from "@/lib/validations/product";
 import { revalidatePath } from "next/cache";
 
@@ -25,7 +25,7 @@ interface PromotionInput {
 }
 
 export async function createPromotion(data: PromotionInput) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const parsed = promotionCreateSchema.safeParse(data);
@@ -72,7 +72,7 @@ export async function createPromotion(data: PromotionInput) {
 }
 
 export async function updatePromotion(id: string, data: Partial<PromotionInput>) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const promotion = await db.promotionCode.findUnique({ where: { id } });
@@ -109,7 +109,7 @@ export async function updatePromotion(id: string, data: Partial<PromotionInput>)
 }
 
 export async function deletePromotion(id: string) {
-  await requireAdmin();
+  await requirePermission("products.manage");
 
   try {
     const promotion = await db.promotionCode.findUnique({ where: { id } });

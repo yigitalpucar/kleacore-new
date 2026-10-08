@@ -14,6 +14,7 @@ import { billingPeriodLabel, formatDateTime } from "@/lib/format/date";
 import { getManualSlaHours } from "@/lib/provisioning/manual";
 import { SLA_LABELS, formatWaiting, slaState } from "@/lib/provisioning/sla";
 import { ActivationForm } from "./activation-form";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ type Delivery = {
 };
 
 export default async function KurulumDetayPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("provisioning.manage");
   const { id } = await params;
   const [task, slaHours] = await Promise.all([getManualProvisioningTask(id), getManualSlaHours()]);
   if (!task) notFound();

@@ -2,6 +2,7 @@ import { getEInvoiceRecordsForAdmin, getEInvoiceStats } from "@/lib/dal/e-invoic
 import { getEInvoiceConfig, getEInvoiceConfigProblem } from "@/lib/integrations/efatura";
 import type { EInvoiceStatus } from "@prisma/client";
 import { EfaturaContent } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,7 @@ export default async function EfaturaPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("efatura.manage");
   const sp = await searchParams;
   const statusFilter = readStatusFilter(sp);
 

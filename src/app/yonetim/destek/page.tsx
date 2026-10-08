@@ -3,6 +3,7 @@ import { getTickets } from "@/lib/dal/tickets";
 import { parsePagination } from "@/lib/utils/pagination";
 import { DestekContent, type AdminTicketRow } from "./content";
 import type { TicketStatus, TicketPriority, TicketDepartment } from "@prisma/client";
+import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function DestekPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePermission("tickets.view");
   const sp = await searchParams;
   const params = parsePagination(sp);
   // Lists show 100 rows per server page unless ?perPage= is given.
