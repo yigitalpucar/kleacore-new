@@ -19,6 +19,8 @@ import {
 } from "@/lib/reseller";
 import { getAppBaseUrl, getStripe } from "@/lib/stripe";
 import { persistGatewayCheckout } from "@/lib/integrations/payment-gateways/persist";
+import { getPaymentGatewayProvider } from "@/lib/integrations/payment-gateways";
+import { loadCheckoutCustomer } from "@/lib/payments/orchestrator";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod, Prisma } from "@prisma/client";
 import {
@@ -329,7 +331,17 @@ export async function checkoutCart(input: CheckoutInput) {
   }
 
   try {
-    const stripeClient = input.paymentMethod === "CREDIT_CARD" ? getStripe() : null;
+    // Card payments go through the active gateway (Kuveyt Türk, iyzico,
+    // PayTR); Stripe keeps its own session flow below.
+    const cardProvider =
+      input.paymentMethod === "CREDIT_CARD" ? await getPaymentGatewayProvider() : null;
+    if (cardProvider?.name === "disabled") {
+      return {
+        success: false,
+        error: "Kredi kartı ödemesi şu anda kullanılamıyor. Lütfen banka havalesi seçin.",
+      };
+    }
+    const stripeClient = cardProvider?.name === "stripe" ? getStripe() : null;
 
     const result = await db.$transaction(async (tx) => {
       const customer = await tx.user.findUnique({
@@ -516,7 +528,7 @@ export async function checkoutCart(input: CheckoutInput) {
             paidAt: isPaid ? now : undefined,
             dueDate,
             notes: isStripe
-              ? "Stripe ödeme onayı bekleniyor"
+              ? "Kredi kartı ödeme onayı bekleniyor"
               : "Banka havalesi sonrası ödeme onayı bekleniyor",
             items: {
               create: {
@@ -537,7 +549,7 @@ export async function checkoutCart(input: CheckoutInput) {
             method: input.paymentMethod,
             status: isPaid ? "COMPLETED" : "PENDING",
             notes: isStripe
-              ? "Stripe Checkout bekleniyor"
+              ? "Kredi kartı ödemesi bekleniyor"
               : "Banka havalesi bekleniyor",
             paidAt: isPaid ? now : undefined,
           },
@@ -633,9 +645,33 @@ export async function checkoutCart(input: CheckoutInput) {
       });
     });
 
-    if (input.paymentMethod === "CREDIT_CARD") {
+    if (cardProvider && !stripeClient) {
       const baseUrl = getAppBaseUrl();
-      const session = await stripeClient!.checkout.sessions.create({
+      const checkout = await cardProvider.createCheckout({
+        customerId,
+        customer: await loadCheckoutCustomer(customerId),
+        invoiceIds: result.invoiceIds,
+        totalAmount: result.totalAmount,
+        description: `Sipariş ${result.orderNumbers.join(", ")}`,
+        successUrl: `${baseUrl}/sepet/basarili`,
+        cancelUrl: `${baseUrl}/sepet/iptal?invoice_ids=${result.invoiceIds.join(",")}`,
+        context: "cart",
+      });
+
+      return {
+        success: true,
+        data: {
+          ...result,
+          checkoutUrl: checkout.checkoutUrl,
+          checkoutHtml: checkout.checkoutHtml,
+          paytrToken: checkout.paytrToken,
+        },
+      };
+    }
+
+    if (stripeClient) {
+      const baseUrl = getAppBaseUrl();
+      const session = await stripeClient.checkout.sessions.create({
         mode: "payment",
         success_url: `${baseUrl}/sepet/basarili?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/sepet/iptal?invoice_ids=${result.invoiceIds.join(",")}`,
