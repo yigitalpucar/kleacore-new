@@ -17,7 +17,7 @@ export const sslFeatureItems: FeatureItem[] = [
   {
     icon: Clock,
     title: "Doğrulamaya göre teslim",
-    description: "DV sertifikalar genellikle dakikalar içinde, OV ve EV sertifikalar kurum doğrulamasından sonra düzenlenir.",
+    description: "Sertifika, doğrulama tamamlandıktan sonra düzenlenir. DV'de alan adı, OV ve EV'de kurum bilgileri doğrulanır.",
   },
   {
     icon: ShieldCheck,
