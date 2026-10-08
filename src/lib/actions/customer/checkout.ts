@@ -18,6 +18,7 @@ import {
   getResellerDiscountForCustomer,
 } from "@/lib/reseller";
 import { getAppBaseUrl, getStripe } from "@/lib/stripe";
+import { persistGatewayCheckout } from "@/lib/integrations/payment-gateways/persist";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod, Prisma } from "@prisma/client";
 import {
@@ -659,14 +660,13 @@ export async function checkoutCart(input: CheckoutInput) {
         ],
       });
 
-      await db.payment.updateMany({
-        where: {
-          invoiceId: { in: result.invoiceIds },
-          status: "PENDING",
-        },
-        data: {
-          transactionId: session.id,
-        },
+      await persistGatewayCheckout({
+        invoiceIds: result.invoiceIds,
+        gatewaySessionId: session.id,
+        provider: "stripe",
+        customerId,
+        context: "cart",
+        notesPrefix: "Stripe Checkout ödemesi",
       });
 
       return {

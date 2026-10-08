@@ -117,6 +117,95 @@ function buildFulfillmentEvents(
   return events;
 }
 
+const SUPERSEDED_PAYMENT_NOTE = "Fatura başka bir ödeme ile kapandı";
+const DUPLICATE_PAYMENT_NOTE =
+  "MÜKERRER ÖDEME: fatura zaten ödenmişti, iade veya bakiye aktarımı gerekli";
+
+/**
+ * Marks the payment that settled the invoice COMPLETED. With a gateway
+ * reference that is the row bound to that session; otherwise (admin "ödendi",
+ * legacy rows) the newest unbound pending row, falling back to the newest
+ * pending one. Other sessions still PENDING for this invoice are closed as
+ * FAILED so they don't count as received money.
+ */
+async function completeInvoicePayment(
+  tx: Prisma.TransactionClient,
+  invoiceId: string,
+  now: Date,
+  input: FulfillInvoicePaymentInput
+) {
+  const pending = await tx.payment.findMany({
+    where: { invoiceId, status: "PENDING" },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, transactionId: true },
+  });
+
+  const settling =
+    (input.paymentReference
+      ? pending.find((payment) => payment.transactionId === input.paymentReference)
+      : undefined) ??
+    pending.find((payment) => payment.transactionId === null) ??
+    pending[0];
+
+  if (settling) {
+    await tx.payment.update({
+      where: { id: settling.id },
+      data: {
+        status: "COMPLETED",
+        paidAt: now,
+        transactionId: settling.transactionId ?? input.paymentReference,
+        notes: input.notes ?? "Ödeme tamamlandı",
+      },
+    });
+  }
+
+  const superseded = pending
+    .filter((payment) => payment.id !== settling?.id)
+    .map((payment) => payment.id);
+
+  if (superseded.length > 0) {
+    await tx.payment.updateMany({
+      where: { id: { in: superseded }, status: "PENDING" },
+      data: { status: "FAILED", notes: SUPERSEDED_PAYMENT_NOTE },
+    });
+  }
+}
+
+/**
+ * The invoice was already PAID when this payment arrived. A repeated callback
+ * of the session that paid it finds its row COMPLETED and does nothing. A
+ * different session that was really charged (customer paid twice) is recorded
+ * as COMPLETED with a duplicate note and logged so an admin can refund it.
+ */
+async function recordPaymentOnSettledInvoice(
+  tx: Prisma.TransactionClient,
+  invoiceId: string,
+  input: FulfillInvoicePaymentInput
+) {
+  if (!input.paymentReference) {
+    return;
+  }
+
+  const duplicate = await tx.payment.updateMany({
+    where: {
+      invoiceId,
+      transactionId: input.paymentReference,
+      status: { in: ["PENDING", "FAILED"] },
+    },
+    data: {
+      status: "COMPLETED",
+      paidAt: new Date(),
+      notes: DUPLICATE_PAYMENT_NOTE,
+    },
+  });
+
+  if (duplicate.count > 0) {
+    console.error(
+      `[Fulfillment] Ödenmiş faturaya ikinci ödeme alındı (fatura ${invoiceId}, referans ${input.paymentReference}). İade gerekebilir.`
+    );
+  }
+}
+
 export async function fulfillInvoicePayment(
   tx: Prisma.TransactionClient,
   input: FulfillInvoicePaymentInput
@@ -140,14 +229,15 @@ export async function fulfillInvoicePayment(
     throw new Error("INVOICE_CANCELLED");
   }
 
-  if (invoice.status === "PAID") {
-    return invoice;
-  }
-
   const now = new Date();
 
-  await tx.invoice.update({
-    where: { id: invoice.id },
+  // Conditional state transition: of two concurrent callbacks (PayTR retry,
+  // iyzico redirect + webhook, Stripe events) only the one whose UPDATE flips
+  // the row to PAID continues. The other blocks on the row lock, re-evaluates
+  // the WHERE after commit, matches 0 rows and becomes an idempotent no-op —
+  // so provisioning, renewal and affiliate commission run exactly once.
+  const transition = await tx.invoice.updateMany({
+    where: { id: invoice.id, status: { notIn: ["PAID", "CANCELLED"] } },
     data: {
       status: "PAID",
       paidAt: invoice.paidAt ?? now,
@@ -155,15 +245,12 @@ export async function fulfillInvoicePayment(
     },
   });
 
-  await tx.payment.updateMany({
-    where: { invoiceId: invoice.id, status: "PENDING" },
-    data: {
-      status: "COMPLETED",
-      paidAt: now,
-      transactionId: input.paymentReference,
-      notes: input.notes ?? "Ödeme tamamlandı",
-    },
-  });
+  if (transition.count === 0) {
+    await recordPaymentOnSettledInvoice(tx, invoice.id, input);
+    return { fulfilled: false as const, invoice };
+  }
+
+  await completeInvoicePayment(tx, invoice.id, now, input);
 
   let renewal: RenewalResult | null = null;
   let orderCompleted = false;
@@ -245,7 +332,7 @@ export async function fulfillInvoicePayment(
     console.error("[E-Fatura] Taslak kuyruğa alınamadı:", error);
   });
 
-  return invoice;
+  return { fulfilled: true as const, invoice };
 }
 
 export async function notifyInvoicePaymentReceived(invoiceId: string) {

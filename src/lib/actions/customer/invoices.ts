@@ -85,6 +85,9 @@ export async function payInvoice(input: PayInvoiceInput) {
           customerId: session.user.id,
           method: "CREDIT_CARD",
           status: "PENDING",
+          // Only reuse a row no gateway session has claimed yet; rows bound
+          // to earlier sessions must keep their amount for callback matching.
+          transactionId: null,
         },
         orderBy: { createdAt: "desc" },
       });

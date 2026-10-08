@@ -890,6 +890,10 @@ model Payment {
   paidAt        DateTime?
   createdAt     DateTime      @default(now())
 
+  // One row per invoice per gateway session: a callback for any session
+  // matches exactly one payment of each invoice it covers.
+  @@unique([invoiceId, transactionId])
+  @@index([transactionId])
   @@map("payments")
 }
 

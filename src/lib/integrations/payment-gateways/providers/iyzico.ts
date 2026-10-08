@@ -23,6 +23,11 @@ interface IyzicoRetrieveResponse {
   paymentId?: string;
   conversationId?: string;
   errorMessage?: string;
+  /** Basket total we requested. */
+  price?: number | string;
+  /** Amount actually charged (includes installment commission if passed to the customer). */
+  paidPrice?: number | string;
+  currency?: string;
 }
 
 function getIyzicoBaseUrl(testMode: boolean) {
