@@ -187,6 +187,10 @@ describe("checkoutCart signup guards", () => {
     expect(result.success).toBe(true);
     expect(mocks.tx.order.create).toHaveBeenCalledTimes(2);
     expect(mocks.tx.consentRecord.createMany).toHaveBeenCalledOnce();
+    // OrderItem amounts are net (KDV only on the order): 100, not 120.
+    const orderData = (mocks.tx.order.create.mock.calls as unknown as Array<[{ data: Record<string, any> }]>)[0][0].data;
+    expect(String(orderData.items.create.totalPrice)).toBe("100");
+    expect(String(orderData.totalAmount)).toBe("120");
 
     const { data, skipDuplicates } = mocks.tx.consentRecord.createMany.mock.calls[0][0] as {
       data: Array<Record<string, unknown>>;

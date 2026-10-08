@@ -63,8 +63,8 @@ export async function approveOrder(id: string) {
           status: "PENDING",
           dueDate,
           items: {
-            // Net line from the order's own net amounts; OrderItem.totalPrice
-            // is KDV-inclusive in some flows and must not be copied.
+            // Net line from the order's own net amounts (OrderItem is net too
+            // since 20261009130000_order_item_net; legacy rows may not be).
             create: invoiceLine,
           },
         },

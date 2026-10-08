@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calculateTax } from "./tax";
-import { netInvoiceLine, netInvoiceLineFromOrder } from "./invoice-lines";
+import { netInvoiceLine, netInvoiceLineFromOrder, netOrderItemAmounts } from "./invoice-lines";
 
 describe("net invoice lines", () => {
   it("stores the net line total after discount; the invoice adds KDV once", () => {
@@ -27,5 +27,18 @@ describe("net invoice lines", () => {
     const even = netInvoiceLineFromOrder({ basePrice: 298, discountAmount: 0, quantity: 2 }, "Ürün");
     expect(even.quantity).toBe(2);
     expect(even.unitPrice.toFixed(2)).toBe("149.00");
+  });
+});
+
+describe("net order items", () => {
+  it("stores OrderItem amounts net like InvoiceItem (KDV only on the order)", () => {
+    const item = netOrderItemAmounts({ unitPrice: 300, discountAmount: 30 });
+    expect(item).toMatchObject({ quantity: 1 });
+    expect(item.unitPrice.toFixed(2)).toBe("300.00");
+    expect(item.discountAmount.toFixed(2)).toBe("30.00");
+    expect(item.totalPrice.toFixed(2)).toBe("270.00");
+    expect(item).not.toHaveProperty("description");
+    // The order adds KDV once on the same net amount.
+    expect(calculateTax(item.totalPrice, 20).totalAmount).toBe(324);
   });
 });

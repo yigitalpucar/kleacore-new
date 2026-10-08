@@ -76,7 +76,7 @@ export default async function OrderDetailPage({
             {order.items.length > 0 ? (
               <div className="mt-5">
                 <p className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                  Sipariş kalemleri
+                  Sipariş kalemleri (KDV hariç)
                 </p>
                 <ul className="divide-y divide-dashed rounded-md border">
                   {order.items.map((item) => (

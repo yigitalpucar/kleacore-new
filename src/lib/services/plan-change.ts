@@ -2,7 +2,7 @@ import type { BillingPeriod, PlanChangeType, Prisma, Service } from "@prisma/cli
 import { db } from "@/lib/db";
 import { changeRemoteServicePlan } from "@/lib/integrations/provisioning-provider";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
-import { netInvoiceLine } from "@/lib/billing/invoice-lines";
+import { netInvoiceLine, netOrderItemAmounts } from "@/lib/billing/invoice-lines";
 import { queueProvisioningAttempt } from "@/lib/provisioning/queue";
 import { periodTotal, priceBasisForCategory } from "@/lib/billing/period-price";
 import { billingMonths } from "@/lib/payments/renewal-fulfillment";
@@ -278,10 +278,7 @@ export async function requestPlanChange(input: RequestPlanChangeInput) {
           create: {
             productName: `${targetProduct.name} Yükseltme`,
             productSku: targetProduct.sku,
-            quantity: 1,
-            unitPrice: totalAmount,
-            discountAmount: 0,
-            totalPrice: totalAmount,
+            ...netOrderItemAmounts({ unitPrice: chargeAmount }),
             configuration: {
               type: "plan_change",
               planChangeId: planChange.id,

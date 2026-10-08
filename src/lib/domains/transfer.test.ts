@@ -92,4 +92,17 @@ describe("processAutomatedDomainTransfer", () => {
     expect(configuration.eppCode).not.toBe("EPP-123");
     expect(decryptSecret(configuration.eppCode)).toBe("EPP-123");
   });
+
+  it("stores the order line net, like the invoice line (KDV only on the order)", async () => {
+    await processAutomatedDomainTransfer(customer, {
+      domain: "ornek.com.tr",
+      eppCode: "EPP-123",
+      email: "a@example.com",
+    });
+
+    const order = mocks.tx.order.create.mock.calls[0][0].data;
+    const invoice = mocks.tx.invoice.create.mock.calls[0][0].data;
+    expect(String(order.items.create.totalPrice)).toBe(String(invoice.items.create.totalPrice));
+    expect(String(order.items.create.totalPrice)).toBe(String(order.basePrice));
+  });
 });

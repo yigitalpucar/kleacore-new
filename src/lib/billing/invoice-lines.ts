@@ -70,3 +70,13 @@ export function netInvoiceLineFromOrder(
     discountAmount: order.discountAmount,
   });
 }
+
+/**
+ * OrderItem amounts use the same net semantics as InvoiceItem: unitPrice =
+ * net unit price, discountAmount = net line discount, totalPrice = net line
+ * total. KDV lives on the order (taxAmount / totalAmount) only.
+ */
+export function netOrderItemAmounts(input: Omit<NetInvoiceLineInput, "description">) {
+  const { quantity, unitPrice, discountAmount, totalPrice } = netInvoiceLine({ ...input, description: "" });
+  return { quantity, unitPrice, discountAmount, totalPrice };
+}

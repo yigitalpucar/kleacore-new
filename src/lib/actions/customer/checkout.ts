@@ -43,7 +43,7 @@ import {
 } from "@/lib/payments/balance-payment";
 import { claimPromotionUse } from "@/lib/billing/promo-usage";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
-import { netInvoiceLine } from "@/lib/billing/invoice-lines";
+import { netInvoiceLine, netOrderItemAmounts } from "@/lib/billing/invoice-lines";
 import {
   cartDomainItemName,
   validateCartItems,
@@ -614,10 +614,12 @@ export async function checkoutCart(input: CheckoutInput) {
               create: {
                 productName: item.productName,
                 productSku: item.productSku,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                discountAmount: lineDiscount,
-                totalPrice: taxed.totalAmount,
+                // Net amounts like InvoiceItem: totalPrice = lineTotal − discount.
+                ...netOrderItemAmounts({
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  discountAmount: lineDiscount,
+                }),
                 configuration: item.configuration as Prisma.InputJsonValue,
               },
             },
