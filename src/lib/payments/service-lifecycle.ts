@@ -1,4 +1,8 @@
 import type { Prisma } from "@prisma/client";
+import { queueProvisioningAttempt } from "@/lib/provisioning/queue";
+
+/** The inline unsuspend normally finishes long before the queued backstop runs. */
+const UNSUSPEND_QUEUE_DELAY_SECONDS = 60;
 
 /**
  * suspendReason written by the overdue-invoice cron. Only services suspended
@@ -21,7 +25,7 @@ export function isNonPaymentSuspension(service: {
  * run here — it would hold the transaction open on a network call and can't be
  * rolled back — so an UNSUSPEND provisioning job is written in the same
  * transaction. `runUnsuspendJobsForInvoices` executes it right after commit
- * and the provisioning retry cron retries it on failure.
+ * and the provisioning.run queue job retries it on failure.
  */
 export async function unsuspendServiceIfNeeded(
   tx: Prisma.TransactionClient,
@@ -59,7 +63,7 @@ export async function unsuspendServiceIfNeeded(
   }
 
   const now = new Date();
-  await tx.provisioningJob.upsert({
+  const job = await tx.provisioningJob.upsert({
     where: { orderId },
     create: {
       orderId,
@@ -80,13 +84,17 @@ export async function unsuspendServiceIfNeeded(
     },
   });
 
+  // Backstop for the inline run after commit: if that run fails or the
+  // process dies first, the queue retries the unsuspend (with backoff).
+  await queueProvisioningAttempt(tx, job, { startAfter: UNSUSPEND_QUEUE_DELAY_SECONDS });
+
   return { unsuspended: true };
 }
 
 /**
  * Runs the remote unsuspend for services reactivated by these (just
  * committed) invoice payments. Never throws: failures stay on the job for the
- * retry cron and are logged.
+ * queue to retry and are logged.
  */
 export async function runUnsuspendJobsForInvoices(invoiceIds: string[]) {
   if (invoiceIds.length === 0) {

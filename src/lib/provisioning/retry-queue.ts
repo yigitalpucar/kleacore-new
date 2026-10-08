@@ -9,6 +9,8 @@ import {
   provisionSslCertificate,
 } from "@/lib/integrations/ssl";
 import type { CronJobResult } from "@/lib/cron/jobs/types";
+import type { JobContext } from "@/lib/jobs/registry";
+import { dismissFailedQueueEntries, queueProvisioningAttempt } from "@/lib/provisioning/queue";
 
 const RETRY_DELAYS_MS = [
   5 * 60 * 1000,
@@ -33,10 +35,25 @@ export function getNextRetryAt(attempt: number, from = new Date()): Date {
   return new Date(from.getTime() + getRetryDelayMs(attempt));
 }
 
+/**
+ * Records a provisioning failure on the order's ProvisioningJob row and
+ * schedules a queue attempt (provisioning.run) in the same transaction.
+ */
 export async function enqueueProvisioningRetry(
   orderId: string,
   error?: string,
   client: DbClient = db,
+  serviceId?: string
+) {
+  const job = await upsertProvisioningRetry(orderId, error, client, serviceId);
+  await queueProvisioningAttempt(client, job, { startAfter: job.nextRetryAt });
+  return job;
+}
+
+async function upsertProvisioningRetry(
+  orderId: string,
+  error: string | undefined,
+  client: DbClient,
   serviceId?: string
 ) {
   const existing = await client.provisioningJob.findUnique({
@@ -409,6 +426,7 @@ export async function manualRetryProvisioningJob(jobId: string) {
     });
 
     if (finalized.ok) {
+      await dismissFailedQueueEntries(job.id);
       return { ok: true as const };
     }
 
@@ -432,77 +450,123 @@ export async function manualRetryProvisioningJob(jobId: string) {
   }
 }
 
-export async function processProvisioningRetries(limit = 10): Promise<CronJobResult> {
-  const now = new Date();
-
+/**
+ * Outbox reconciliation for the retry-provisioning cron: makes sure every
+ * PENDING ProvisioningJob row has a queued provisioning.run job. New failures
+ * are enqueued in their own transaction already; this picks up rows written
+ * before the queue existed, rows whose enqueue was skipped because the queue
+ * was unreachable, and PROCESSING rows left behind by a crash. Idempotent:
+ * rows that already have a queued/retrying/running job are deduplicated.
+ */
+export async function reconcileProvisioningQueue(limit = 100): Promise<CronJobResult> {
   await recoverStaleProcessingJobs(STALE_PROCESSING_MS);
 
   const jobs = await db.provisioningJob.findMany({
-    where: {
-      status: "PENDING",
-      nextRetryAt: { lte: now },
-    },
-    include: {
-      order: {
-        include: {
-          product: { include: { category: true } },
-          customer: true,
-          items: true,
-        },
-      },
-    },
+    where: { status: "PENDING" },
+    select: { id: true, attempts: true, maxAttempts: true, nextRetryAt: true },
     orderBy: { nextRetryAt: "asc" },
-    take: limit * 2,
+    take: limit,
   });
 
-  const dueJobs = jobs.filter((job) => job.attempts < job.maxAttempts).slice(0, limit);
-  const processedIds: string[] = [];
+  const queuedIds: string[] = [];
   let skipped = 0;
+  const now = new Date();
 
-  for (const job of dueJobs) {
-    await db.provisioningJob.update({
-      where: { id: job.id },
-      data: { status: "PROCESSING" },
+  for (const job of jobs) {
+    if (job.attempts >= job.maxAttempts) {
+      await db.provisioningJob.update({ where: { id: job.id }, data: { status: "FAILED" } });
+      skipped += 1;
+      continue;
+    }
+
+    const result = await queueProvisioningAttempt(db, job, {
+      startAfter: job.nextRetryAt > now ? job.nextRetryAt : undefined,
     });
-
-    try {
-      const result = await retryProvisioningJob(job);
-      const finalized = await finalizeProvisioningRetryAttempt(job, result);
-
-      if (finalized.ok) {
-        processedIds.push(job.id);
-        continue;
-      }
-
-      const nextAttempts = job.attempts + 1;
-      if (nextAttempts >= job.maxAttempts) {
-        skipped += 1;
-      } else {
-        processedIds.push(job.id);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "PROVISIONING_RETRY_FAILED";
-      await finalizeProvisioningRetryAttempt(job, { ok: false, error: message });
-
-      const nextAttempts = job.attempts + 1;
-      if (nextAttempts >= job.maxAttempts) {
-        skipped += 1;
-      }
+    if (result.queued) {
+      queuedIds.push(job.id);
+    } else {
+      skipped += 1;
     }
   }
 
-  return {
-    processed: processedIds.length,
-    skipped,
-    ids: processedIds,
-  };
+  return { processed: queuedIds.length, skipped, ids: queuedIds };
+}
+
+/** Rough "next attempt" shown on /yonetim/provisioning (pg-boss adds jitter). */
+function estimateQueueRetryAt(retryCount: number, from = new Date()) {
+  const seconds = Math.min(10 * 60 * 2 ** retryCount, 6 * 60 * 60);
+  return new Date(from.getTime() + seconds * 1000);
+}
+
+/**
+ * Handler of the provisioning.run queue job: one attempt for one row.
+ * Throws on failure so pg-boss applies backoff, and on the last attempt marks
+ * the row FAILED (pg-boss marks the queue job failed).
+ */
+export async function runQueuedProvisioningJob(provisioningJobId: string, context: JobContext) {
+  const job = await loadProvisioningJobForRetry(provisioningJobId);
+
+  if (!job) {
+    return { skipped: "JOB_NOT_FOUND" };
+  }
+
+  if (job.status === "COMPLETED") {
+    return { skipped: "ALREADY_COMPLETED" };
+  }
+
+  // Same claim as the inline unsuspend runner, so the two never run one row
+  // concurrently. A PROCESSING row older than the stale window belongs to a
+  // crashed run and may be taken over.
+  const claimed = await db.provisioningJob.updateMany({
+    where: {
+      id: job.id,
+      OR: [
+        { status: { in: ["PENDING", "FAILED"] } },
+        { status: "PROCESSING", updatedAt: { lt: new Date(Date.now() - STALE_PROCESSING_MS) } },
+      ],
+    },
+    data: { status: "PROCESSING" },
+  });
+
+  if (claimed.count === 0) {
+    throw new Error("JOB_BUSY");
+  }
+
+  let result: { ok: boolean; error?: string };
+  try {
+    result = await retryProvisioningJob(job);
+  } catch (error) {
+    result = { ok: false, error: error instanceof Error ? error.message : "PROVISIONING_RETRY_FAILED" };
+  }
+
+  if (result.ok) {
+    await db.provisioningJob.update({
+      where: { id: job.id },
+      data: { status: "COMPLETED", completedAt: new Date(), lastError: null },
+    });
+    return { ok: true, orderId: job.orderId };
+  }
+
+  const error = result.error ?? "PROVISIONING_RETRY_FAILED";
+  await db.provisioningJob.update({
+    where: { id: job.id },
+    data: {
+      status: context.isFinalAttempt ? "FAILED" : "PENDING",
+      attempts: job.attempts + 1,
+      lastError: error,
+      nextRetryAt: context.isFinalAttempt ? job.nextRetryAt : estimateQueueRetryAt(context.retryCount + 1),
+    },
+  });
+
+  throw new Error(error);
 }
 
 /**
  * Executes the UNSUSPEND jobs written by these invoice payments right after
  * their transaction committed. Each job is claimed with a conditional
- * PENDING -> PROCESSING update so the retry cron never runs it concurrently;
- * a failure is kept on the job (backoff) for the cron to retry.
+ * PENDING -> PROCESSING update so the queued provisioning.run job (scheduled
+ * a minute later by `unsuspendServiceIfNeeded`) never runs it concurrently; on
+ * failure the row stays PENDING and that queue job retries it.
  */
 export async function runPendingUnsuspendJobs(invoiceIds: string[]) {
   const jobs = await db.provisioningJob.findMany({
