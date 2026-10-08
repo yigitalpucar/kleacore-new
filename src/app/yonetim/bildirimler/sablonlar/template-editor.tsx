@@ -327,7 +327,7 @@ export function TemplateEditor(props: {
                 <dt className="sr-only">Not</dt>
                 <dd>
                   {smsInfo.encoding === "UCS-2"
-                    ? `Türkçe karakterler (${smsInfo.unicodeChars.join(" ")}) mesajı UCS-2'ye çevirir: tek SMS 70, iki SMS 134 karakter.`
+                    ? `GSM dışı karakterler (${smsInfo.unicodeChars.join(" ")}; ör. ı ş ğ İ) mesajı UCS-2'ye çevirir: tek SMS 70, iki SMS 134 karakter.`
                     : "GSM-7: tek SMS 160, iki SMS 306 karakter. ı, ş, ğ, İ gibi harfler sınırı 70 / 134'e düşürür."}
                 </dd>
               </div>
