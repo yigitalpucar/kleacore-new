@@ -14,6 +14,7 @@ import {
   sendServiceSuspendedEmail,
 } from "@/lib/notifications/email";
 import { logActivity } from "@/lib/activity-log";
+import { productPeriodPricing } from "@/lib/billing/period-price";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod } from "@prisma/client";
 
@@ -46,11 +47,32 @@ export async function createService(data: ServiceInput) {
 
     const product = await db.product.findUnique({
       where: { id: data.productId },
-      include: { category: true },
+      include: {
+        category: true,
+        pricingTiers: {
+          where: { isActive: true },
+          select: { period: true, price: true, isDefault: true },
+        },
+      },
     });
     if (!product) {
       return { success: false, error: "Ürün bulunamadı" };
     }
+
+    const billingPeriod = data.billingPeriod ?? "monthly";
+    // Service.amount is the VAT-exclusive charge for one full billing period
+    // (what renewals bill), so a yearly hosting stores the yearly total, not
+    // the monthly-equivalent tier price.
+    const amount =
+      data.amount ??
+      productPeriodPricing(
+        {
+          basePrice: Number(product.basePrice),
+          categorySlug: product.category.slug,
+          pricingTiers: product.pricingTiers,
+        },
+        billingPeriod
+      ).total;
 
     const service = await db.service.create({
       data: {
@@ -61,8 +83,8 @@ export async function createService(data: ServiceInput) {
         username: data.username ?? null,
         ipAddress: data.ipAddress ?? null,
         serverName: data.serverName ?? null,
-        billingPeriod: data.billingPeriod ?? "monthly",
-        amount: data.amount ?? 0,
+        billingPeriod,
+        amount,
         nextDueDate: data.nextDueDate ? new Date(data.nextDueDate) : null,
         expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
         diskLimit: data.diskLimit ?? null,

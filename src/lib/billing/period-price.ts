@@ -111,3 +111,42 @@ export function addonPeriodTotal(
   const perMonth = Number(isYearly ? addon.yearlyPrice : addon.monthlyPrice);
   return periodTotal(perMonth, isYearly ? "yearly" : "monthly", "monthly-equivalent");
 }
+
+export interface TieredProduct {
+  basePrice: number;
+  categorySlug: string | null | undefined;
+  pricingTiers: Array<{ period: string; price: number; isDefault: boolean }>;
+}
+
+/** Stored tier price for a period: exact tier, else the default tier, else basePrice. */
+export function tierPriceForPeriod(product: TieredProduct, period: string): number {
+  const exact = product.pricingTiers.find((tier) => tier.period === period);
+  if (exact) return Number(exact.price);
+
+  const defaultTier = product.pricingTiers.find((tier) => tier.isDefault);
+  if (defaultTier) return Number(defaultTier.price);
+
+  return Number(product.basePrice);
+}
+
+/**
+ * Charge for one billing period of a catalogue product (e.g. admin "hizmet
+ * ekle"), VAT-exclusive. `total` is what a Service stores as `amount` — the
+ * full period total (yearly hosting at 39 ₺/ay -> 468), never the monthly
+ * equivalent. `base` is the same period at the monthly list price, so
+ * `discount` is the saving of paying for the longer period.
+ */
+export function productPeriodPricing(
+  product: TieredProduct,
+  period: string
+): { base: number; discount: number; total: number } {
+  const basis = priceBasisForCategory(product.categorySlug);
+  const total = periodTotal(tierPriceForPeriod(product, period), period, basis);
+
+  if (basis === "period-total") {
+    return { base: total, discount: 0, total };
+  }
+
+  const base = periodTotal(tierPriceForPeriod(product, "monthly"), period, basis);
+  return { base, discount: roundMoney(Math.max(0, base - total)), total };
+}

@@ -6,6 +6,8 @@ import {
   periodTotal,
   priceBasisForCategory,
   priceBasisForItemType,
+  productPeriodPricing,
+  tierPriceForPeriod,
 } from "./period-price";
 
 describe("priceBasisForCategory", () => {
@@ -91,5 +93,41 @@ describe("helpers", () => {
   it("monthlyEquivalent divides a period total back", () => {
     expect(monthlyEquivalent(468, "yearly")).toBe(39);
     expect(monthlyEquivalent(49, "monthly")).toBe(49);
+  });
+});
+
+describe("productPeriodPricing", () => {
+  const starter = {
+    basePrice: 49,
+    categorySlug: "hosting",
+    pricingTiers: [
+      { period: "monthly", price: 49, isDefault: true },
+      { period: "yearly", price: 39, isDefault: false },
+    ],
+  };
+
+  it("stores the yearly TOTAL for yearly hosting, not the monthly equivalent", () => {
+    expect(productPeriodPricing(starter, "yearly")).toEqual({ base: 588, discount: 120, total: 468 });
+  });
+
+  it("charges the monthly tier for a monthly service", () => {
+    expect(productPeriodPricing(starter, "monthly")).toEqual({ base: 49, discount: 0, total: 49 });
+  });
+
+  it("multiplies the default monthly tier for periods without their own tier", () => {
+    expect(productPeriodPricing(starter, "quarterly")).toEqual({ base: 147, discount: 0, total: 147 });
+  });
+
+  it("uses period-total tiers as-is for domain / SSL products", () => {
+    const ssl = {
+      basePrice: 99,
+      categorySlug: "ssl",
+      pricingTiers: [{ period: "yearly", price: 99, isDefault: true }],
+    };
+    expect(productPeriodPricing(ssl, "yearly")).toEqual({ base: 99, discount: 0, total: 99 });
+  });
+
+  it("falls back to basePrice when a product has no tiers", () => {
+    expect(tierPriceForPeriod({ basePrice: 75, categorySlug: "vps", pricingTiers: [] }, "yearly")).toBe(75);
   });
 });
