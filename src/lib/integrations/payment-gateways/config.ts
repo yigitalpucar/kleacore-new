@@ -15,6 +15,14 @@ export interface PaymentGatewayConfig {
     merchantKey: string;
     merchantSalt: string;
   };
+  kuveytturk: {
+    enabled: boolean;
+    merchantId: string;
+    customerId: string;
+    username: string;
+    password: string;
+    testMode: boolean;
+  };
 }
 
 export async function getPaymentGatewayConfig(): Promise<PaymentGatewayConfig> {
@@ -28,6 +36,12 @@ export async function getPaymentGatewayConfig(): Promise<PaymentGatewayConfig> {
     { key: "paytr_merchant_id", env: "PAYTR_MERCHANT_ID" },
     { key: "paytr_merchant_key", env: "PAYTR_MERCHANT_KEY" },
     { key: "paytr_merchant_salt", env: "PAYTR_MERCHANT_SALT" },
+    { key: "kuveytturk_enabled", env: "KUVEYTTURK_ENABLED", fallback: "false" },
+    { key: "kuveytturk_merchant_id", env: "KUVEYTTURK_MERCHANT_ID" },
+    { key: "kuveytturk_customer_id", env: "KUVEYTTURK_CUSTOMER_ID" },
+    { key: "kuveytturk_username", env: "KUVEYTTURK_USERNAME" },
+    { key: "kuveytturk_password", env: "KUVEYTTURK_PASSWORD" },
+    { key: "kuveytturk_test_mode", env: "KUVEYTTURK_TEST_MODE", fallback: "true" },
   ]);
 
   const provider = normalizeProvider(settings.payment_gateway_provider);
@@ -46,12 +60,25 @@ export async function getPaymentGatewayConfig(): Promise<PaymentGatewayConfig> {
       merchantKey: settings.paytr_merchant_key,
       merchantSalt: settings.paytr_merchant_salt,
     },
+    kuveytturk: {
+      enabled: isEnabled(settings.kuveytturk_enabled),
+      merchantId: settings.kuveytturk_merchant_id.trim(),
+      customerId: settings.kuveytturk_customer_id.trim(),
+      username: settings.kuveytturk_username.trim(),
+      password: settings.kuveytturk_password,
+      testMode: isEnabled(settings.kuveytturk_test_mode),
+    },
   };
 }
 
 function normalizeProvider(value: string): PaymentGatewayId {
   const normalized = value.trim().toLowerCase();
-  if (normalized === "iyzico" || normalized === "paytr" || normalized === "stripe") {
+  if (
+    normalized === "iyzico" ||
+    normalized === "paytr" ||
+    normalized === "stripe" ||
+    normalized === "kuveytturk"
+  ) {
     return normalized;
   }
   return "stripe";
@@ -69,4 +96,8 @@ export function isPaytrConfigured(config: PaymentGatewayConfig) {
 
 export function isStripeConfigured() {
   return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
+}
+export function isKuveytTurkConfigured(config: PaymentGatewayConfig) {
+  const { merchantId, customerId, username, password } = config.kuveytturk;
+  return Boolean(merchantId && customerId && username && password);
 }

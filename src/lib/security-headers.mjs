@@ -7,6 +7,9 @@ const IYZICO = ["https://*.iyzipay.com", "https://*.iyzico.com"];
 const IYZICO_TELEMETRY = "https://*.sentry.io";
 const PAYTR = "https://www.paytr.com";
 const STRIPE_JS = "https://js.stripe.com";
+// Kuveyt Türk's 3-D page (served from our origin by /api/payments/kuveytturk/start)
+// auto-posts to the bank / BKM 3-D Secure server.
+const KUVEYTTURK_3DS = ["https://*.kuveytturk.com.tr", "https://*.bkm.com.tr", "https://*.bkmtest.com.tr"];
 
 /**
  * Full Content-Security-Policy for the app.
@@ -24,7 +27,7 @@ export function buildContentSecurityPolicy({ dev = false, reportUri } = {}) {
     "base-uri": ["'self'"],
     "object-src": ["'none'"],
     "frame-ancestors": ["'self'"],
-    "form-action": ["'self'", ...IYZICO, PAYTR, "https://checkout.stripe.com"],
+    "form-action": ["'self'", ...IYZICO, PAYTR, "https://checkout.stripe.com", ...KUVEYTTURK_3DS],
     "script-src": ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...IYZICO, PAYTR, STRIPE_JS],
     "style-src": ["'self'", "'unsafe-inline'", ...IYZICO],
     "img-src": ["'self'", "data:", "blob:", "https:"],

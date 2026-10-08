@@ -1,11 +1,13 @@
 import {
   getPaymentGatewayConfig,
   isIyzicoConfigured,
+  isKuveytTurkConfigured,
   isPaytrConfigured,
   isStripeConfigured,
 } from "./config";
 import { createDisabledPaymentGatewayProvider } from "./providers/disabled";
 import { createIyzicoPaymentGatewayProvider } from "./providers/iyzico";
+import { createKuveytTurkPaymentGatewayProvider } from "./providers/kuveytturk";
 import { createPaytrPaymentGatewayProvider } from "./providers/paytr";
 import { createStripePaymentGatewayProvider } from "./providers/stripe";
 import type { PaymentGatewayProvider } from "./types";
@@ -18,6 +20,13 @@ export async function getPaymentGatewayProvider(): Promise<PaymentGatewayProvide
       return createDisabledPaymentGatewayProvider("stripe");
     }
     return createStripePaymentGatewayProvider();
+  }
+
+  if (config.provider === "kuveytturk") {
+    if (!config.kuveytturk.enabled || !isKuveytTurkConfigured(config)) {
+      return createDisabledPaymentGatewayProvider("kuveytturk");
+    }
+    return createKuveytTurkPaymentGatewayProvider(config);
   }
 
   if (config.provider === "iyzico") {
