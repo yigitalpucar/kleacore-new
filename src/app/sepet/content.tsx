@@ -30,6 +30,9 @@ import { addonPeriodTotal, priceBasisForItemType } from "@/lib/billing/period-pr
 import { PeriodBadge, PeriodNote } from "@/components/checkout/period-note";
 import type { CartItem } from "@/store/cart-store";
 import { cartTotals } from "@/lib/billing/cart-totals";
+import { CheckoutLegalConsent, type CheckoutLegalDocument } from "@/components/checkout/legal-consent";
+import { EmailVerificationBanner } from "@/components/auth/email-verification-banner";
+import type { LegalBuyer, LegalSeller } from "@/lib/legal/render";
 
 function formatPrice(value: number) {
   return formatTRY(value, { keepDecimals: true });
@@ -50,7 +53,17 @@ function itemPeriod(item: CartItem): "monthly" | "yearly" {
   return item.metadata?.billingPeriod === "yearly" ? "yearly" : "monthly";
 }
 
-export function SepetContent({ taxRate }: { taxRate: number }) {
+export function SepetContent({
+  taxRate,
+  emailVerified,
+  userEmail,
+  legal,
+}: {
+  taxRate: number;
+  emailVerified: boolean;
+  userEmail: string | null;
+  legal: { documents: CheckoutLegalDocument[]; seller: LegalSeller; buyer: LegalBuyer | null };
+}) {
   const router = useRouter();
   const items = useCartStore((state) => state.items);
   const hasHydrated = useCartStore((state) => state.hasHydrated);
@@ -66,6 +79,8 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
   const [paymentMethod, setPaymentMethod] = useState<"BANK_TRANSFER" | "CREDIT_CARD">("CREDIT_CARD");
   const [promoCode, setPromoCode] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [acceptedDocuments, setAcceptedDocuments] = useState<Record<string, boolean>>({});
+  const allDocumentsAccepted = legal.documents.every((document) => acceptedDocuments[document.id]);
 
   const handleRemove = (id: string, title: string) => {
     removeItem(id);
@@ -78,10 +93,18 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
   };
 
   const handleCheckout = () => {
+    if (!allDocumentsAccepted) {
+      toast.error("Devam etmek için Ön Bilgilendirme Formu'nu ve Mesafeli Satış Sözleşmesi'ni onaylayın.");
+      return;
+    }
     startTransition(async () => {
       const result = await checkoutCart({
         paymentMethod,
         promoCode,
+        consents: legal.documents.map((document) => ({
+          documentId: document.id,
+          version: document.version,
+        })),
         items: items.map((item) => ({
           id: item.id,
           type: item.type,
@@ -94,6 +117,12 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
         if (result.code === "LOGIN_REQUIRED") {
           toast.info("Ödeme için giriş yapmalısınız.");
           router.push("/musteri/giris?callbackUrl=%2Fsepet");
+          return;
+        }
+        if (result.code === "LEGAL_CONSENT_OUTDATED") {
+          toast.error(result.error);
+          router.refresh();
+          setAcceptedDocuments({});
           return;
         }
 
@@ -391,10 +420,26 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
                     </div>
                   </fieldset>
 
+                  <CheckoutLegalConsent
+                    documents={legal.documents}
+                    seller={legal.seller}
+                    buyer={legal.buyer}
+                    items={items}
+                    taxRate={taxRate}
+                    paymentMethod={paymentMethod}
+                    accepted={acceptedDocuments}
+                    onAcceptedChange={(documentId, value) =>
+                      setAcceptedDocuments((current) => ({ ...current, [documentId]: value }))
+                    }
+                    disabled={isPending}
+                  />
+
+                  {emailVerified ? null : <EmailVerificationBanner email={userEmail} compact />}
+
                   <button
                     type="button"
                     onClick={handleCheckout}
-                    disabled={isPending}
+                    disabled={isPending || !emailVerified || !allDocumentsAccepted}
                     className={buttonClasses({ size: "lg", className: "w-full disabled:opacity-60" })}
                   >
                     {isPending ? (

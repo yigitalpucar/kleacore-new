@@ -3,6 +3,9 @@ import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { getTaxRate } from "@/lib/billing/tax";
+import { auth } from "@/lib/auth";
+import { isEmailVerified } from "@/lib/auth/email-verification";
+import { getCheckoutLegalDocuments, getLegalBuyer, getLegalSeller } from "@/lib/legal/documents";
 import { SepetContent } from "./content";
 
 export const metadata: Metadata = {
@@ -16,13 +19,37 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function SepetPage() {
-  const taxRate = await getTaxRate();
+  const session = await auth();
+  const userId = session?.user?.id;
+  const [taxRate, documents, seller, buyer, emailVerified] = await Promise.all([
+    getTaxRate(),
+    getCheckoutLegalDocuments(),
+    getLegalSeller(),
+    userId ? getLegalBuyer(userId) : null,
+    userId ? isEmailVerified(userId) : true,
+  ]);
   return (
     <div className="flex min-h-screen flex-col">
       <Topbar />
       <Header />
       <main id="main" className="flex-1">
-        <SepetContent taxRate={taxRate} />
+        <SepetContent
+          taxRate={taxRate}
+          emailVerified={emailVerified}
+          userEmail={session?.user?.email ?? null}
+          legal={{
+            documents: documents.map((document) => ({
+              id: document.id,
+              type: document.type,
+              version: document.version,
+              title: document.title,
+              content: document.content,
+              isPlaceholder: document.isPlaceholder,
+            })),
+            seller,
+            buyer,
+          }}
+        />
       </main>
       <Footer />
     </div>

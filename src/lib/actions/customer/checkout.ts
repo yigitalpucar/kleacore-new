@@ -21,6 +21,20 @@ import { getAppBaseUrl, getStripe } from "@/lib/stripe";
 import { persistGatewayCheckout } from "@/lib/integrations/payment-gateways/persist";
 import { getPaymentGatewayProvider } from "@/lib/integrations/payment-gateways";
 import { loadCheckoutCustomer } from "@/lib/payments/orchestrator";
+import { getPurchaseBlock } from "@/lib/auth/email-verification";
+import {
+  LEGAL_CONSENT_OUTDATED_MESSAGE,
+  LEGAL_CONSENT_REQUIRED_MESSAGE,
+  assertCheckoutConsents,
+  getCheckoutLegalDocuments,
+  getLegalBuyer,
+  getLegalSeller,
+  legalPaymentMethodLabel,
+  recordCheckoutConsents,
+  type AcceptedLegalDocument,
+} from "@/lib/legal/documents";
+import type { LegalOrderItem } from "@/lib/legal/render";
+import { getRequestMeta } from "@/lib/request-meta";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod, Prisma } from "@prisma/client";
 import {
@@ -85,6 +99,8 @@ interface CheckoutInput {
   paymentMethod: CheckoutPaymentMethod;
   items: CheckoutItemInput[];
   promoCode?: string;
+  /** Ön bilgilendirme formu + mesafeli satış sözleşmesi versions the buyer accepted. */
+  consents?: AcceptedLegalDocument[];
 }
 
 const allowedPaymentMethods: CheckoutPaymentMethod[] = [...CUSTOMER_PAYMENT_METHODS];
@@ -341,7 +357,23 @@ export async function checkoutCart(input: CheckoutInput) {
     return { success: false, error: "Sepetiniz boş" };
   }
 
+  const purchaseBlock = await getPurchaseBlock(customerId);
+  if (purchaseBlock) {
+    return purchaseBlock;
+  }
+
   try {
+    const legalDocuments = await getCheckoutLegalDocuments();
+    assertCheckoutConsents(legalDocuments, input.consents);
+    const [legalSeller, legalBuyer, requestMeta] = await Promise.all([
+      getLegalSeller(),
+      getLegalBuyer(customerId),
+      getRequestMeta(),
+    ]);
+    if (!legalBuyer) {
+      throw new Error("CUSTOMER_NOT_FOUND");
+    }
+
     // Card payments go through the active gateway (Kuveyt Türk, iyzico,
     // PayTR); Stripe keeps its own session flow below.
     const cardProvider =
@@ -449,6 +481,10 @@ export async function checkoutCart(input: CheckoutInput) {
       const orderIds: string[] = [];
       const invoiceIds: string[] = [];
       let checkoutTotalAmount = money(0);
+      let checkoutTaxAmount = money(0);
+      let checkoutLineTotal = money(0);
+      let checkoutDiscount = money(0);
+      const legalItems: LegalOrderItem[] = [];
       let totalResellerDiscount = money(0);
       let remainingDiscount = discountAmount;
       const applicableIndexes = promotion
@@ -478,6 +514,15 @@ export async function checkoutCart(input: CheckoutInput) {
         const payableLineTotal = max(0, sub(lineTotal, lineDiscount));
         const taxed = calculateTax(payableLineTotal, taxRate);
         checkoutTotalAmount = add(checkoutTotalAmount, taxed.totalAmount);
+        checkoutTaxAmount = add(checkoutTaxAmount, taxed.taxAmount);
+        checkoutLineTotal = add(checkoutLineTotal, lineTotal);
+        checkoutDiscount = add(checkoutDiscount, sub(lineTotal, payableLineTotal));
+        legalItems.push({
+          name: item.productName,
+          quantity: item.quantity,
+          period: item.billingPeriod === "yearly" ? "Yıllık" : "Aylık",
+          lineTotal: toNumber(lineTotal),
+        });
         const isStripe = input.paymentMethod === "CREDIT_CARD";
         const isPaid = false;
 
@@ -631,6 +676,27 @@ export async function checkoutCart(input: CheckoutInput) {
         select: { orderNumber: true },
       });
 
+      await recordCheckoutConsents(tx, {
+        userId: customerId,
+        orderIds,
+        documents: legalDocuments,
+        seller: legalSeller,
+        buyer: legalBuyer,
+        order: {
+          date: new Intl.DateTimeFormat("tr-TR", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Istanbul" }).format(now),
+          numbers: orderNumbers.map((order) => order.orderNumber).join(", "),
+          items: legalItems,
+          subtotal: toNumber(checkoutLineTotal),
+          discount: toNumber(checkoutDiscount),
+          taxRate,
+          tax: toNumber(checkoutTaxAmount),
+          total: toNumber(checkoutTotalAmount),
+          paymentMethod: legalPaymentMethodLabel(input.paymentMethod),
+        },
+        ipAddress: requestMeta.ip,
+        userAgent: requestMeta.userAgent,
+      });
+
       return {
         orderIds,
         invoiceIds,
@@ -741,6 +807,12 @@ export async function checkoutCart(input: CheckoutInput) {
     return { success: true, data: result };
   } catch (error) {
     if (error instanceof Error) {
+      if (error.message === "LEGAL_CONSENT_MISSING") {
+        return { success: false, error: LEGAL_CONSENT_REQUIRED_MESSAGE, code: "LEGAL_CONSENT_REQUIRED" as const };
+      }
+      if (error.message === "LEGAL_CONSENT_OUTDATED") {
+        return { success: false, error: LEGAL_CONSENT_OUTDATED_MESSAGE, code: "LEGAL_CONSENT_OUTDATED" as const };
+      }
       if (error.message === "CUSTOMER_NOT_FOUND") {
         return { success: false, error: "Kullanıcı bulunamadı" };
       }
