@@ -112,6 +112,8 @@ interface CartState {
   addServerPlan: (payload: AddServerPlanPayload) => boolean;
   addProduct: (payload: AddProductPayload) => boolean;
   removeItem: (id: string) => void;
+  /** Domain an item is for (SSL certificate common name). */
+  setItemDomain: (id: string, domain: string) => void;
   clearCart: () => void;
   getTotalItems: () => number;
   getSubtotal: () => number;
@@ -321,6 +323,13 @@ export const useCartStore = create<CartState>()(
 
         return wasAdded;
       },
+
+      setItemDomain: (id, domain) =>
+        set((state) => ({
+          items: state.items.map((item) =>
+            item.id === id ? { ...item, metadata: { ...item.metadata, domain: domain.trim() } } : item
+          ),
+        })),
 
       removeItem: (id) =>
         set((state) => ({

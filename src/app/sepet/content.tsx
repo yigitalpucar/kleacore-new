@@ -30,6 +30,7 @@ import { addonPeriodTotal, priceBasisForItemType } from "@/lib/billing/period-pr
 import { PeriodBadge, PeriodNote } from "@/components/checkout/period-note";
 import type { CartItem } from "@/store/cart-store";
 import { cartTotals } from "@/lib/billing/cart-totals";
+import { validateCartItems } from "@/lib/checkout/validate-cart";
 
 function formatPrice(value: number) {
   return formatTRY(value, { keepDecimals: true });
@@ -55,6 +56,7 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
   const items = useCartStore((state) => state.items);
   const hasHydrated = useCartStore((state) => state.hasHydrated);
   const removeItem = useCartStore((state) => state.removeItem);
+  const setItemDomain = useCartStore((state) => state.setItemDomain);
   const clearCart = useCartStore((state) => state.clearCart);
   const subtotal = useCartStore((state) => state.getSubtotal());
   const totalItems = useCartStore((state) => state.getTotalItems());
@@ -66,6 +68,10 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
   const [paymentMethod, setPaymentMethod] = useState<"BANK_TRANSFER" | "CREDIT_CARD">("CREDIT_CARD");
   const [promoCode, setPromoCode] = useState("");
   const [isPending, startTransition] = useTransition();
+  // Same rules as checkoutCart (minus the TLD list): a cart that can't be
+  // provisioned is fixed here, before payment.
+  const cartErrors = validateCartItems(items);
+  const errorsByItem = new Map(cartErrors.map((error) => [error.itemId, error.message]));
 
   const handleRemove = (id: string, title: string) => {
     removeItem(id);
@@ -78,6 +84,10 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
   };
 
   const handleCheckout = () => {
+    if (cartErrors.length > 0) {
+      toast.error(cartErrors[0].message);
+      return;
+    }
     startTransition(async () => {
       const result = await checkoutCart({
         paymentMethod,
@@ -243,6 +253,31 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
                           </p>
                         ) : null}
 
+                        {item.type === "ssl" ? (
+                          <div className="mt-3">
+                            <label htmlFor={`ssl-domain-${item.id}`} className="text-sm font-medium">
+                              Sertifika alan adı
+                            </label>
+                            <input
+                              id={`ssl-domain-${item.id}`}
+                              className="mt-1.5 h-11 w-full rounded-lg border bg-background px-3 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              placeholder="ornek.com.tr"
+                              autoComplete="off"
+                              inputMode="url"
+                              value={item.metadata?.domain ?? ""}
+                              onChange={(event) => setItemDomain(item.id, event.target.value)}
+                              aria-invalid={errorsByItem.has(item.id)}
+                              aria-describedby={errorsByItem.has(item.id) ? `cart-error-${item.id}` : undefined}
+                            />
+                          </div>
+                        ) : null}
+
+                        {errorsByItem.has(item.id) ? (
+                          <p id={`cart-error-${item.id}`} role="alert" className="mt-2 text-sm text-destructive">
+                            {errorsByItem.get(item.id)}
+                          </p>
+                        ) : null}
+
                         {item.type === "hosting" && item.metadata?.addons && item.metadata.addons.length > 0 ? (
                           <ul className="mt-3 space-y-1 text-sm" aria-label="Paket ve ek hizmetler">
                             <li className="flex items-center justify-between gap-3 text-muted-foreground">
@@ -394,7 +429,7 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
                   <button
                     type="button"
                     onClick={handleCheckout}
-                    disabled={isPending}
+                    disabled={isPending || cartErrors.length > 0}
                     className={buttonClasses({ size: "lg", className: "w-full disabled:opacity-60" })}
                   >
                     {isPending ? (
