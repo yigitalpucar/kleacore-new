@@ -1,8 +1,18 @@
+import { securityHeaders } from "./src/lib/security-headers.mjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: securityHeaders({ dev: process.env.NODE_ENV !== "production" }),
+      },
+    ];
+  },
   async redirects() {
     return [
       // Canonical host: www -> apex (keeps path and query).
