@@ -33,6 +33,7 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 | KLEACORE: Gecikmiş Faturalar | `0 5 * * *` | `/app/cron-run.sh overdue-invoices` |
 | KLEACORE: Hizmet Askıya Alma | `0 6 * * *` | `/app/cron-run.sh suspend-services` |
 | KLEACORE: Domain Süre Bildirimleri | `0 10 * * *` | `/app/cron-run.sh domain-notices` |
+| KLEACORE: TCMB Kurları | `15 16,18 * * *` | `/app/cron-run.sh fx-rates` |
 | KLEACORE: Provisioning Retry | `*/15 * * * *` | `/app/cron-run.sh retry-provisioning` |
 | KLEACORE: E-Fatura Durumları | `*/15 * * * *` | `/app/cron-run.sh efatura-status` |
 | KLEACORE: Bildirimler | `20 8-21 * * *` | `/app/cron-run.sh notifications` |
@@ -46,6 +47,14 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
   (ayrıntı: `docs/ops-jobs.md`); WHM yavaşsa kilidi tutmaz. Hiç bağlı hizmet
   yoksa `processed: 0` ile biter. Yeni görevi eklemek için §Operatör adımları 4
   (`setup-dokploy-schedules.mjs`) yeniden çalıştırılmalı.
+- `fx-rates`: TCMB `today.xml` bülteninden USD/EUR/GBP döviz alış/satış ve
+  efektif satış kurlarını `exchange_rates` tablosuna yazar (para birimi + bülten
+  tarihi başına bir satır, tekrar çalıştırmak güvenli). Hafta sonu/tatilde yeni
+  bülten olmadığından son kur geçerli kalır. TLD fiyat kuralında "otomatik
+  uygula" açıksa (varsayılan kapalı) önerilen fiyatları yazar ve
+  `activity_logs`'a kaydeder; tek seferde %30'dan büyük değişimleri atlar.
+  Geçmiş gün: `/api/cron/fx-rates?date=2026-09-01` (arşivden, otomatik
+  uygulama yok). Ayrıntı: `docs/fx-tld-pricing.md`.
 - `notifications`: saat başı (08–21) "fatura oluştu" (yenileme / elle oluşturulan
   faturalar), "vade -3 gün" hatırlatması ve gözden kaçan "gecikti" bildirimleri;
   hepsi fatura × tür başına **bir kez** (`NotificationLog.dedupeKey`). Ayrıca kuyruğa

@@ -75,7 +75,7 @@ export function RegistrarSection({ registrar }: { registrar: RegistrarConfig }) 
                 className={appButton({ variant: "outline" })}
               >
                 <RefreshCw aria-hidden />
-                Gri TLD fiyatlarını içe aktar
+                Gri TLD maliyetlerini içe aktar
               </button>
             )}
             <button type="submit" formAction={testRegistrarConnection} className={appButton({ variant: "outline" })}>

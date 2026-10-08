@@ -24,6 +24,7 @@ const CRON_JOBS = [
   { id: "retry-provisioning", name: "Provisioning Retry", path: "/api/cron/retry-provisioning" },
   { id: "usage-sync", name: "Hosting Kullanım Senkronu", path: "/api/cron/usage-sync" },
   { id: "efatura-status", name: "E-Fatura Durumları", path: "/api/cron/efatura-status" },
+  { id: "fx-rates", name: "TCMB Kurları", path: "/api/cron/fx-rates" },
   { id: "notifications", name: "Bildirimler", path: "/api/cron/notifications" },
   { id: "jobs-drain", name: "İş Kuyruğu", path: "/api/cron/jobs-drain" },
 ];

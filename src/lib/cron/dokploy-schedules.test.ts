@@ -31,6 +31,7 @@ describe("Dokploy cron schedules", () => {
       "domain-renewals",
       "domain-sync",
       "efatura-status",
+      "fx-rates",
       "jobs-drain",
       "notifications",
       "overdue-invoices",

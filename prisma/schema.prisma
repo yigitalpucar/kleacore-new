@@ -1107,6 +1107,8 @@ model Invoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Reports aggregate paid invoices by paidAt (src/lib/reports/*).
+  @@index([status, paidAt])
   @@map("invoices")
 }
 
@@ -1178,6 +1180,8 @@ model Payment {
   // matches exactly one payment of each invoice it covers.
   @@unique([invoiceId, transactionId])
   @@index([transactionId])
+  /// Collections report (tahsilat by day/month and method).
+  @@index([status, paidAt])
   @@map("payments")
 }
 
@@ -1748,10 +1752,45 @@ model DomainTld {
   transferPrice Decimal  @db.Decimal(14, 2)
   isActive      Boolean  @default(true)
   displayOrder  Int      @default(0)
+
+  /// Registrar cost per year in `costCurrency` (Gri price list or entered by
+  /// an admin). Sale prices above are TRY and KDV-exclusive; the suggested
+  /// sale price is cost × TCMB rate + margin (src/lib/fx/tld-pricing.ts).
+  /// NULL = cost unknown, no suggestion.
+  costRegister  Decimal? @db.Decimal(14, 4)
+  costRenew     Decimal? @db.Decimal(14, 4)
+  costTransfer  Decimal? @db.Decimal(14, 4)
+  /// ISO 4217 code (USD, EUR, GBP or TRY).
+  costCurrency  String   @default("USD")
+  costUpdatedAt DateTime?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@map("domain_tlds")
+}
+
+/// One TCMB daily bulletin rate (TRY per 1 unit of `currency`), written by the
+/// `fx-rates` cron (src/lib/fx/sync.ts). `date` is the bulletin date; on
+/// weekends/holidays no new bulletin exists and the last one stays in effect
+/// (getRate falls back to the latest prior date).
+model ExchangeRate {
+  id              String   @id @default(cuid())
+  currency        String
+  date            DateTime @db.Date
+  /// ForexBuying (Döviz Alış).
+  buying          Decimal  @db.Decimal(18, 6)
+  /// ForexSelling (Döviz Satış) — used for cost conversion.
+  selling         Decimal  @db.Decimal(18, 6)
+  /// BanknoteSelling (Efektif Satış), when published.
+  banknoteSelling Decimal? @db.Decimal(18, 6)
+  source          String   @default("TCMB")
+  bulletinNo      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([currency, date])
+  @@map("exchange_rates")
 }
 
 // =====================

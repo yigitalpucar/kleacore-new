@@ -39,6 +39,9 @@ export const JOBS = [
   { name: "KLEACORE: Gecikmiş Faturalar", cron: "0 5 * * *", job: "overdue-invoices" },
   { name: "KLEACORE: Hizmet Askıya Alma", cron: "0 6 * * *", job: "suspend-services" },
   { name: "KLEACORE: Domain Süre Bildirimleri", cron: "0 10 * * *", job: "domain-notices" },
+  // TCMB publishes ~15:30 on business days; the 18:15 run catches a late
+  // bulletin. Weekends/holidays keep the last rate (idempotent upsert).
+  { name: "KLEACORE: TCMB Kurları", cron: "15 16,18 * * *", job: "fx-rates" },
   { name: "KLEACORE: Provisioning Retry", cron: "*/15 * * * *", job: "retry-provisioning" },
   { name: "KLEACORE: E-Fatura Durumları", cron: "*/15 * * * *", job: "efatura-status" },
   // Invoice created / due-3 / overdue notices + notification outbox reconcile (daytime only).
