@@ -24,6 +24,7 @@ import {
 import { formatDate, formatDateTime } from "@/lib/format/date";
 import { formatTRY } from "@/lib/format/price";
 import { toast } from "@/lib/toast";
+import { issueEInvoiceForInvoiceAction } from "@/lib/actions/admin/efatura";
 
 export interface AdminInvoiceDetail {
   id: string;
@@ -70,6 +71,8 @@ export interface AdminInvoiceDetail {
     documentNumber: string | null;
     sentAt: string | null;
     errorMessage: string | null;
+    attempts: number;
+    pdfAvailable: boolean;
   } | null;
 }
 
@@ -299,9 +302,17 @@ export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail 
               title={invoice.eInvoice.type === "e-arsiv" ? "e-Arşiv fatura" : "e-Fatura"}
               actions={<StatusBadge kind="eInvoice" status={invoice.eInvoice.status} />}
               footer={
-                <Link href="/yonetim/efatura" className={appButton({ variant: "outline", size: "sm" })}>
-                  E-Fatura sayfasına git
-                </Link>
+                <>
+                  {invoice.eInvoice.pdfAvailable ? (
+                    <a href={`/api/faturalar/${invoice.id}/e-belge`} className={appButton({ variant: "outline", size: "sm" })}>
+                      <Download aria-hidden />
+                      Resmi faturayı indir
+                    </a>
+                  ) : null}
+                  <Link href="/yonetim/efatura" className={appButton({ variant: "outline", size: "sm" })}>
+                    E-Fatura sayfasına git
+                  </Link>
+                </>
               }
             >
               <DetailList
@@ -310,8 +321,19 @@ export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail 
                   { label: "Belge no", value: invoice.eInvoice.documentNumber, mono: true, copy: invoice.eInvoice.documentNumber ?? undefined },
                   { label: "Gönderim", value: invoice.eInvoice.sentAt ? formatDateTime(invoice.eInvoice.sentAt) : null },
                   { label: "Hata", value: invoice.eInvoice.errorMessage },
+                  { label: "Deneme", value: invoice.eInvoice.attempts ? String(invoice.eInvoice.attempts) : null },
                 ]}
               />
+            </SectionCard>
+          ) : invoice.status === "PAID" ? (
+            <SectionCard
+              title="Resmi fatura"
+              description="Bu fatura için henüz e-Fatura / e-Arşiv kesilmedi."
+              footer={<IssueEInvoiceButton invoiceId={invoice.id} />}
+            >
+              <p className="text-sm text-muted-foreground">
+                Müşterinin VKN/TCKN bilgisine göre e-Fatura veya e-Arşiv otomatik seçilir.
+              </p>
             </SectionCard>
           ) : null}
 
@@ -390,5 +412,28 @@ export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail 
         </div>
       </div>
     </>
+  );
+}
+
+function IssueEInvoiceButton({ invoiceId }: { invoiceId: string }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+
+  const handleIssue = async () => {
+    setPending(true);
+    const result = await issueEInvoiceForInvoiceAction(invoiceId);
+    setPending(false);
+    if (!result.success) {
+      toast.error(result.error ?? "E-fatura kesilemedi");
+    } else {
+      toast.success("E-belge kesildi");
+    }
+    router.refresh();
+  };
+
+  return (
+    <button type="button" disabled={pending} onClick={handleIssue} className={appButton({ size: "sm" })}>
+      {pending ? "Kesiliyor…" : "E-belge kes"}
+    </button>
   );
 }

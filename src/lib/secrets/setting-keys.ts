@@ -10,6 +10,7 @@ export const SECRET_SETTING_KEYS = new Set([
   "vps_vds_api_password",
   "provisioning_api_key",
   "efatura_api_key",
+  "efatura_uyumsoft_password",
   "ssl_sectigo_api_key",
   "sms_netgsm_password",
   "sms_iletimerkezi_api_key",

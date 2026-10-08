@@ -28,22 +28,19 @@ export async function getEInvoiceRecordsForAdmin(status?: EInvoiceStatus | "all"
 }
 
 export async function getEInvoiceStats() {
-  const [draft, queued, sent, accepted, rejected, failed] = await Promise.all([
-    db.eInvoiceRecord.count({ where: { status: "DRAFT" } }),
-    db.eInvoiceRecord.count({ where: { status: "QUEUED" } }),
-    db.eInvoiceRecord.count({ where: { status: "SENT" } }),
-    db.eInvoiceRecord.count({ where: { status: "ACCEPTED" } }),
-    db.eInvoiceRecord.count({ where: { status: "REJECTED" } }),
-    db.eInvoiceRecord.count({ where: { status: "FAILED" } }),
-  ]);
+  const grouped = await db.eInvoiceRecord.groupBy({ by: ["status"], _count: { _all: true } });
+  const count = (status: EInvoiceStatus) => grouped.find((row) => row.status === status)?._count._all ?? 0;
 
-  return {
-    draft,
-    queued,
-    sent,
-    accepted,
-    rejected,
-    failed,
-    total: draft + queued + sent + accepted + rejected + failed,
+  const stats = {
+    draft: count("DRAFT"),
+    queued: count("QUEUED"),
+    sent: count("SENT"),
+    accepted: count("ACCEPTED"),
+    rejected: count("REJECTED"),
+    failed: count("FAILED"),
+    cancelled: count("CANCELLED"),
   };
+
+  return { ...stats, total: Object.values(stats).reduce((sum, value) => sum + value, 0) };
 }
+

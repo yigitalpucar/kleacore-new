@@ -81,6 +81,28 @@ export interface EfaturaConfig {
   provider: string;
   hasApiKey: boolean;
   companyVkn: string;
+  defaultProfile: string;
+  /** Why issuing is blocked, or null when ready. */
+  problem: string | null;
+  uyumsoft: {
+    username: string;
+    hasPassword: boolean;
+    testMode: boolean;
+    earsivPrefix: string;
+    efaturaPrefix: string;
+  };
+  supplier: {
+    name: string;
+    taxOffice: string;
+    street: string;
+    district: string;
+    city: string;
+    postalZone: string;
+    phone: string;
+    email: string;
+    website: string;
+    mersisNo: string;
+  };
 }
 
 export interface SslConfig {

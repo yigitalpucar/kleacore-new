@@ -1,4 +1,5 @@
 import { getEInvoiceRecordsForAdmin, getEInvoiceStats } from "@/lib/dal/e-invoices";
+import { getEInvoiceConfig, getEInvoiceConfigProblem } from "@/lib/integrations/efatura";
 import type { EInvoiceStatus } from "@prisma/client";
 import { EfaturaContent } from "./content";
 
@@ -21,6 +22,7 @@ function readStatusFilter(
     "ACCEPTED",
     "REJECTED",
     "FAILED",
+    "CANCELLED",
   ];
 
   if (allowed.includes(status as EInvoiceStatus)) {
@@ -38,9 +40,10 @@ export default async function EfaturaPage({
   const sp = await searchParams;
   const statusFilter = readStatusFilter(sp);
 
-  const [records, stats] = await Promise.all([
+  const [records, stats, config] = await Promise.all([
     getEInvoiceRecordsForAdmin(statusFilter),
     getEInvoiceStats(),
+    getEInvoiceConfig(),
   ]);
 
   return (
@@ -48,6 +51,8 @@ export default async function EfaturaPage({
       records={records}
       stats={stats}
       statusFilter={typeof sp.status === "string" ? sp.status : "all"}
+      configProblem={getEInvoiceConfigProblem(config)}
+      testMode={config.provider === "uyumsoft" && config.uyumsoft.testMode}
     />
   );
 }

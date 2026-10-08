@@ -1,6 +1,7 @@
 import { checkIntegrationHealth } from "./health";
 import { getSettingMap, isEnabled } from "./settings";
 import { db } from "@/lib/db";
+import { getEInvoiceConfig, getEInvoiceConfigProblem } from "./efatura/config";
 
 export type ModuleCategory =
   | "domain"
@@ -110,10 +111,6 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       { key: "sms_iletimerkezi_sender" },
       { key: "webhook_orders" },
       { key: "webhook_payments" },
-      { key: "efatura_enabled" },
-      { key: "efatura_provider", fallback: "disabled" },
-      { key: "efatura_api_key" },
-      { key: "efatura_company_vkn" },
       { key: "ssl_enabled" },
       { key: "ssl_provider", fallback: "disabled" },
       { key: "ssl_acme_email" },
@@ -178,12 +175,10 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
   const webhookConfigured = Boolean(settings.webhook_orders || settings.webhook_payments);
   const publicApiConfigured = apiKeyCount > 0;
 
-  const efaturaProvider = settings.efatura_provider || "disabled";
-  const efaturaConfigured =
-    isEnabled(settings.efatura_enabled) &&
-    efaturaProvider !== "disabled" &&
-    Boolean(settings.efatura_company_vkn) &&
-    Boolean(settings.efatura_api_key);
+  const efaturaConfig = await getEInvoiceConfig();
+  const efaturaProvider = efaturaConfig.provider;
+  const efaturaProblem = getEInvoiceConfigProblem(efaturaConfig);
+  const efaturaConfigured = efaturaProblem === null;
 
   const sslProvider = settings.ssl_provider || "disabled";
   const sslConfigured =
@@ -382,16 +377,12 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
     {
       id: "efatura",
       name: "E-Fatura / E-Arşiv",
-      description: "Ödenen faturalar için UBL-TR taslak oluşturma ve gönderim",
+      description: "Ödenen faturalar için resmi e-Fatura / e-Arşiv (Uyumsoft veya Paraşüt)",
       category: "payment",
       status: efaturaConfigured ? "active" : "inactive",
       configured: efaturaConfigured,
       provider: efaturaProvider,
-      message: efaturaConfigured
-        ? undefined
-        : isEnabled(settings.efatura_enabled)
-          ? "E-fatura sağlayıcı veya şirket VKN bilgisi eksik"
-          : "E-fatura modülü pasif",
+      message: efaturaProblem ?? undefined,
       configSource: "settings",
       tab: "efatura",
     },

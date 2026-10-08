@@ -7,7 +7,7 @@ import { syncRegistrarTldsFromProvider } from "@/lib/actions/admin/registrar";
 import { getSettings } from "@/lib/dal/settings";
 import { getCpanelWhmProvider, getVpsVdsProvider } from "@/lib/integrations/provisioning";
 import { getRegistrarProvider } from "@/lib/integrations/registrar";
-import { getEInvoiceProvider } from "@/lib/integrations/efatura";
+import { createEInvoiceProvider, getEInvoiceConfig } from "@/lib/integrations/efatura/config";
 import { getSslProvider } from "@/lib/integrations/ssl";
 import { getSmsProvider } from "@/lib/integrations/sms";
 import { getPaymentGatewayConfig } from "@/lib/integrations/payment-gateways";
@@ -157,20 +157,65 @@ export async function saveVpsVdsIntegrationSettings(formData: FormData) {
   );
 }
 
+const EFATURA_PLAIN_FIELDS = [
+  "efatura_company_vkn",
+  "efatura_uyumsoft_username",
+  "efatura_company_name",
+  "efatura_company_tax_office",
+  "efatura_company_street",
+  "efatura_company_district",
+  "efatura_company_city",
+  "efatura_company_postal_zone",
+  "efatura_company_phone",
+  "efatura_company_email",
+  "efatura_company_website",
+  "efatura_company_mersis",
+] as const;
+
+function prefixValue(formData: FormData, key: string) {
+  return getFormValue(formData, key).trim().toLocaleUpperCase("tr-TR");
+}
+
 export async function saveEfaturaIntegrationSettings(formData: FormData) {
   await requireAdmin();
 
   const settings = await getSettings();
   const currentApiKey = getSettingValue(settings, "efatura_api_key", "");
+  const currentUyumsoftPassword = getSettingValue(settings, "efatura_uyumsoft_password", "");
+
+  const earsivPrefix = prefixValue(formData, "efatura_uyumsoft_earsiv_prefix");
+  const efaturaPrefix = prefixValue(formData, "efatura_uyumsoft_efatura_prefix");
+  const invalidPrefix = [earsivPrefix, efaturaPrefix].find((prefix) => prefix && !/^[A-Z0-9]{3}$/.test(prefix));
+  if (invalidPrefix) {
+    redirectWithFeedback("efatura", false, `Seri öneki 3 harf/rakam olmalı: ${invalidPrefix}`);
+  }
+  const vkn = getFormValue(formData, "efatura_company_vkn").replace(/\D/g, "");
+  if (vkn && !/^\d{10,11}$/.test(vkn)) {
+    redirectWithFeedback("efatura", false, "Şirket VKN 10, TCKN 11 haneli olmalı.");
+  }
 
   const result = await updateSettings([
     { key: "efatura_enabled", value: getFormValue(formData, "efatura_enabled", "false") },
-    { key: "efatura_provider", value: getFormValue(formData, "efatura_provider", "disabled") },
+    { key: "efatura_provider", value: getFormValue(formData, "efatura_provider", "uyumsoft") },
     {
       key: "efatura_api_key",
       value: getSecretFormValue(formData, "efatura_api_key", currentApiKey),
     },
-    { key: "efatura_company_vkn", value: getFormValue(formData, "efatura_company_vkn") },
+    {
+      key: "efatura_uyumsoft_password",
+      value: getSecretFormValue(formData, "efatura_uyumsoft_password", currentUyumsoftPassword),
+    },
+    { key: "efatura_uyumsoft_test_mode", value: getFormValue(formData, "efatura_uyumsoft_test_mode", "true") },
+    { key: "efatura_uyumsoft_earsiv_prefix", value: earsivPrefix },
+    { key: "efatura_uyumsoft_efatura_prefix", value: efaturaPrefix },
+    {
+      key: "efatura_default_profile",
+      value: getFormValue(formData, "efatura_default_profile") === "TICARIFATURA" ? "TICARIFATURA" : "TEMELFATURA",
+    },
+    ...EFATURA_PLAIN_FIELDS.map((key) => ({
+      key,
+      value: key === "efatura_company_vkn" ? vkn : getFormValue(formData, key).trim(),
+    })),
   ]);
 
   revalidatePath(INTEGRATIONS_PATH);
@@ -187,7 +232,8 @@ export async function saveEfaturaIntegrationSettings(formData: FormData) {
 export async function testEfaturaConnection() {
   await requireAdmin();
 
-  const provider = await getEInvoiceProvider();
+  const config = await getEInvoiceConfig();
+  const provider = createEInvoiceProvider(config.provider, config);
   const result = await provider.healthCheck();
 
   revalidatePath(INTEGRATIONS_PATH);
@@ -197,7 +243,7 @@ export async function testEfaturaConnection() {
     result.skipped
       ? "E-fatura sağlayıcısı yapılandırılmamış."
       : result.ok
-        ? "E-fatura bağlantısı başarılı."
+        ? `E-fatura bağlantısı başarılı${result.detail ? ` (${result.detail})` : ""}.`
         : result.error ?? "E-fatura bağlantısı başarısız."
   );
 }

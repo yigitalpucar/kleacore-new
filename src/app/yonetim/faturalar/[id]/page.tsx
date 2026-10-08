@@ -56,6 +56,11 @@ export default async function InvoiceDetailPage({
           documentNumber: invoice.eInvoiceRecord.documentNumber,
           sentAt: invoice.eInvoiceRecord.sentAt ? invoice.eInvoiceRecord.sentAt.toISOString() : null,
           errorMessage: invoice.eInvoiceRecord.errorMessage,
+          attempts: invoice.eInvoiceRecord.attempts,
+          pdfAvailable:
+            Boolean(invoice.eInvoiceRecord.documentUuid) &&
+            invoice.eInvoiceRecord.provider !== "parasut" &&
+            ["SENT", "ACCEPTED", "CANCELLED"].includes(invoice.eInvoiceRecord.status),
         }
       : null,
   };
