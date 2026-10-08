@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getDomainWithDns } from "@/lib/dal/domains";
+import { getCurrentDomainRenewal, getDomainWithDns } from "@/lib/dal/domains";
 import { DomainDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +20,8 @@ export default async function DomainDetayPage(props: DomainDetayPageProps) {
   if (!domain || domain.customerId !== session!.user.id) {
     notFound();
   }
+
+  const renewal = await getCurrentDomainRenewal(domain.id, domain.expiresAt);
 
   const serializedDomain = {
     id: domain.id,
@@ -45,5 +47,19 @@ export default async function DomainDetayPage(props: DomainDetayPageProps) {
     })),
   };
 
-  return <DomainDetayContent domain={serializedDomain} />;
+  return (
+    <DomainDetayContent
+      domain={serializedDomain}
+      renewal={
+        renewal
+          ? {
+              status: renewal.status,
+              invoiceId: renewal.invoice?.id ?? null,
+              invoiceNumber: renewal.invoice?.invoiceNumber ?? null,
+              invoiceStatus: renewal.invoice?.status ?? null,
+            }
+          : null
+      }
+    />
+  );
 }

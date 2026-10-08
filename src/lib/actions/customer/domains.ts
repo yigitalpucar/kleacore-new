@@ -298,3 +298,33 @@ export async function updateNameservers(domainId: string, nameservers: string[])
     return { success: false, error: "Nameserver kayıtları güncellenirken bir hata oluştu" };
   }
 }
+export async function setDomainAutoRenew(domainId: string, enabled: boolean) {
+  const session = await requireCustomer();
+
+  try {
+    const { setAutoRenewForCustomer } = await import("@/lib/domains/self-service");
+    const result = await setAutoRenewForCustomer(domainId, session.user.id, enabled);
+    if (result.success) revalidateDomainPaths(domainId);
+    return result;
+  } catch (error) {
+    console.error("[Domains] Otomatik yenileme güncellenemedi:", error);
+    return { success: false as const, error: "Otomatik yenileme ayarı kaydedilemedi" };
+  }
+}
+
+export async function requestDomainRenewal(domainId: string) {
+  const session = await requireCustomer();
+
+  try {
+    const { requestRenewalForCustomer } = await import("@/lib/domains/self-service");
+    const result = await requestRenewalForCustomer(domainId, session.user.id);
+    if (result.success) {
+      revalidateDomainPaths(domainId);
+      revalidatePath("/musteri/panel/faturalar");
+    }
+    return result;
+  } catch (error) {
+    console.error("[Domains] Yenileme faturası oluşturulamadı:", error);
+    return { success: false as const, error: "Yenileme faturası oluşturulamadı" };
+  }
+}
