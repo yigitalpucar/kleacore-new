@@ -580,9 +580,11 @@ export async function checkoutCart(input: CheckoutInput) {
               orderId: order.id,
               action: "PROVISIONED",
               description:
-                provisioned.type === "domain"
-                  ? "Domain kaydı aktifleştirildi"
-                  : "Hizmet aktifleştirildi",
+                "partialFailure" in provisioned && provisioned.partialFailure
+                  ? "Sağlama başarısız oldu, yeniden denenecek"
+                  : provisioned.type === "domain"
+                    ? "Domain kaydı registrara iletildi"
+                    : "Hizmet aktifleştirildi",
               performedBy: customerId,
               metadata: provisioned,
             },

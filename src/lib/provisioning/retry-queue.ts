@@ -1,10 +1,9 @@
-import type { BillingPeriod, Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   createRemoteService,
   unsuspendRemoteService,
 } from "@/lib/integrations/provisioning-provider";
-import { registerDomainWithRegistrar } from "@/lib/integrations/registrar";
 import {
   mapProductSubTypeToSslType,
   provisionSslCertificate,
@@ -18,15 +17,6 @@ const RETRY_DELAYS_MS = [
   4 * 60 * 60 * 1000,
   24 * 60 * 60 * 1000,
 ] as const;
-
-const billingMonths: Record<BillingPeriod, number> = {
-  monthly: 1,
-  quarterly: 3,
-  semiannual: 6,
-  yearly: 12,
-  biennial: 24,
-  triennial: 36,
-};
 
 type DbClient = Prisma.TransactionClient | typeof db;
 
@@ -113,25 +103,15 @@ async function retryDomainProvisioning(
     return { ok: false as const, error: "DOMAIN_REQUIRED" };
   }
 
-  const registrarResult = await registerDomainWithRegistrar({
-    domain: configuredDomain,
-    years: Math.max(1, Math.round((billingMonths[order.billingPeriod] ?? 12) / 12)),
-    nameservers: ["ns1.kleacore.com", "ns2.kleacore.com"],
-    customer: order.customer,
-  });
+  const { submitDomainToRegistrar } = await import("@/lib/provisioning/internal");
+  const registrarResult = await submitDomainToRegistrar(db, order, configuredDomain);
 
   if (registrarResult.ok && !registrarResult.skipped) {
-    await db.domain.update({
-      where: { name: configuredDomain },
-      data: { registrar: registrarResult.provider ?? "Gri" },
-    });
     return { ok: true as const };
   }
 
-  if (registrarResult.skipped) {
-    return { ok: true as const };
-  }
-
+  // A disabled registrar (skipped) registered nothing: keep the job open so
+  // the domain stays visible as an admin task instead of silently completing.
   return { ok: false as const, error: registrarResult.error ?? "REGISTRAR_PROVISIONING_FAILED" };
 }
 

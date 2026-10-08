@@ -300,9 +300,11 @@ export async function fulfillInvoicePayment(
             orderId: invoice.orderId,
             action: "PAYMENT_FULFILLED",
             description:
-              provisioned.type === "domain"
-                ? "Ödeme tamamlandı ve domain aktifleştirildi"
-                : "Ödeme tamamlandı ve hizmet aktifleştirildi",
+              "partialFailure" in provisioned && provisioned.partialFailure
+                ? "Ödeme tamamlandı, sağlama başarısız oldu ve yeniden denenecek"
+                : provisioned.type === "domain"
+                  ? "Ödeme tamamlandı ve domain registrara iletildi"
+                  : "Ödeme tamamlandı ve hizmet aktifleştirildi",
             performedBy: input.performedBy,
             metadata: {
               invoiceId: invoice.id,
