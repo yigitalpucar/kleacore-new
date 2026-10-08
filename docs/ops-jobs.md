@@ -109,13 +109,15 @@ Yerelde: `pnpm jobs:worker` (tsx) veya `pnpm build && node --env-file=.env .work
 **tek kısa transaction** açar: Payment `COMPLETED`, fatura `PAID` (koşullu güncelleme,
 tekrar gelen callback no-op), sipariş `COMPLETED`, yenileme/paket değişikliği,
 yerel kayıtlar (alan adı `PENDING`, SSL sertifikası `PENDING`, hizmet satırı),
-`ProvisioningJob` satırı ve şu kuyruk işleri — hepsi aynı commit'le:
+`ProvisioningJob` satırı, `invoice.paid` (+ `order.paid` / `service.renewed`) olayları
+ve şu kuyruk işleri — hepsi aynı commit'le:
 
 | İş | Ne yapar | Tekrar |
 |---|---|---|
 | `provisioning.run` | Registrar kaydı/transferi, SSL siparişi, WHM/VPS oluşturma, paket değişikliği (`PLAN_CHANGE`), askı kaldırma | 5 deneme, backoff; sonra `FAILED` |
-| `efatura.issue` | Uyumsoft/Paraşüt e-fatura/e-arşiv kesimi | 6 deneme; fatura verisi hatası (`EFATURA_…:`) tekrar denenmez, `/yonetim/e-fatura`'da görünür |
-| `payment.settled` | Webhook/aktivite olayları + "ödeme alındı" bildirimi (`billing.payment-received`, fatura başına tek gönderim) | 4 deneme |
+| `events.dispatch` | Olayı abonelere dağıtır: "ödeme alındı" bildirimi, `efatura.issue` (einvoice abonesi), webhook, aktivite kaydı | 6 deneme; abone başına tek teslim |
+| `efatura.issue` | Uyumsoft/Paraşüt e-fatura/e-arşiv kesimi (invoice.paid → einvoice abonesi kuyruğa alır) | 6 deneme; fatura verisi hatası (`EFATURA_…:`) tekrar denenmez, `/yonetim/e-fatura`'da görünür |
+| `payment.settled` | Eski akış: yalnızca deploy öncesi kuyruğa girmiş işler için kayıtlı | 4 deneme |
 
 Transaction içinde **hiçbir uzak çağrı yapılmaz**; bu yüzden registrar/WHM/SSL
 hatası artık kart çekimini geri almaz. Sipariş verisi bozuksa (ör. alan adı
@@ -124,8 +126,8 @@ görünür; siparişi düzeltip "Yeniden dene" yeterlidir. Siparişin etkinleşt
 beklenmedik bir hatayla patlarsa (ör. yenilenecek hizmet silinmiş) yalnızca o kısım
 bir SAVEPOINT'e geri alınır, ödeme kalır; sipariş `PROCESSING`, iş
 `FAILED` (`FULFILMENT_ERROR: …`) olur. Kuyruk o an erişilemezse ödeme yine
-kaydedilir; takip işleri commit'ten sonra yeniden kuyruğa eklenir, olmazsa aynı
-istekte çalıştırılır.
+kaydedilir; olay satırları yine commit'le yazılır ve `jobs-drain` taraması onları
+dağıtır (kuyruk hâlâ yoksa aynı istekte).
 
 Otomasyonu olmayan ürünlerde (`manual_provisioning_categories`, ör. VDS) aynı
 transaction `provisioning.run` yerine `MANUAL` görev açar (aşağıya bakın); yönetim
@@ -144,10 +146,40 @@ hizmetler sonuçta `missing` olarak listelenir. Panel hatası denemeyi başarıs
 sayar (3 deneme, ≈15/30 dk). Salt okunur: panelde hiçbir şey değişmez.
 Kota aşan hesaplar: `/yonetim/hizmetler/kota`.
 
+## Olaylar (transactional outbox, `events.dispatch`)
+
+Kod: `src/lib/events/` — yönetim: **/yonetim/olaylar** (filtre, abone bazında teslim,
+"Yeniden dağıt").
+
+```ts
+import { emitEvent } from "@/lib/events/emit";
+await db.$transaction(async (tx) => {
+  await tx.invoice.update(...);                       // iş değişikliği
+  await emitEvent(tx, "invoice.overdue", { invoiceId, invoiceNumber, customerId, totalAmount, dueDate });
+});
+```
+
+- Katalog: `src/lib/events/catalog.ts` (34 olay, zod şemalı; gizli alanlar `enc:v1:` ile
+  şifreli saklanır). Olay iş satırıyla **aynı transaction'da** `domain_events`'e yazılır;
+  rollback → olay yok. `events.dispatch` işi de aynı transaction'la (savepoint içinde)
+  eklenir, yani yalnızca commit'ten sonra görünür.
+- Aboneler kodda (`src/lib/events/subscribers`): `notifications` (olay → şablon, eski
+  dedupe anahtarlarıyla), `einvoice` (invoice.paid → `efatura.issue`), `webhooks`
+  (eski `payment.completed` / `order.paid` / `service.renewed` sözleşmesi; HTTP hatası
+  tekrar denenir), `activity-log`, `admin-alert` (yeni ticket, havale bildirimi,
+  kurulum hatası, otomatik çekim hatası → `admin.event-alert`).
+- `event_deliveries` (olay × abone tekil): yeniden deneme yalnızca başarısız aboneyi
+  çalıştırır, teslim edilmiş olan tekrar gönderilmez. 6 denemeden sonra olay
+  "Başarısız" görünür; /yonetim/olaylar'dan "Yeniden dağıt".
+- `jobs-drain` (dakikada bir) önce tarama yapar: 1 dakikadan eski, işlenmemiş ve işi
+  hiç oluşmamış olaylar kuyruğa alınır (kuyruk yoksa satır içi dağıtılır).
+- Transaction'ı olmayan eski noktalar için `emitEventAfterCommit` (hata fırlatmaz).
+
 ## Bildirimler (`notification.send`)
 
 Kod: `src/lib/notifications/` — yönetim: **/yonetim/bildirimler** (kayıtlar, filtre,
-"Yeniden gönder"), **/yonetim/bildirimler/sablonlar** (örnek veriyle önizleme).
+"Yeniden gönder"), **/yonetim/bildirimler/sablonlar** (şablon düzenleyici),
+**/yonetim/bildirimler/hatirlatmalar** (fatura hatırlatma takvimi).
 
 ```ts
 import { sendNotification } from "@/lib/notifications/send";
@@ -170,6 +202,15 @@ await sendNotification({
 - Gizli alanlar (`sensitive`: ilk şifre, doğrulama/sıfırlama bağlantısı) kuyruk
   yükünde ve log'da şifreli (`enc:v1:`), müşteri gelen kutusu kopyasında ve yönetim
   önizlemesinde "•••••• (gizli)" olarak durur; log `redacted=true`.
+- Yönetimden düzenlenen şablonlar (`notification_templates`, sürüm geçmişi
+  `notification_template_versions`) aktifse TS şablonunun yerine geçer; gönderim anında
+  okunur. Sözdizimi `{{ad}}`, `{{#ad}}…{{/ad}}`, `{{^ad}}…{{/ad}}`, `{{.}}`; kod çalıştırmaz,
+  değerler HTML-kaçışlı. Değişken listesi şablonun zod şemasından gelir; bilinmeyen
+  değişken kaydedilemez. İşlenemeyen şablonda TS varsayılanı kullanılır.
+- Hatırlatma takvimi (`invoice_reminder_schedule`, saat başı `notifications` cron'u):
+  varsayılan vade −3 (e-posta+SMS), −1, +1, +3 (e-posta+SMS), +7; askıya alma öncesi
+  son uyarı vade + (askı süresi − 1). gün, yalnızca aktif hizmeti askıya alınacak
+  faturalara. Anahtar `invoice.reminder:<fatura>:<adım>` — adım×kanal başına bir kez.
 - SMS yalnızca `sms_notifications=true` + yapılandırılmış sağlayıcı + telefon varsa yazılır.
 - Yönetim bildirimleri: `admin_notification_email` (yoksa `support_email`,
   `company_email`), SMS için `admin_notification_phone`.

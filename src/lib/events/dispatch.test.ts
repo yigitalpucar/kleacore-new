@@ -34,6 +34,8 @@ vi.mock("@/lib/db", () => {
   return {
     db: {
       domainEvent: {
+        findMany: async () =>
+          [...store.events.values()].filter((event) => !event.processedAt).map((event) => ({ id: event.id })),
         findUnique: async ({ where }: { where: { id: string } }) => {
           const event = store.events.get(where.id);
           if (!event) return null;
@@ -76,8 +78,15 @@ vi.mock("@/lib/db", () => {
   };
 });
 
+const enqueue = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/jobs/enqueue", () => ({ enqueue }));
+vi.mock("./subscribers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./subscribers")>()),
+  eventSubscribers: [],
+}));
+
 import { encryptSecret } from "@/lib/secrets/crypto";
-import { dispatchDomainEvent, EventDispatchError } from "./dispatch";
+import { dispatchDomainEvent, EventDispatchError, sweepPendingEvents } from "./dispatch";
 import type { EventSubscriber } from "./subscribers";
 
 function seedEvent(overrides: Partial<EventRow> = {}) {
@@ -199,5 +208,27 @@ describe("dispatchDomainEvent", () => {
 
   it("reports a missing event without throwing", async () => {
     expect(await dispatchDomainEvent("nope", { subscribers: [] })).toMatchObject({ status: "not_found" });
+  });
+});
+
+describe("sweepPendingEvents (jobs-drain)", () => {
+  beforeEach(() => {
+    store.events.clear();
+    store.deliveries.length = 0;
+    enqueue.mockReset();
+  });
+
+  it("queues events whose dispatch job never existed", async () => {
+    seedEvent();
+    enqueue.mockResolvedValue({ id: "job-1", deduplicated: false });
+    expect(await sweepPendingEvents()).toMatchObject({ checked: 1, queued: 1, inline: 0 });
+    expect(enqueue).toHaveBeenCalledWith("events.dispatch", { eventId: "evt-1" }, { singletonKey: "evt-1" });
+  });
+
+  it("dispatches inline when the queue is unreachable", async () => {
+    seedEvent();
+    enqueue.mockRejectedValue(new Error("pg-boss down"));
+    expect(await sweepPendingEvents()).toMatchObject({ checked: 1, queued: 0, inline: 1 });
+    expect(store.events.get("evt-1")!.processedAt).toBeInstanceOf(Date);
   });
 });

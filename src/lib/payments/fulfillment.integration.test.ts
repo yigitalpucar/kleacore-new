@@ -53,7 +53,7 @@ import { randomUUID } from "node:crypto";
 import type { ProductCategorySlug } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getBoss, stopBoss } from "@/lib/jobs/boss";
-import { EFATURA_ISSUE_JOB, PAYMENT_SETTLED_JOB, PROVISIONING_RUN_JOB } from "@/lib/jobs/definitions";
+import { EVENTS_DISPATCH_JOB, PROVISIONING_RUN_JOB } from "@/lib/jobs/definitions";
 import { netInvoiceLine } from "@/lib/billing/invoice-lines";
 import { fulfillGatewayReference } from "./gateway-fulfillment";
 import { runQueuedProvisioningJob } from "@/lib/provisioning/retry-queue";
@@ -147,6 +147,13 @@ async function queueJobs(name: string, key: string) {
   return boss.findJobs(name, { key });
 }
 
+/** invoice.paid outbox rows of an invoice, each with its events.dispatch job. */
+async function paidEvents(invoiceId: string) {
+  const boss = await getBoss();
+  const events = await db.domainEvent.findMany({ where: { type: "invoice.paid", aggregateId: invoiceId } });
+  return Promise.all(events.map(async (event) => ({ event, jobs: await boss.findJobs(EVENTS_DISPATCH_JOB, { key: event.id }) })));
+}
+
 const ctx = (retryCount = 0) => ({ jobId: "itest", retryCount, retryLimit: 4, isFinalAttempt: retryCount >= 4 });
 
 describe.runIf(enabled)("payment fulfilment (integration, real Postgres)", () => {
@@ -173,12 +180,12 @@ describe.runIf(enabled)("payment fulfilment (integration, real Postgres)", () =>
         const queued = await boss.findJobs(PROVISIONING_RUN_JOB, { key: job.id });
         if (queued.length) await boss.deleteJob(PROVISIONING_RUN_JOB, queued.map((q) => q.id));
       }
-      for (const invoiceId of createdInvoices) {
-        for (const name of [EFATURA_ISSUE_JOB, PAYMENT_SETTLED_JOB]) {
-          const queued = await boss.findJobs(name, { key: invoiceId });
-          if (queued.length) await boss.deleteJob(name, queued.map((q) => q.id));
-        }
+      const events = await db.domainEvent.findMany({ where: { aggregateId: { in: [...createdInvoices, ...createdOrders] } } });
+      for (const event of events) {
+        const queued = await boss.findJobs(EVENTS_DISPATCH_JOB, { key: event.id });
+        if (queued.length) await boss.deleteJob(EVENTS_DISPATCH_JOB, queued.map((q) => q.id));
       }
+      await db.domainEvent.deleteMany({ where: { id: { in: events.map((event) => event.id) } } });
       await db.provisioningJob.deleteMany({ where: { orderId: { in: createdOrders } } });
       await db.notificationLog.deleteMany({ where: { OR: [{ userId: customerId }, { dedupeKey: { startsWith: "manual-provisioning:" }, createdAt: { gte: startedAt } }] } });
       await db.notification.deleteMany({ where: { title: "Manuel kurulum bekliyor", createdAt: { gte: startedAt } } });
@@ -214,9 +221,10 @@ describe.runIf(enabled)("payment fulfilment (integration, real Postgres)", () =>
       expect(after.payments).toEqual([expect.objectContaining({ status: "COMPLETED", transactionId: reference })]);
       expect(after.job).toMatchObject({ status: "FAILED", lastError: expect.stringMatching(/^DOMAIN_REQUIRED/) });
       expect(remote.provisionSslCertificate).not.toHaveBeenCalled();
-      // e-invoice + notification were queued with the commit, exactly once.
-      expect(await queueJobs(EFATURA_ISSUE_JOB, invoice.id)).toHaveLength(1);
-      expect(await queueJobs(PAYMENT_SETTLED_JOB, invoice.id)).toHaveLength(1);
+      // invoice.paid (→ e-invoice, notification, webhooks) committed with the payment, exactly once.
+      const paid = await paidEvents(invoice.id);
+      expect(paid).toHaveLength(1);
+      expect(paid[0].jobs).toHaveLength(1);
 
       // Callback retry: idempotent no-op.
       const again = await fulfillGatewayReference(reference, gateway.notes, gateway.confirmation);
@@ -294,7 +302,7 @@ describe.runIf(enabled)("payment fulfilment (integration, real Postgres)", () =>
     expect(after.payments.filter((payment) => payment.status === "COMPLETED")).toHaveLength(1);
     expect(after.job).toMatchObject({ kind: "PROVISION", status: "PENDING" });
     expect(await db.domain.findUnique({ where: { name: "itest-race-alan.com" } })).toMatchObject({ status: "PENDING" });
-    expect(await queueJobs(PAYMENT_SETTLED_JOB, invoice.id)).toHaveLength(1);
+    expect(await paidEvents(invoice.id)).toHaveLength(1);
     expect(remote.registerDomainWithRegistrar).not.toHaveBeenCalled();
   });
 
