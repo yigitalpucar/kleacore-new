@@ -37,6 +37,9 @@ export const JOBS = [
   // Disk / bandwidth of hosting accounts (one queued job per WHM instance).
   { name: "KLEACORE: Hosting Kullanım Senkronu", cron: "30 4 * * *", job: "usage-sync" },
   { name: "KLEACORE: Gecikmiş Faturalar", cron: "0 5 * * *", job: "overdue-invoices" },
+  // Saved-card collection (docs/payments-saved-cards.md): after overdue marking,
+  // before suspension, so a successful charge keeps the service running.
+  { name: "KLEACORE: Otomatik Tahsilat", cron: "30 5 * * *", job: "auto-charge" },
   { name: "KLEACORE: Hizmet Askıya Alma", cron: "0 6 * * *", job: "suspend-services" },
   { name: "KLEACORE: Domain Süre Bildirimleri", cron: "0 10 * * *", job: "domain-notices" },
   { name: "KLEACORE: Provisioning Retry", cron: "*/15 * * * *", job: "retry-provisioning" },

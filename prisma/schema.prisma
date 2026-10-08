@@ -397,11 +397,19 @@ model User {
   notificationLogs        NotificationLog[]
   bankTransferNotices     BankTransferNotice[]
   importRuns              ImportRun[]
+  savedCards              SavedCard[]
+  paymentAttempts         PaymentAttempt[]
 
   // Affiliate relations
   affiliateReferrals AffiliateReferral[] @relation("AffiliateReferrals")
   referredReferrals  AffiliateReferral[] @relation("ReferredReferrals")
   affiliatePayments  AffiliatePayment[]
+
+  // Otomatik ödeme (Faz 3.7): vadesi gelen faturalar varsayılan kayıtlı karttan
+  // çekilir. Açılırken müşterinin onayı (zaman + IP) kaydedilir.
+  autoPayEnabled   Boolean   @default(false)
+  autoPayConsentAt DateTime?
+  autoPayConsentIp String?
 
   // Timestamps
   emailVerifiedAt DateTime?
@@ -1103,6 +1111,7 @@ model Invoice {
   domainRenewal       DomainRenewal?
   refunds             Refund[]
   bankTransferNotices BankTransferNotice[]
+  paymentAttempts     PaymentAttempt[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2100,4 +2109,110 @@ model ImportRow {
   @@unique([runId, remoteId])
   @@index([runId, status])
   @@map("import_rows")
+}
+
+// =====================
+// SAVED CARDS + AUTOMATIC COLLECTION (Faz 3.7) — docs/payments-saved-cards.md
+// =====================
+
+enum SavedCardStatus {
+  /// Consent recorded, 1 TL 3D verification started at the gateway.
+  PENDING
+  ACTIVE
+  EXPIRED
+  /// Verification failed or the gateway did not return a card.
+  FAILED
+  /// Removed by the customer (and at the gateway); tokens wiped.
+  DELETED
+}
+
+/// A card stored AT THE GATEWAY. We keep only the gateway's tokens (encrypted,
+/// enc:v1:) and display data — never the card number or CVV.
+model SavedCard {
+  id                     String          @id @default(cuid())
+  userId                 String
+  user                   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "paytr" (iyzico possible later; see docs).
+  gateway                String
+  /// PayTR utoken / iyzico cardUserKey — encrypted. Empty until verified/after delete.
+  gatewayCustomerRef     String          @default("")
+  /// PayTR ctoken / iyzico cardToken — encrypted. Empty until verified/after delete.
+  cardToken              String          @default("")
+  last4                  String          @default("")
+  /// Card scheme: VISA, MASTERCARD, TROY, AMEX…
+  brand                  String          @default("")
+  /// Card program (bonus, world, maximum…) when the gateway reports it.
+  cardProgram            String?
+  expMonth               Int?
+  expYear                Int?
+  bankName               String?
+  /// PayTR require_cvv: the card can't be charged without the customer.
+  requireCvv             Boolean         @default(false)
+  isDefault              Boolean         @default(false)
+  status                 SavedCardStatus @default(PENDING)
+  /// Explicit consent to store the card and charge it automatically.
+  consentAt              DateTime
+  consentIp              String?
+  consentUserAgent       String?
+  /// Exact consent text shown to the customer.
+  consentText            String          @db.Text
+  /// Gateway order id of the verification charge (1 TL, refunded).
+  verificationRef        String?         @unique
+  /// The 1 TL verification sale went through (money to refund).
+  verificationChargedAt  DateTime?
+  verificationRefundedAt DateTime?
+  failureReason          String?
+  expiryNoticeSentAt     DateTime?
+  deletedAt              DateTime?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  attempts PaymentAttempt[]
+
+  @@index([userId, status])
+  @@index([status, expYear, expMonth])
+  @@map("saved_cards")
+}
+
+enum PaymentAttemptKind {
+  /// Daily automatic collection.
+  AUTO
+  /// Customer clicked "Kayıtlı kartla öde".
+  MANUAL
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  /// Gateway outcome unknown (timeout / wait_callback); the callback settles it.
+  UNKNOWN
+}
+
+/// One charge of a stored card for an invoice. `idempotencyKey` is
+/// "auto:<invoiceId>:<YYYY-MM-DD>" for the daily job, so a second run on the
+/// same day can never charge the invoice again.
+model PaymentAttempt {
+  id             String               @id @default(cuid())
+  idempotencyKey String               @unique
+  kind           PaymentAttemptKind
+  invoiceId      String
+  invoice        Invoice              @relation(fields: [invoiceId], references: [id])
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedCardId    String?
+  savedCard      SavedCard?           @relation(fields: [savedCardId], references: [id], onDelete: SetNull)
+  gateway        String
+  /// Gateway order id (PayTR merchant_oid) = Payment.transactionId.
+  gatewayRef     String               @unique
+  amount         Decimal              @db.Decimal(14, 2)
+  status         PaymentAttemptStatus @default(PENDING)
+  errorCode      String?
+  errorMessage   String?
+  createdAt      DateTime             @default(now())
+  finishedAt     DateTime?
+
+  @@index([invoiceId, kind, status])
+  @@index([userId, createdAt])
+  @@map("payment_attempts")
 }
