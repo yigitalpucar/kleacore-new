@@ -5,6 +5,7 @@ import {
   fulfillInvoicePayment,
   notifyInvoicePaymentReceived,
 } from "@/lib/payments/fulfillment";
+import { runUnsuspendJobsForInvoices } from "@/lib/payments/service-lifecycle";
 
 /** What the gateway says was charged for a session, as reported in its callback. */
 export interface GatewayPaymentConfirmation {
@@ -170,6 +171,7 @@ export async function fulfillGatewayReference(
   );
 
   if (result.fulfilled) {
+    await runUnsuspendJobsForInvoices(result.invoiceIds);
     await Promise.allSettled(
       result.invoiceIds.map((invoiceId) => notifyInvoicePaymentReceived(invoiceId))
     );

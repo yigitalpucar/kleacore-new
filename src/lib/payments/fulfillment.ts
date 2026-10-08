@@ -315,7 +315,7 @@ export async function fulfillInvoicePayment(
     }
 
     if (invoice.order?.serviceId) {
-      await unsuspendServiceIfNeeded(tx, invoice.order.serviceId);
+      await unsuspendServiceIfNeeded(tx, invoice.order.serviceId, invoice.orderId);
     }
   }
 

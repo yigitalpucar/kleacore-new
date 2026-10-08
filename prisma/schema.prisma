@@ -83,6 +83,11 @@ enum ProvisioningJobStatus {
   FAILED
 }
 
+enum ProvisioningJobKind {
+  PROVISION
+  UNSUSPEND
+}
+
 enum PlanChangeType {
   UPGRADE
   DOWNGRADE
@@ -697,6 +702,7 @@ model ProvisioningJob {
   order       Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
   serviceId   String?
   service     Service?              @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  kind        ProvisioningJobKind   @default(PROVISION)
   status      ProvisioningJobStatus @default(PENDING)
   attempts    Int                   @default(0)
   maxAttempts Int                   @default(5)

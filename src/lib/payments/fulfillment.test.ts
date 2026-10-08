@@ -30,6 +30,7 @@ vi.mock("@/lib/provisioning/internal", () => ({
 }));
 vi.mock("@/lib/payments/service-lifecycle", () => ({
   unsuspendServiceIfNeeded: mocks.unsuspendServiceIfNeeded,
+  runUnsuspendJobsForInvoices: vi.fn(),
 }));
 
 import type { Prisma } from "@prisma/client";

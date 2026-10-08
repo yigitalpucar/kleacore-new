@@ -68,18 +68,23 @@ export async function applyServiceRenewalFromOrder(
     currentExpiry.getTime() > now.getTime() ? currentExpiry : now;
   const newExpiryDate = addMonths(renewalBaseDate, renewalMonths);
 
+  // A suspended service keeps its suspension here: unsuspendServiceIfNeeded
+  // decides afterwards, so only non-payment suspensions are lifted (with the
+  // remote unsuspend) and customer-stopped / admin-suspended ones stay put.
+  const reactivate = service.status !== "SUSPENDED";
+
   await tx.service.update({
     where: { id: service.id },
     data: {
-      status: "ACTIVE",
+      ...(reactivate
+        ? { status: "ACTIVE" as const, suspendedAt: null, suspendReason: null }
+        : {}),
       billingPeriod: order.billingPeriod,
       // Pre-tax, pre-discount amount for the renewed period (see
       // provisioning/internal.ts) so the next renewal adds KDV exactly once.
       amount: order.basePrice,
       nextDueDate: newExpiryDate,
       expiresAt: newExpiryDate,
-      suspendedAt: null,
-      suspendReason: null,
     },
   });
 

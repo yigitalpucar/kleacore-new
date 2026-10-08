@@ -12,6 +12,7 @@ import {
   sendInvoicePaymentReminderEmail,
 } from "@/lib/notifications/email";
 import { fulfillInvoicePayment, notifyInvoicePaymentReceived } from "@/lib/payments/fulfillment";
+import { runUnsuspendJobsForInvoices } from "@/lib/payments/service-lifecycle";
 import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 
@@ -140,6 +141,8 @@ async function fulfillInvoiceAsAdmin(
       notes,
     },
   });
+
+  await runUnsuspendJobsForInvoices([id]);
 
   dispatchNotification(() => notifyInvoicePaymentReceived(id));
 

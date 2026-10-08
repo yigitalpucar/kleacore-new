@@ -7,6 +7,7 @@ import {
   fulfillInvoicePayment,
   notifyInvoicePaymentReceived,
 } from "@/lib/payments/fulfillment";
+import { runUnsuspendJobsForInvoices } from "@/lib/payments/service-lifecycle";
 import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
           }
         });
 
+        await runUnsuspendJobsForInvoices(invoiceIds);
         await Promise.allSettled(
           invoiceIds.map((invoiceId) => notifyInvoicePaymentReceived(invoiceId))
         );
