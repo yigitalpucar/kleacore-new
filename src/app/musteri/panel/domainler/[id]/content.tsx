@@ -15,31 +15,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   ArrowRightLeft,
   Edit,
   ExternalLink,
   Globe,
   Loader2,
   Lock,
-  Plus,
   Receipt,
   RefreshCcw,
   Server,
   Settings,
-  Trash2,
 } from "lucide-react";
 import {
   AppBreadcrumbLabel,
   CopyButton,
   DetailList,
-  EmptyState,
   IconTile,
   PageHeader,
   SectionCard,
@@ -49,38 +39,12 @@ import {
 } from "@/components/app";
 import { formatDate, daysUntil } from "@/lib/format/date";
 import {
-  addDnsRecord,
-  deleteDnsRecord,
   requestDomainRenewal,
   setDomainAutoRenew,
-  updateDnsRecord,
   updateNameservers,
 } from "@/lib/actions/customer/domains";
 import { toast } from "@/lib/toast";
-import type { DnsRecordType } from "@prisma/client";
-
-const allowedDnsTypes: DnsRecordType[] = [
-  "A",
-  "AAAA",
-  "CNAME",
-  "MX",
-  "TXT",
-  "NS",
-  "SRV",
-];
-
-function isDnsRecordType(value: string): value is DnsRecordType {
-  return allowedDnsTypes.includes(value as DnsRecordType);
-}
-
-interface DnsRecord {
-  id: string;
-  type: string;
-  name: string;
-  value: string;
-  ttl: number;
-  priority: number | null;
-}
+import { DnsSection, type DnsRecordRow, type DnsState } from "./dns-section";
 
 interface DomainDetail {
   id: string;
@@ -96,7 +60,7 @@ interface DomainDetail {
   whoisEmail: string | null;
   whoisPhone: string | null;
   whoisAddress: string | null;
-  dnsRecords: DnsRecord[];
+  dnsRecords: DnsRecordRow[];
 }
 
 interface CurrentRenewal {
@@ -108,117 +72,24 @@ interface CurrentRenewal {
 
 interface DomainDetayContentProps {
   domain: DomainDetail;
+  dns: DnsState;
   renewal: CurrentRenewal | null;
 }
 
 const OPEN_INVOICE_STATUSES = new Set(["DRAFT", "PENDING", "OVERDUE"]);
 const RENEWABLE_STATUSES = new Set(["ACTIVE", "EXPIRED"]);
 
-const emptyDnsForm = {
-  type: "A" as DnsRecordType,
-  name: "@",
-  value: "",
-  ttl: "3600",
-  priority: "10",
-};
-
-export function DomainDetayContent({ domain, renewal }: DomainDetayContentProps) {
+export function DomainDetayContent({ domain, dns, renewal }: DomainDetayContentProps) {
   const router = useRouter();
   const [autoRenew, setAutoRenew] = useState(domain.autoRenew);
   const [autoRenewTarget, setAutoRenewTarget] = useState<boolean | null>(null);
   const [isAutoRenewSaving, setIsAutoRenewSaving] = useState(false);
   const [isRenewing, setIsRenewing] = useState(false);
-  const [dnsRecords, setDnsRecords] = useState<DnsRecord[]>(domain.dnsRecords);
   const [nameservers, setNameservers] = useState<string[]>(domain.nameservers);
-
-  const [isDnsDialogOpen, setIsDnsDialogOpen] = useState(false);
-  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
-  const [dnsForm, setDnsForm] = useState(emptyDnsForm);
-  const [isDnsSubmitting, setIsDnsSubmitting] = useState(false);
-  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
 
   const [isNsDialogOpen, setIsNsDialogOpen] = useState(false);
   const [nsForm, setNsForm] = useState<string[]>(["", ""]);
   const [isNsSubmitting, setIsNsSubmitting] = useState(false);
-
-  const openAddDnsDialog = () => {
-    setEditingRecordId(null);
-    setDnsForm(emptyDnsForm);
-    setIsDnsDialogOpen(true);
-  };
-
-  const openEditDnsDialog = (record: DnsRecord) => {
-    setEditingRecordId(record.id);
-    setDnsForm({
-      type: record.type as DnsRecordType,
-      name: record.name,
-      value: record.value,
-      ttl: String(record.ttl),
-      priority: record.priority != null ? String(record.priority) : "10",
-    });
-    setIsDnsDialogOpen(true);
-  };
-
-  const handleDnsSubmit = async () => {
-    if (isDnsSubmitting) return;
-
-    if (!isDnsRecordType(dnsForm.type)) {
-      toast.error("Geçersiz DNS kayıt tipi");
-      return;
-    }
-
-    const ttl = Number.parseInt(dnsForm.ttl, 10);
-    const priority =
-      dnsForm.type === "MX" || dnsForm.type === "SRV"
-        ? Number.parseInt(dnsForm.priority, 10)
-        : undefined;
-
-    const payload = {
-      type: dnsForm.type,
-      name: dnsForm.name.trim(),
-      value: dnsForm.value.trim(),
-      ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : 3600,
-      priority: Number.isFinite(priority) ? priority : undefined,
-    };
-
-    setIsDnsSubmitting(true);
-
-    const result = editingRecordId
-      ? await updateDnsRecord(domain.id, editingRecordId, payload)
-      : await addDnsRecord(domain.id, payload);
-
-    if (!result.success) {
-      toast.error(result.error ?? "DNS kaydı kaydedilemedi");
-      setIsDnsSubmitting(false);
-      return;
-    }
-
-    toast.success(editingRecordId ? "DNS kaydı güncellendi" : "DNS kaydı eklendi");
-    setIsDnsDialogOpen(false);
-    setEditingRecordId(null);
-    setDnsForm(emptyDnsForm);
-    router.refresh();
-    setIsDnsSubmitting(false);
-  };
-
-  const handleDeleteDnsRecord = async (recordId: string) => {
-    const confirmed = window.confirm("Bu DNS kaydını silmek istediğinize emin misiniz?");
-    if (!confirmed) return;
-
-    setDeletingRecordId(recordId);
-    const result = await deleteDnsRecord(domain.id, recordId);
-
-    if (!result.success) {
-      toast.error(result.error ?? "DNS kaydı silinemedi");
-      setDeletingRecordId(null);
-      return;
-    }
-
-    setDnsRecords((prev) => prev.filter((record) => record.id !== recordId));
-    toast.success("DNS kaydı silindi");
-    router.refresh();
-    setDeletingRecordId(null);
-  };
 
   const openNsDialog = () => {
     const current = nameservers.length >= 2 ? nameservers : ["", ""];
@@ -245,8 +116,6 @@ export function DomainDetayContent({ domain, renewal }: DomainDetayContentProps)
     router.refresh();
     setIsNsSubmitting(false);
   };
-
-  const showPriorityField = dnsForm.type === "MX" || dnsForm.type === "SRV";
 
   const openInvoice =
     renewal?.status === "PENDING" && renewal.invoiceId && renewal.invoiceStatus && OPEN_INVOICE_STATUSES.has(renewal.invoiceStatus)
@@ -295,9 +164,8 @@ export function DomainDetayContent({ domain, renewal }: DomainDetayContentProps)
       : null;
 
   useEffect(() => {
-    setDnsRecords(domain.dnsRecords);
     setNameservers(domain.nameservers);
-  }, [domain.dnsRecords, domain.nameservers]);
+  }, [domain.nameservers]);
 
   const daysLeft = daysUntil(domain.expiresAt);
   const whoisHref = `/domain/whois?domain=${encodeURIComponent(domain.name)}`;
@@ -381,67 +249,10 @@ export function DomainDetayContent({ domain, renewal }: DomainDetayContentProps)
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
-          <SectionCard
-            id="dns-kayitlari"
-            title="DNS kayıtları"
-            description="Alan adı için tanımlı DNS kayıtları"
-            actions={
-              <button type="button" onClick={openAddDnsDialog} className={appButton({ size: "sm" })}>
-                <Plus aria-hidden />
-                Kayıt ekle
-              </button>
-            }
-            flush
-            className="scroll-mt-20"
-          >
-            {dnsRecords.length === 0 ? (
-              <EmptyState compact className="m-4" title="Henüz DNS kaydı yok" description="İlk kaydınızı ekleyerek başlayın." />
-            ) : (
-              <ul className="divide-y">
-                {dnsRecords.map((record) => (
-                  <li key={record.id} className="flex items-start gap-3 px-4 py-3 md:items-center md:px-5">
-                    <span className="mt-0.5 inline-flex h-6 min-w-[52px] shrink-0 items-center justify-center rounded border bg-muted/50 font-mono text-[11px] font-semibold md:mt-0">
-                      {record.type}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-mono text-[13px] font-medium">{record.name}</p>
-                      <p className="break-all font-mono text-xs text-muted-foreground">{record.value}</p>
-                      <p className="mt-1 text-xs text-muted-foreground md:hidden">
-                        TTL {record.ttl}
-                        {record.priority !== null ? ` · Öncelik ${record.priority}` : ""}
-                      </p>
-                    </div>
-                    <div className="hidden shrink-0 text-right font-mono text-[11px] text-muted-foreground md:block">
-                      {record.priority !== null ? <p>Öncelik {record.priority}</p> : null}
-                      <p>TTL {record.ttl}</p>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      <button
-                        type="button"
-                        aria-label={`${record.type} ${record.name} kaydını düzenle`}
-                        className={appButton({ variant: "ghost", size: "icon-sm" })}
-                        onClick={() => openEditDnsDialog(record)}
-                      >
-                        <Edit aria-hidden />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`${record.type} ${record.name} kaydını sil`}
-                        className={appButton({ variant: "ghost", size: "icon-sm", className: "text-red-600 dark:text-red-400" })}
-                        onClick={() => void handleDeleteDnsRecord(record.id)}
-                        disabled={deletingRecordId === record.id}
-                      >
-                        {deletingRecordId === record.id ? <Loader2 aria-hidden className="animate-spin" /> : <Trash2 aria-hidden />}
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SectionCard>
+          <DnsSection domain={{ id: domain.id, name: domain.name }} records={domain.dnsRecords} dns={dns} />
 
           <SectionCard
-            title="Nameserver"
+            title={dns.zone ? "Kayıt firmasındaki nameserver'lar" : "Nameserver"}
             description="Alan adı için tanımlı isim sunucuları"
             actions={
               <button type="button" onClick={openNsDialog} className={appButton({ variant: "outline", size: "sm" })}>
@@ -570,111 +381,6 @@ export function DomainDetayContent({ domain, renewal }: DomainDetayContentProps)
           </div>
         </div>
       </div>
-
-      <Dialog open={isDnsDialogOpen} onOpenChange={setIsDnsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingRecordId ? "DNS kaydını düzenle" : "DNS kaydı ekle"}</DialogTitle>
-            <DialogDescription>Kayıt tipini, adını ve değerini girin.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="dns-type">Kayıt tipi</Label>
-              <Select
-                value={dnsForm.type}
-                onValueChange={(value) =>
-                  setDnsForm((prev) => ({
-                    ...prev,
-                    type: value as DnsRecordType,
-                  }))
-                }
-              >
-                <SelectTrigger id="dns-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {allowedDnsTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="dns-name">Kayıt adı</Label>
-              <Input
-                id="dns-name"
-                placeholder="@, www, mail"
-                value={dnsForm.name}
-                onChange={(e) => setDnsForm((prev) => ({ ...prev, name: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="dns-value">Kayıt değeri</Label>
-              <Input
-                id="dns-value"
-                placeholder="192.0.2.1 veya hedef adres"
-                value={dnsForm.value}
-                onChange={(e) => setDnsForm((prev) => ({ ...prev, value: e.target.value }))}
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="dns-ttl">TTL (saniye)</Label>
-                <Input
-                  id="dns-ttl"
-                  type="number"
-                  min={60}
-                  value={dnsForm.ttl}
-                  onChange={(e) => setDnsForm((prev) => ({ ...prev, ttl: e.target.value }))}
-                />
-              </div>
-              {showPriorityField ? (
-                <div className="space-y-2">
-                  <Label htmlFor="dns-priority">Öncelik</Label>
-                  <Input
-                    id="dns-priority"
-                    type="number"
-                    min={0}
-                    value={dnsForm.priority}
-                    onChange={(e) =>
-                      setDnsForm((prev) => ({
-                        ...prev,
-                        priority: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <button
-              type="button"
-              className={appButton({ variant: "outline" })}
-              onClick={() => setIsDnsDialogOpen(false)}
-              disabled={isDnsSubmitting}
-            >
-              Vazgeç
-            </button>
-            <button
-              type="button"
-              className={appButton()}
-              onClick={() => void handleDnsSubmit()}
-              disabled={isDnsSubmitting || !dnsForm.name.trim() || !dnsForm.value.trim()}
-            >
-              {isDnsSubmitting ? <Loader2 aria-hidden className="animate-spin" /> : null}
-              {isDnsSubmitting ? "Kaydediliyor…" : editingRecordId ? "Güncelle" : "Ekle"}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={autoRenewTarget !== null} onOpenChange={(open) => (!open ? setAutoRenewTarget(null) : undefined)}>
         <DialogContent>

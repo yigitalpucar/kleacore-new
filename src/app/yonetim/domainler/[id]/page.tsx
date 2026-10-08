@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAdminDomainDetail } from "@/lib/dal/domains";
 import { toNumber } from "@/lib/money";
+import { getDnsDefaultProvider } from "@/lib/dns/settings";
+import { nameserversMatch } from "@/lib/dns/zones";
+import { listActiveInstances } from "@/lib/modules/instances";
 import { AdminDomainDetailContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +15,8 @@ export default async function AdminDomainDetailPage({ params }: { params: Promis
   const { id } = await params;
   const domain = await getAdminDomainDetail(id);
   if (!domain) notFound();
+  const [dnsProvider, dnsInstances] = await Promise.all([getDnsDefaultProvider(), listActiveInstances("dns")]);
+  const zone = domain.dnsZone;
 
   return (
     <AdminDomainDetailContent
@@ -46,6 +51,31 @@ export default async function AdminDomainDetailPage({ params }: { params: Promis
           ? { id: r.invoice.id, number: r.invoice.invoiceNumber, status: r.invoice.status, total: toNumber(r.invoice.totalAmount) }
           : null,
       }))}
+      dns={{
+        provider: dnsProvider,
+        hasDnsModule: dnsInstances.length > 0,
+        zone: zone
+          ? {
+              status: zone.status,
+              providerZoneId: zone.providerZoneId,
+              nameservers: zone.nameservers,
+              nameserversPointed: nameserversMatch(domain.nameservers, zone.nameservers),
+              instance: zone.moduleInstance?.label ?? null,
+              lastSyncedAt: zone.lastSyncedAt?.toISOString() ?? null,
+              lastError: zone.lastError,
+            }
+          : null,
+        records: domain.dnsRecords.map((r) => ({
+          id: r.id,
+          type: r.type,
+          name: r.name,
+          value: r.value,
+          ttl: r.ttl,
+          priority: r.priority,
+          proxied: r.proxied,
+          managedBy: r.managedBy,
+        })),
+      }}
       notices={domain.notices.map((n) => ({ id: n.id, kind: n.kind, sentAt: n.sentAt.toISOString() }))}
       events={domain.lifecycleEvents.map((e) => ({
         id: e.id,

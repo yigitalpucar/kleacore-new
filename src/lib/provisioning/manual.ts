@@ -294,6 +294,10 @@ export async function activateManualProvisioning(taskId: string, raw: ManualActi
       notes: input.notes,
     });
 
+    // VDS hostname under the customer's domain → A record (only when we manage its DNS).
+    const { queueServiceDnsSetup } = await import("@/lib/dns/activation");
+    await queueServiceDnsSetup(tx, updated, service.product.category.slug);
+
     return { serviceId: service.id, orderId: task.order.id, orderNumber: task.order.orderNumber };
   });
 }

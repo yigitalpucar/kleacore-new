@@ -196,6 +196,32 @@ export const hostingUsageSyncJob = defineJob({
   },
 });
 
+export const DNS_SERVICE_SETUP_JOB = "dns.service-setup";
+
+/**
+ * DNS for a freshly activated service (src/lib/dns/activation.ts): zone +
+ * @/www/mail A, MX, SPF for hosting; hostname A for VDS. Queued only when the
+ * domain's DNS is ours (DnsZone or dns_default_provider = cloudflare).
+ * Idempotent; 5 attempts, backoff ≈ 5, 10, 20, 40 min.
+ */
+export const dnsServiceSetupJob = defineJob({
+  name: DNS_SERVICE_SETUP_JOB,
+  label: "DNS kayıtları (hizmet aktivasyonu)",
+  schema: z.object({ serviceId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 4,
+    retryDelay: 5 * 60,
+    retryBackoff: true,
+    retryDelayMax: 6 * 60 * 60,
+    expireInSeconds: 5 * 60,
+  },
+  handler: async ({ serviceId }) => {
+    const { runServiceDnsSetup } = await import("@/lib/dns/activation");
+    return runServiceDnsSetup(serviceId);
+  },
+});
+
 const definitions = [
   provisioningRunJob,
   domainRenewJob,
@@ -204,6 +230,7 @@ const definitions = [
   notificationSendJob,
   serverReinstallJob,
   hostingUsageSyncJob,
+  dnsServiceSetupJob,
 ] as const;
 
 export type RegisteredJob = (typeof definitions)[number];

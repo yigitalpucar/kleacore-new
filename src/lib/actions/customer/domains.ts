@@ -8,16 +8,7 @@ import {
 } from "@/lib/integrations/registrar";
 import { revalidatePath } from "next/cache";
 import type { DnsRecordType } from "@prisma/client";
-
-const ALLOWED_DNS_TYPES: DnsRecordType[] = [
-  "A",
-  "AAAA",
-  "CNAME",
-  "MX",
-  "TXT",
-  "NS",
-  "SRV",
-];
+import { validateDnsRecord, type ValidDnsRecord } from "@/lib/dns/validation";
 
 export interface DnsRecordInput {
   type: DnsRecordType;
@@ -25,60 +16,31 @@ export interface DnsRecordInput {
   value: string;
   ttl?: number;
   priority?: number;
+  /** Cloudflare zones only (A/AAAA/CNAME). */
+  proxied?: boolean;
 }
 
-function isValidDnsRecordType(type: string): type is DnsRecordType {
-  return ALLOWED_DNS_TYPES.includes(type as DnsRecordType);
+/** Type-specific validation (src/lib/dns/validation.ts); names are stored relative ("@", "www"). */
+function normalizeDnsRecordInput(record: DnsRecordInput, zone: string, provider: "cloudflare" | "registrar") {
+  const result = validateDnsRecord(record, zone, { provider });
+  if (!result.ok) return { error: result.error };
+  return { record: result.record };
 }
 
-function normalizeDnsRecordInput(record: DnsRecordInput) {
-  const type = record.type.toString().toUpperCase();
-
-  if (!isValidDnsRecordType(type)) {
-    return { error: "Geçersiz DNS kayıt tipi" as const };
-  }
-
-  const name = record.name.trim();
-  const value = record.value.trim();
-
-  if (!name) {
-    return { error: "Kayıt adı zorunludur" as const };
-  }
-
-  if (!value) {
-    return { error: "Kayıt değeri zorunludur" as const };
-  }
-
-  const ttl = record.ttl ?? 3600;
-  if (!Number.isFinite(ttl) || ttl <= 0) {
-    return { error: "TTL değeri geçersiz" as const };
-  }
-
-  let priority: number | null = null;
-  if (type === "MX" || type === "SRV") {
-    if (record.priority == null || !Number.isFinite(record.priority)) {
-      return { error: "MX ve SRV kayıtları için öncelik zorunludur" as const };
-    }
-    priority = record.priority;
-  } else if (record.priority != null && Number.isFinite(record.priority)) {
-    priority = record.priority;
-  }
-
+function legacyRecordData(record: ValidDnsRecord) {
   return {
-    data: {
-      type: type as DnsRecordType,
-      name,
-      value,
-      ttl,
-      priority,
-    },
+    type: record.type as DnsRecordType,
+    name: record.name,
+    value: record.value,
+    ttl: record.ttl,
+    priority: record.priority,
   };
 }
 
 async function getOwnedDomain(domainId: string, customerId: string) {
   const domain = await db.domain.findUnique({
     where: { id: domainId },
-    include: { dnsRecords: true },
+    include: { dnsRecords: true, dnsZone: true },
   });
 
   if (!domain) {
@@ -121,20 +83,27 @@ export async function addDnsRecord(domainId: string, record: DnsRecordInput) {
   const session = await requireCustomer();
 
   try {
-    const normalized = normalizeDnsRecordInput(record);
-    if ("error" in normalized) {
-      return { success: false, error: normalized.error };
-    }
-
     const owned = await getOwnedDomain(domainId, session.user.id);
     if ("error" in owned) {
       return { success: false, error: owned.error };
     }
 
+    const normalized = normalizeDnsRecordInput(record, owned.domain.name, owned.domain.dnsZone ? "cloudflare" : "registrar");
+    if ("error" in normalized) {
+      return { success: false, error: normalized.error };
+    }
+
+    if (owned.domain.dnsZone) {
+      const { saveZoneRecord } = await import("@/lib/dns/zones");
+      const saved = await saveZoneRecord(domainId, normalized.record);
+      revalidateDomainPaths(domainId);
+      return saved.ok ? { success: true, recordId: saved.data.recordId } : { success: false, error: saved.error };
+    }
+
     const created = await db.dnsRecord.create({
       data: {
         domainId,
-        ...normalized.data,
+        ...legacyRecordData(normalized.record),
       },
     });
 
@@ -155,14 +124,21 @@ export async function updateDnsRecord(
   const session = await requireCustomer();
 
   try {
-    const normalized = normalizeDnsRecordInput(record);
+    const owned = await getOwnedDomain(domainId, session.user.id);
+    if ("error" in owned) {
+      return { success: false, error: owned.error };
+    }
+
+    const normalized = normalizeDnsRecordInput(record, owned.domain.name, owned.domain.dnsZone ? "cloudflare" : "registrar");
     if ("error" in normalized) {
       return { success: false, error: normalized.error };
     }
 
-    const owned = await getOwnedDomain(domainId, session.user.id);
-    if ("error" in owned) {
-      return { success: false, error: owned.error };
+    if (owned.domain.dnsZone) {
+      const { saveZoneRecord } = await import("@/lib/dns/zones");
+      const saved = await saveZoneRecord(domainId, normalized.record, { recordId });
+      revalidateDomainPaths(domainId);
+      return saved.ok ? { success: true } : { success: false, error: saved.error };
     }
 
     const existing = await db.dnsRecord.findFirst({
@@ -175,7 +151,7 @@ export async function updateDnsRecord(
 
     await db.dnsRecord.update({
       where: { id: recordId },
-      data: normalized.data,
+      data: legacyRecordData(normalized.record),
     });
 
     const registrar = await syncDnsRecordsToRegistrar(owned.domain);
@@ -194,6 +170,13 @@ export async function deleteDnsRecord(domainId: string, recordId: string) {
     const owned = await getOwnedDomain(domainId, session.user.id);
     if ("error" in owned) {
       return { success: false, error: owned.error };
+    }
+
+    if (owned.domain.dnsZone) {
+      const { deleteZoneRecord } = await import("@/lib/dns/zones");
+      const deleted = await deleteZoneRecord(domainId, recordId);
+      revalidateDomainPaths(domainId);
+      return deleted.ok ? { success: true } : { success: false, error: deleted.error };
     }
 
     const existing = await db.dnsRecord.findFirst({
@@ -233,13 +216,17 @@ export async function updateDnsRecords(
       return { success: false, error: "Geçersiz DNS kayıt formatı" };
     }
 
+    if (owned.domain.dnsZone) {
+      return { success: false, error: "Cloudflare DNS bölgesindeki kayıtları tek tek düzenleyin" };
+    }
+
     const normalizedRecords = [];
     for (const record of records) {
-      const normalized = normalizeDnsRecordInput(record);
+      const normalized = normalizeDnsRecordInput(record, owned.domain.name, "registrar");
       if ("error" in normalized) {
         return { success: false, error: normalized.error };
       }
-      normalizedRecords.push(normalized.data);
+      normalizedRecords.push(legacyRecordData(normalized.record));
     }
 
     await db.$transaction([
@@ -326,5 +313,110 @@ export async function requestDomainRenewal(domainId: string) {
   } catch (error) {
     console.error("[Domains] Yenileme faturası oluşturulamadı:", error);
     return { success: false as const, error: "Yenileme faturası oluşturulamadı" };
+  }
+}
+
+/**
+ * "DNS'i Cloudflare'de yönet": creates the domain's zone in our Cloudflare
+ * account (existing records are copied). Only offered while
+ * dns_default_provider = "cloudflare" (owner decision #6).
+ */
+export async function enableCloudflareDns(domainId: string) {
+  const session = await requireCustomer();
+
+  try {
+    const owned = await getOwnedDomain(domainId, session.user.id);
+    if ("error" in owned) return { success: false as const, error: owned.error };
+    if (!owned.domain.dnsZone) {
+      const { getDnsDefaultProvider } = await import("@/lib/dns/settings");
+      if ((await getDnsDefaultProvider()) !== "cloudflare") {
+        return { success: false as const, error: "Cloudflare DNS yönetimi şu anda kullanıma açık değil" };
+      }
+    }
+
+    const { ensureDomainZone } = await import("@/lib/dns/zones");
+    const result = await ensureDomainZone(domainId);
+    revalidateDomainPaths(domainId);
+    if (!result.ok) return { success: false as const, error: result.error };
+    return {
+      success: true as const,
+      nameservers: result.data.zone.nameservers,
+      importErrors: result.data.importErrors,
+    };
+  } catch (error) {
+    console.error("[Domains] Cloudflare DNS bölgesi oluşturulamadı:", error);
+    return { success: false as const, error: "DNS bölgesi oluşturulamadı" };
+  }
+}
+
+/** "Yenile": re-reads the zone's records from Cloudflare. */
+export async function refreshDnsZone(domainId: string) {
+  const session = await requireCustomer();
+
+  try {
+    const owned = await getOwnedDomain(domainId, session.user.id);
+    if ("error" in owned) return { success: false as const, error: owned.error };
+    if (!owned.domain.dnsZone) return { success: false as const, error: "Bu alan adı için DNS bölgesi yok" };
+    const { syncZoneMirror } = await import("@/lib/dns/zones");
+    const result = await syncZoneMirror(domainId);
+    revalidateDomainPaths(domainId);
+    return result.ok ? { success: true as const } : { success: false as const, error: result.error };
+  } catch (error) {
+    console.error("[Domains] DNS kayıtları yenilenemedi:", error);
+    return { success: false as const, error: "DNS kayıtları yenilenemedi" };
+  }
+}
+
+/**
+ * "Nameserver'ları Cloudflare'e çevir": for domains registered through us
+ * (Gri), sets the registrar nameservers to the zone's assigned ones.
+ */
+export async function switchNameserversToCloudflare(domainId: string) {
+  const session = await requireCustomer();
+
+  try {
+    const owned = await getOwnedDomain(domainId, session.user.id);
+    if ("error" in owned) return { success: false as const, error: owned.error };
+    const { isRegisteredThroughUs, nameserversMatch } = await import("@/lib/dns/zones");
+    const zone = owned.domain.dnsZone;
+    if (!zone || zone.nameservers.length < 2) {
+      return { success: false as const, error: "Önce DNS bölgesini oluşturun" };
+    }
+    if (!isRegisteredThroughUs(owned.domain.registrar)) {
+      return { success: false as const, error: "Bu alan adı başka bir kayıt firmasında; nameserver'ları oradan değiştirin" };
+    }
+    if (owned.domain.status !== "ACTIVE") {
+      return { success: false as const, error: "Yalnızca aktif alan adlarının nameserver'ları değiştirilebilir" };
+    }
+    if (nameserversMatch(owned.domain.nameservers, zone.nameservers)) {
+      return { success: true as const, unchanged: true };
+    }
+
+    const registrar = await updateRegistrarNameservers({ domain: owned.domain.name, nameservers: zone.nameservers });
+    if (!registrar.ok || registrar.skipped) {
+      return {
+        success: false as const,
+        error: registrar.skipped
+          ? "Kayıt firması entegrasyonu etkin değil; destek talebi açın"
+          : `Kayıt firması nameserver değişikliğini kabul etmedi${registrar.error ? `: ${registrar.error}` : ""}`,
+      };
+    }
+
+    await db.$transaction([
+      db.domain.update({ where: { id: domainId }, data: { nameservers: zone.nameservers } }),
+      db.domainLifecycleEvent.create({
+        data: {
+          domainId,
+          type: "nameservers.cloudflare",
+          message: `Nameserver'lar Cloudflare'e çevrildi: ${zone.nameservers.join(", ")}`,
+          actorId: session.user.id,
+        },
+      }),
+    ]);
+    revalidateDomainPaths(domainId);
+    return { success: true as const, unchanged: false };
+  } catch (error) {
+    console.error("[Domains] Nameserver'lar Cloudflare'e çevrilemedi:", error);
+    return { success: false as const, error: "Nameserver'lar değiştirilemedi" };
   }
 }

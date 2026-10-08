@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   abandonModuleProvisioning: vi.fn(),
   unsuspendRemoteService: vi.fn(),
   changeRemoteServicePlan: vi.fn(),
+  queueServiceDnsSetup: vi.fn(),
+  queueServiceActivatedNotice: vi.fn(),
   queueProvisioningAttempt: vi.fn(),
   dismissFailedQueueEntries: vi.fn(),
   db: {
@@ -15,7 +17,7 @@ const mocks = vi.hoisted(() => ({
       updateMany: vi.fn(),
       create: vi.fn(),
     },
-    service: { findUnique: vi.fn() },
+    service: { findUnique: vi.fn(), update: vi.fn() },
   },
 }));
 
@@ -31,10 +33,11 @@ vi.mock("@/lib/integrations/provisioning-provider", () => ({
 }));
 vi.mock("@/lib/modules/provisioning", () => ({ abandonModuleProvisioning: mocks.abandonModuleProvisioning }));
 vi.mock("@/lib/integrations/ssl", () => ({ mapProductSubTypeToSslType: vi.fn(), provisionSslCertificate: vi.fn() }));
-const notice = vi.hoisted(() => ({ queueServiceActivatedNotice: vi.fn() }));
+vi.mock("@/lib/dns/activation", () => ({ queueServiceDnsSetup: mocks.queueServiceDnsSetup }));
+const notice = { queueServiceActivatedNotice: mocks.queueServiceActivatedNotice };
 vi.mock("@/lib/provisioning/activation-notice", () => ({
   activationKindForCategory: (slug: string) => (slug === "hosting" ? "hosting" : "other"),
-  queueServiceActivatedNotice: notice.queueServiceActivatedNotice,
+  queueServiceActivatedNotice: mocks.queueServiceActivatedNotice,
 }));
 
 import {
@@ -125,6 +128,50 @@ describe("runQueuedProvisioningJob — paid order work moved out of the payment 
     mocks.db.provisioningJob.updateMany.mockResolvedValue({ count: 1 });
     mocks.db.provisioningJob.update.mockResolvedValue({});
     mocks.changeRemoteServicePlan.mockReset();
+  });
+
+  it("queues the DNS setup after a hosting account was created", async () => {
+    const hostingService = { id: "svc-9", status: "ACTIVE", customerId: "c1", domain: "ornek.com.tr", serverName: null, ipAddress: null };
+    mocks.db.provisioningJob.findUnique.mockResolvedValue({
+      ...unsuspendJob,
+      id: "pj-9",
+      kind: "PROVISION",
+      serviceId: "svc-9",
+      lastError: null,
+      order: { id: "ord-9", serviceId: "svc-9", customer: {}, items: [], product: { category: { slug: "hosting" } } },
+    });
+    mocks.db.service.findUnique.mockResolvedValue(hostingService);
+    mocks.db.service.update.mockResolvedValue(hostingService);
+    mocks.createRemoteService.mockResolvedValue({ ok: true, reference: "ornekcom" });
+
+    await expect(runQueuedProvisioningJob("pj-9", ctx(0))).resolves.toMatchObject({ ok: true });
+    expect(mocks.queueServiceActivatedNotice).toHaveBeenCalled();
+    expect(mocks.queueServiceDnsSetup).toHaveBeenCalledWith(undefined, hostingService, "hosting");
+  });
+
+  it("queues the DNS setup once after a module-bound VDS was created, with the IP the module wrote", async () => {
+    const before = { id: "svc-8", status: "ACTIVE", customerId: "c1", domain: "vds.ornek.com.tr", serverName: null, ipAddress: null, moduleInstanceId: "mi-pve" };
+    const after = { ...before, serverName: "101", remoteId: "101", ipAddress: "203.0.113.20", product: {} };
+    mocks.db.provisioningJob.findUnique.mockResolvedValue({
+      ...unsuspendJob,
+      id: "pj-8",
+      kind: "PROVISION",
+      serviceId: "svc-8",
+      lastError: null,
+      order: { id: "ord-8", serviceId: "svc-8", customer: {}, items: [], product: { category: { slug: "vds" } } },
+    });
+    mocks.db.service.findUnique.mockReset().mockResolvedValueOnce(before).mockResolvedValue(after);
+    mocks.db.service.update.mockResolvedValue(after);
+    mocks.queueServiceDnsSetup.mockReset();
+    mocks.createRemoteService.mockResolvedValue({ ok: true, provider: "proxmox", reference: "101" });
+
+    await expect(runQueuedProvisioningJob("pj-8", ctx(0))).resolves.toMatchObject({ ok: true });
+    expect(mocks.queueServiceDnsSetup).toHaveBeenCalledTimes(1);
+    expect(mocks.queueServiceDnsSetup).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ id: "svc-8", ipAddress: "203.0.113.20", domain: "vds.ornek.com.tr" }),
+      "vds"
+    );
   });
 
   it("pushes a paid plan change to WHM with the service's new package", async () => {

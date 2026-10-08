@@ -8,6 +8,7 @@ import { cpanelWhmModule } from "./server/cpanel-whm";
 import { virtualizorModule } from "./server/virtualizor";
 import { proxmoxModule } from "./server/proxmox";
 import { griModule } from "./registrar/gri";
+import { cloudflareModule } from "./dns/cloudflare";
 import { iyzicoModule, kuveytTurkModule, paytrModule, stripeModule } from "./payment";
 import { parasutModule, uyumsoftModule } from "./einvoice";
 import { iletiMerkeziModule, netgsmModule } from "./sms";
@@ -20,6 +21,7 @@ export const MODULE_MANIFESTS: readonly AnyModuleManifest[] = [
   // registrar
   griModule,
   // dns
+  cloudflareModule,
   // payment (settings-backed)
   kuveytTurkModule,
   paytrModule,

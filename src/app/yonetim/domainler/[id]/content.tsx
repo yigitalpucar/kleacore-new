@@ -27,6 +27,7 @@ import { daysUntil, formatDate, formatDateTime } from "@/lib/format/date";
 import { formatTRY } from "@/lib/format/price";
 import { renewDomainAtRegistrar, syncDomainNow } from "@/lib/actions/admin/domains";
 import { toast } from "@/lib/toast";
+import { AdminDnsCard, type AdminDnsRecord, type AdminDnsZoneInfo } from "./dns-card";
 
 interface DomainInfo {
   id: string;
@@ -57,6 +58,12 @@ interface RenewalRow {
 
 interface Props {
   domain: DomainInfo;
+  dns: {
+    provider: "registrar" | "cloudflare";
+    hasDnsModule: boolean;
+    zone: AdminDnsZoneInfo | null;
+    records: AdminDnsRecord[];
+  };
   renewals: RenewalRow[];
   notices: Array<{ id: string; kind: string; sentAt: string }>;
   events: Array<{ id: string; type: string; message: string; createdAt: string; actorId: string | null }>;
@@ -80,7 +87,7 @@ function eventTone(type: string) {
   return "neutral" as const;
 }
 
-export function AdminDomainDetailContent({ domain, renewals, notices, events }: Props) {
+export function AdminDomainDetailContent({ domain, dns, renewals, notices, events }: Props) {
   const router = useRouter();
   const [confirmRenew, setConfirmRenew] = useState(false);
   const [busy, setBusy] = useState<"renew" | "sync" | null>(null);
@@ -158,6 +165,14 @@ export function AdminDomainDetailContent({ domain, renewals, notices, events }: 
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
+          <AdminDnsCard
+            domain={{ id: domain.id, name: domain.name }}
+            zone={dns.zone}
+            records={dns.records}
+            provider={dns.provider}
+            hasDnsModule={dns.hasDnsModule}
+          />
+
           <SectionCard title="Yenilemeler" description="Dönem başına yenileme faturası ve registrar durumu" flush>
             {renewals.length === 0 ? (
               <EmptyState compact className="m-4" title="Henüz yenileme yok" />

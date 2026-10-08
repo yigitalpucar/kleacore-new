@@ -265,6 +265,9 @@ async function retryServiceProvisioning(
       ...(bound && kind === "server" ? { passwordDelivery: "panel" as const } : {}),
       ...(password ? { password, passwordDelivery: "included" as const } : {}),
     });
+    // Zone + A/MX/SPF records when the domain's DNS is ours (no-op in registrar mode).
+    const { queueServiceDnsSetup } = await import("@/lib/dns/activation");
+    if (fresh) await queueServiceDnsSetup(undefined, fresh, order.product.category.slug);
   }
 
   if (provisioning.ok || provisioning.skipped) {
