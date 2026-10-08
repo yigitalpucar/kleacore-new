@@ -10,6 +10,7 @@ import {
 } from "@/lib/validations/customer";
 import { compare, hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
+import { sendNotification } from "@/lib/notifications/send";
 
 export async function updateProfile(formData: FormData) {
   const session = await requireCustomer();
@@ -96,6 +97,12 @@ export async function changePassword(formData: FormData) {
     await db.user.update({
       where: { id: session.user.id },
       data: { password: hashedPassword, sessionVersion: { increment: 1 } },
+    });
+
+    await sendNotification({
+      userId: session.user.id,
+      template: "auth.password-changed",
+      data: { changedAt: new Date(), method: "profile" },
     });
 
     // Re-issue the current session so the user who just changed the password

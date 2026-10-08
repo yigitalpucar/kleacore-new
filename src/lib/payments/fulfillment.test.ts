@@ -13,11 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/affiliate", () => ({ applyAffiliateCommission: mocks.applyAffiliateCommission }));
 vi.mock("@/lib/events/dispatcher", () => ({ dispatchEvents: mocks.dispatchEvents }));
-vi.mock("@/lib/notifications/email", () => ({
-  loadCustomerRecipient: vi.fn(),
-  sendPaymentReceivedEmail: vi.fn(),
-}));
-vi.mock("@/lib/notifications/sms", () => ({ sendSmsNotification: vi.fn() }));
+vi.mock("@/lib/notifications/send", () => ({ sendNotification: vi.fn() }));
 vi.mock("@/lib/integrations/efatura", () => ({ queueEInvoiceDraft: mocks.queueEInvoiceDraft }));
 vi.mock("@/lib/payments/renewal-fulfillment", () => ({
   applyServiceRenewalFromOrder: mocks.applyServiceRenewalFromOrder,

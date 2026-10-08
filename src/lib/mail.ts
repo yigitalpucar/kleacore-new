@@ -1,17 +1,29 @@
 import nodemailer from "nodemailer";
 import { db } from "@/lib/db";
+import { resolveSettingValue } from "@/lib/secrets/crypto";
+
+interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+  /** Content-ID for inline images (`<img src="cid:...">`). */
+  cid?: string;
+}
 
 interface MailInput {
   to: string | string[];
   subject: string;
   text: string;
   html?: string;
+  attachments?: MailAttachment[];
 }
 
-interface MailResult {
+export interface MailResult {
   sent: boolean;
   skipped?: boolean;
   reason?: string;
+  /** SMTP Message-ID of the accepted message. */
+  messageId?: string;
 }
 
 function env(name: string) {
@@ -35,7 +47,8 @@ async function getSettingMap() {
     select: { key: true, value: true },
   });
 
-  return new Map(settings.map((setting) => [setting.key, setting.value]));
+  // smtp_password is stored encrypted (SECRET_SETTING_KEYS); decrypt it here.
+  return new Map(settings.map((setting) => [setting.key, resolveSettingValue(setting.key, setting.value)]));
 }
 
 export async function sendTransactionalEmail(input: MailInput): Promise<MailResult> {
@@ -57,7 +70,9 @@ export async function sendTransactionalEmail(input: MailInput): Promise<MailResu
     env("EMAIL_FROM") ||
     "noreply@kleacore.com";
 
-  if (!host || !user || !pass) {
+  // Credentials are optional: a relay or a local catcher (Mailpit) accepts
+  // unauthenticated mail. A username without a password is a misconfiguration.
+  if (!host || (user && !pass)) {
     if (process.env.NODE_ENV !== "production") {
       console.info(`[Mail][DEV_FALLBACK] ${input.subject} -> ${input.to}`);
       console.info(input.text);
@@ -69,18 +84,19 @@ export async function sendTransactionalEmail(input: MailInput): Promise<MailResu
     host,
     port,
     secure: port === 465,
-    auth: { user, pass },
+    ...(user ? { auth: { user, pass } } : {}),
   });
 
-  await transporter.sendMail({
+  const info = await transporter.sendMail({
     from,
     to: input.to,
     subject: input.subject,
     text: input.text,
     html: input.html,
+    attachments: input.attachments,
   });
 
-  return { sent: true };
+  return { sent: true, messageId: info.messageId };
 }
 
 export function plainTextToHtml(text: string) {

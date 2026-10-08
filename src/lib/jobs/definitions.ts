@@ -33,7 +33,32 @@ export const provisioningRunJob = defineJob({
   },
 });
 
-const definitions = [provisioningRunJob] as const;
+export const NOTIFICATION_SEND_JOB = "notification.send";
+
+/**
+ * Delivers one NotificationLog row (one channel, one recipient) written by
+ * sendNotification(). The row is the admin-visible record (/yonetim/bildirimler);
+ * 5 attempts, backoff ≈ 1, 2, 4, 8 min (SMTP hiccups, provider timeouts).
+ */
+export const notificationSendJob = defineJob({
+  name: NOTIFICATION_SEND_JOB,
+  label: "Bildirim gönderimi (e-posta / SMS)",
+  schema: z.object({ notificationLogId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 4,
+    retryDelay: 60,
+    retryBackoff: true,
+    retryDelayMax: 60 * 60,
+    expireInSeconds: 2 * 60,
+  },
+  handler: async ({ notificationLogId }, context) => {
+    const { deliverNotificationLog } = await import("@/lib/notifications/deliver");
+    return deliverNotificationLog(notificationLogId, context);
+  },
+});
+
+const definitions = [provisioningRunJob, notificationSendJob] as const;
 
 export type RegisteredJob = (typeof definitions)[number];
 export type JobName = RegisteredJob["name"];

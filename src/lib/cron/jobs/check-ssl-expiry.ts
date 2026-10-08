@@ -1,9 +1,9 @@
 import { db } from "@/lib/db";
-import { sendTransactionalEmail } from "@/lib/mail";
-import { dispatchSmsNotification, sendSmsNotification } from "@/lib/notifications/sms";
+import { sendNotification } from "@/lib/notifications/send";
 import type { CronJobResult } from "./types";
 
 const WARNING_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function addDays(date: Date, days: number) {
   const next = new Date(date);
@@ -11,42 +11,35 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("tr-TR").format(date);
+/** Notice buckets: one mail per certificate at 30, 7 and 1 days left and once when expired. */
+export function sslNoticeBucket(expiresAt: Date, now: Date): "expired" | "1" | "7" | "30" | null {
+  const daysLeft = Math.ceil((expiresAt.getTime() - now.getTime()) / DAY_MS);
+  if (daysLeft <= 0) return "expired";
+  if (daysLeft <= 1) return "1";
+  if (daysLeft <= 7) return "7";
+  if (daysLeft <= WARNING_DAYS) return "30";
+  return null;
 }
 
 async function notifySslExpiry(input: {
+  certificateId: string;
   customerId: string;
-  email: string;
-  fullName: string;
   domain: string;
   expiresAt: Date;
   expired: boolean;
+  now: Date;
 }) {
-  const subject = input.expired
-    ? `SSL Sertifikanızın Süresi Doldu: ${input.domain}`
-    : `SSL Sertifikanız Yakında Sona Eriyor: ${input.domain}`;
+  const bucket = input.expired ? "expired" : sslNoticeBucket(input.expiresAt, input.now);
+  if (!bucket) return;
 
-  const text = input.expired
-    ? `Merhaba ${input.fullName},\n\n${input.domain} alan adı için SSL sertifikanızın süresi ${formatDate(input.expiresAt)} tarihinde doldu. Lütfen yenileme işlemini başlatın.`
-    : `Merhaba ${input.fullName},\n\n${input.domain} alan adı için SSL sertifikanız ${formatDate(input.expiresAt)} tarihinde sona erecek. Lütfen yenileme işlemini planlayın.`;
-
-  await sendTransactionalEmail({
-    to: input.email,
-    subject,
-    text,
-    html: `<p>${text.replace(/\n/g, "<br />")}</p>`,
+  // Once per certificate and bucket (the cron runs daily; it used to mail
+  // every day for 30 days).
+  await sendNotification({
+    userId: input.customerId,
+    template: "ssl.expiry-notice",
+    data: { domain: input.domain, expiresAt: input.expiresAt, expired: input.expired },
+    dedupeKey: `ssl.expiry:${input.certificateId}:${bucket}:${input.expiresAt.toISOString().slice(0, 10)}`,
   });
-
-  dispatchSmsNotification(() =>
-    sendSmsNotification({
-      customerId: input.customerId,
-      message: input.expired
-        ? `SSL sertifikanızın süresi doldu: ${input.domain}`
-        : `SSL sertifikanız yakında sona eriyor: ${input.domain} (${formatDate(input.expiresAt)})`,
-      template: "custom",
-    })
-  );
 }
 
 export async function checkSslExpiry(): Promise<CronJobResult> {
@@ -79,14 +72,13 @@ export async function checkSslExpiry(): Promise<CronJobResult> {
 
     for (const cert of expired) {
       processedIds.push(cert.id);
-      const fullName = `${cert.customer.name ?? ""} ${cert.customer.surname ?? ""}`.trim();
       await notifySslExpiry({
+        certificateId: cert.id,
         customerId: cert.customer.id,
-        email: cert.customer.email,
-        fullName: fullName || "Müşteri",
         domain: cert.domain,
         expiresAt: cert.expiresAt ?? now,
         expired: true,
+        now,
       });
     }
   }
@@ -117,14 +109,13 @@ export async function checkSslExpiry(): Promise<CronJobResult> {
     }
 
     processedIds.push(cert.id);
-    const fullName = `${cert.customer.name ?? ""} ${cert.customer.surname ?? ""}`.trim();
     await notifySslExpiry({
+      certificateId: cert.id,
       customerId: cert.customer.id,
-      email: cert.customer.email,
-      fullName: fullName || "Müşteri",
       domain: cert.domain,
       expiresAt: cert.expiresAt,
       expired: false,
+      now,
     });
   }
 

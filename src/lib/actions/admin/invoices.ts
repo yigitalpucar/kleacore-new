@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { generateInvoiceNumber } from "@/lib/utils/number-generators";
-import { plainTextToHtml, sendTransactionalEmail } from "@/lib/mail";
+import { sendNotification } from "@/lib/notifications/send";
 import {
   dispatchNotification,
   loadCustomerRecipient,
@@ -17,7 +17,7 @@ import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import { createLogger } from "@/lib/logger";
 import { calculateInvoiceTotals } from "@/lib/billing/invoice-totals";
-import { money, toNumber } from "@/lib/money";
+import { max as maxMoney, money, toNumber } from "@/lib/money";
 
 const log = createLogger("admin.invoices");
 
@@ -41,12 +41,6 @@ interface InvoiceInput {
   notes?: string;
   items: InvoiceItemInput[];
 }
-
-const invoiceCurrencyFormatter = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 2,
-});
 
 export async function createInvoice(data: InvoiceInput) {
   await requireAdmin();
@@ -363,38 +357,18 @@ export async function sendInvoiceReceipt(id: string) {
       return { success: false, error: "Makbuz sadece ödenmiş faturalar için gönderilebilir" };
     }
 
-    const fullName = `${invoice.customer.name} ${invoice.customer.surname}`.trim();
-    const paidAtLabel = new Intl.DateTimeFormat("tr-TR").format(
-      invoice.paidAt ?? invoice.updatedAt
-    );
-    const paidAmount = Math.max(Number(invoice.paidAmount), Number(invoice.totalAmount));
-    const amountLabel = invoiceCurrencyFormatter.format(paidAmount);
-
-    const content = [
-      fullName ? `Merhaba ${fullName},` : "Merhaba,",
-      "",
-      `${invoice.invoiceNumber} numaralı faturanızın ödemesi başarıyla alınmıştır.`,
-      `Ödeme tarihi: ${paidAtLabel}`,
-      `Ödenen tutar: ${amountLabel}`,
-      "",
-      "Bu mesaj ödeme makbuzu niteliğindedir.",
-    ].join("\n");
-
-    await db.emailMessage.create({
+    // Manual "makbuz gönder": explicit resend, so no dedupe key.
+    await sendNotification({
+      userId: invoice.customer.id,
+      template: "billing.payment-received",
       data: {
-        customerId: invoice.customer.id,
-        subject: `Ödeme Makbuzu: ${invoice.invoiceNumber}`,
-        preview: `${invoice.invoiceNumber} numaralı faturanıza ait ödeme makbuzu`,
-        content,
-        category: "BILLING",
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        paidAmount: toNumber(maxMoney(invoice.paidAmount, invoice.totalAmount)),
+        paidAt: invoice.paidAt ?? invoice.updatedAt,
+        receipt: true,
       },
-    });
-
-    await sendTransactionalEmail({
-      to: invoice.customer.email,
-      subject: `Ödeme Makbuzu: ${invoice.invoiceNumber}`,
-      text: content,
-      html: plainTextToHtml(content),
+      channel: "EMAIL",
     });
 
     revalidatePath("/yonetim/faturalar");

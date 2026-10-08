@@ -64,6 +64,8 @@ enum OrderStatus {
 }
 
 enum ServiceStatus {
+  // Paid, waiting for manual provisioning (admin task) — "Kurulum sürüyor"
+  PENDING
   ACTIVE
   SUSPENDED
   CANCELLED
@@ -86,6 +88,21 @@ enum ProvisioningJobStatus {
 enum ProvisioningJobKind {
   PROVISION
   UNSUSPEND
+  // No automation module (VDS in Faz 1, unconfigured panels): admin task
+  MANUAL
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+enum NotificationLogStatus {
+  QUEUED
+  SENT
+  FAILED
+  // Not attempted: channel disabled / not configured, no phone number
+  SKIPPED
 }
 
 enum PlanChangeType {
@@ -350,6 +367,7 @@ model User {
   emailAccounts        EmailAccount[]
   cancellationRequests CancellationRequest[]
   planChanges          ServicePlanChange[]
+  notificationLogs     NotificationLog[]
 
   // Affiliate relations
   affiliateReferrals AffiliateReferral[] @relation("AffiliateReferrals")
@@ -725,7 +743,13 @@ model ProvisioningJob {
   updatedAt   DateTime              @updatedAt
   completedAt DateTime?
 
+  // MANUAL jobs: delivery details entered by the admin on activation.
+  // Sensitive values (initial password) are stored encrypted (enc:v1:...).
+  deliveryDetails Json?
+  completedBy     String?
+
   @@index([status, nextRetryAt])
+  @@index([kind, status])
   @@map("provisioning_jobs")
 }
 
@@ -1454,4 +1478,38 @@ model JobWorkerHeartbeat {
   info       Json?
 
   @@map("job_worker_heartbeats")
+}
+
+/// One outgoing notification (one channel, one recipient). Rows are written
+/// by sendNotification() and delivered by the "notification.send" queue job.
+model NotificationLog {
+  id                String                @id @default(cuid())
+  userId            String?
+  user              User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  template          String
+  channel           NotificationChannel   @default(EMAIL)
+  to                String
+  subject           String                @default("")
+  status            NotificationLogStatus @default(QUEUED)
+  error             String?
+  providerMessageId String?
+  /// Template data; keys the template marks sensitive are encrypted (enc:v1:)
+  data              Json                  @default("{}")
+  /// True when the template carries secrets (password, reset link)
+  redacted          Boolean               @default(false)
+  /// Idempotency key (e.g. "invoice.reminder:<invoiceId>"); one row per key + channel
+  dedupeKey         String?
+  attempts          Int                   @default(0)
+  resendOfId        String?
+  inboxMessageId    String?
+  sentAt            DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@unique([dedupeKey, channel])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([template, createdAt])
+  @@index([status, createdAt])
+  @@map("notification_logs")
 }

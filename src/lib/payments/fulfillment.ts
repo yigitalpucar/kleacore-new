@@ -6,17 +6,13 @@ import type {
   KleacoreEvent,
   PaymentCompletedContext,
 } from "@/lib/events/types";
-import {
-  loadCustomerRecipient,
-  sendPaymentReceivedEmail,
-} from "@/lib/notifications/email";
-import { sendSmsNotification } from "@/lib/notifications/sms";
+import { sendNotification } from "@/lib/notifications/send";
 import { queueEInvoiceDraft } from "@/lib/integrations/efatura";
 import { applyServiceRenewalFromOrder } from "@/lib/payments/renewal-fulfillment";
 import { applyPlanChangeFromOrder } from "@/lib/services/plan-change";
 import { unsuspendServiceIfNeeded } from "@/lib/payments/service-lifecycle";
 import { provisionCompletedOrder } from "@/lib/provisioning/internal";
-import { toNumber, type MoneyInput } from "@/lib/money";
+import { max as maxMoney, toNumber, type MoneyInput } from "@/lib/money";
 
 interface FulfillInvoicePaymentInput {
   invoiceId: string;
@@ -303,7 +299,9 @@ export async function fulfillInvoicePayment(
             description:
               "partialFailure" in provisioned && provisioned.partialFailure
                 ? "Ödeme tamamlandı, sağlama başarısız oldu ve yeniden denenecek"
-                : provisioned.type === "domain"
+                : "manual" in provisioned && provisioned.manual
+                  ? "Ödeme tamamlandı, manuel kurulum görevi açıldı"
+                  : provisioned.type === "domain"
                   ? "Ödeme tamamlandı ve domain registrara iletildi"
                   : "Ödeme tamamlandı ve hizmet aktifleştirildi",
             performedBy: input.performedBy,
@@ -338,6 +336,10 @@ export async function fulfillInvoicePayment(
   return { fulfilled: true as const, invoice };
 }
 
+/**
+ * "Ödeme alındı" e-posta (+ SMS when configured). Idempotent per invoice:
+ * gateway callbacks, webhooks and the admin "ödendi" button may all call it.
+ */
 export async function notifyInvoicePaymentReceived(invoiceId: string) {
   try {
     const invoice = await db.invoice.findUnique({
@@ -346,6 +348,7 @@ export async function notifyInvoicePaymentReceived(invoiceId: string) {
         id: true,
         invoiceNumber: true,
         customerId: true,
+        status: true,
         totalAmount: true,
         paidAmount: true,
         paidAt: true,
@@ -353,29 +356,20 @@ export async function notifyInvoicePaymentReceived(invoiceId: string) {
       },
     });
 
-    if (!invoice) {
+    if (!invoice || invoice.status !== "PAID") {
       return;
     }
 
-    const customer = await loadCustomerRecipient(invoice.customerId);
-    if (!customer) {
-      return;
-    }
-
-    const paidAmount = Math.max(Number(invoice.paidAmount), Number(invoice.totalAmount));
-
-    await sendPaymentReceivedEmail({
-      customer,
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.invoiceNumber,
-      paidAmount,
-      paidAt: invoice.paidAt ?? invoice.updatedAt,
-    });
-
-    await sendSmsNotification({
-      customerId: invoice.customerId,
-      message: `Faturanız ödendi: ${invoice.invoiceNumber}`,
-      template: "payment_received",
+    await sendNotification({
+      userId: invoice.customerId,
+      template: "billing.payment-received",
+      data: {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        paidAmount: toNumber(maxMoney(invoice.paidAmount, invoice.totalAmount)),
+        paidAt: invoice.paidAt ?? invoice.updatedAt,
+      },
+      dedupeKey: `payment.received:${invoice.id}`,
     });
   } catch (error) {
     console.error("[Fulfillment] Ödeme bildirimi gönderilemedi:", error);
