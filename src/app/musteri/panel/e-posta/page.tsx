@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getCustomerEmails, getCustomerEmailStats } from "@/lib/dal/emails";
 import { getNotifications } from "@/lib/dal/notifications";
 import { EPostaContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "E-postalarım" };
 
 function formatRelativeTime(date: Date) {
   const diffMs = Date.now() - date.getTime();
@@ -68,9 +71,12 @@ export default async function EPostaPage() {
     subject: email.subject,
     category: categoryMap[email.category] ?? "system",
     preview: email.preview || email.content.slice(0, 140),
+    content: email.content || email.preview,
     sentAt: formatRelativeTime(email.sentAt),
     date: formatDate(email.sentAt),
+    sentAtIso: email.sentAt.toISOString(),
     isRead: email.isRead,
+    source: "email" as "email" | "notification",
   }));
 
   let serializedStats = stats;
@@ -85,9 +91,12 @@ export default async function EPostaPage() {
         notification.message
       ),
       preview: notification.message,
+      content: notification.message,
       sentAt: formatRelativeTime(notification.createdAt),
       date: formatDate(notification.createdAt),
+      sentAtIso: notification.createdAt.toISOString(),
       isRead: notification.isRead,
+      source: "notification" as const,
     }));
 
     const now = new Date();

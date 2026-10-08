@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getServerServicesByCustomer } from "@/lib/dal/servers";
 import { SunucularContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Sunucularım" };
 
 export default async function SunucularPage() {
   const session = await auth();

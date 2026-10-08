@@ -2,9 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { CreditCard, Link2, Loader2, Share2, ShoppingCart, UserPlus, Users, Wallet } from "lucide-react";
+import {
+  CopyButton,
+  DataTable,
+  EmptyState,
+  FormField,
+  ListRow,
+  PageHeader,
+  SectionCard,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  UnavailableAction,
+  appButton,
+  type ColumnDef,
+} from "@/components/app";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -14,128 +27,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  requestPayout,
-  saveAffiliatePayoutIban,
-} from "@/lib/actions/customer/affiliate";
+import { requestPayout, saveAffiliatePayoutIban } from "@/lib/actions/customer/affiliate";
 import { MIN_PAYOUT_AMOUNT } from "@/lib/affiliate/constants";
+import { formatTRY } from "@/lib/format/price";
+import { formatDate } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
-import {
-  Users,
-  Link2,
-  Copy,
-  Check,
-  Wallet,
-  TrendingUp,
-  Clock,
-  Gift,
-  UserPlus,
-  CreditCard,
-  Share2,
-  Globe,
-  Server,
-  Shield,
-  ChevronRight,
-  CheckCircle2,
-  XCircle,
-  Hourglass,
-  Info,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
 
-const commissionRates = [
-  {
-    category: "Web Hosting",
-    icon: Globe,
-    rate: 20,
-    description: "Tüm hosting paketleri",
-  },
-  {
-    category: "VPS Sunucu",
-    icon: Server,
-    rate: 15,
-    description: "VPS ve VDS paketleri",
-  },
-  {
-    category: "Bulut Sunucu",
-    icon: Server,
-    rate: 15,
-    description: "Cloud sunucu paketleri",
-  },
-  {
-    category: "SSL Sertifikası",
-    icon: Shield,
-    rate: 10,
-    description: "Tüm SSL sertifikaları",
-  },
-];
+// Mirrors AFFILIATE_COMMISSION_RATE (src/lib/affiliate/index.ts) — a flat rate on every paid order.
+const COMMISSION_PERCENT = 10;
 
-const statusConfig = {
-  active: {
-    label: "Aktif",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-    icon: CheckCircle2,
-  },
-  pending: {
-    label: "Bekliyor",
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
-    icon: Hourglass,
-  },
-  inactive: {
-    label: "Pasif",
-    color: "text-gray-500",
-    bgColor: "bg-gray-500/10",
-    icon: XCircle,
-  },
-  PENDING: {
-    label: "Bekliyor",
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
-    icon: Hourglass,
-  },
-  PAID: {
-    label: "Tamamlandı",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-    icon: CheckCircle2,
-  },
-  CANCELLED: {
-    label: "İptal",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
-    icon: XCircle,
-  },
-};
-
-const steps = [
-  {
-    step: 1,
-    title: "Linkinizi Paylaşın",
-    description: "Referans linkinizi sosyal medya, blog veya arkadaşlarınızla paylaşın.",
-    icon: Share2,
-  },
-  {
-    step: 2,
-    title: "Müşteri Kaydolsun",
-    description: "Linkiniz üzerinden gelen ziyaretçiler hesap oluştursun.",
-    icon: UserPlus,
-  },
-  {
-    step: 3,
-    title: "Alışveriş Yapsın",
-    description: "Referansınız herhangi bir hizmet satın alsın.",
-    icon: CreditCard,
-  },
-  {
-    step: 4,
-    title: "Komisyon Kazanın",
-    description: "Her satıştan %10-20 arası komisyon kazanın.",
-    icon: Gift,
-  },
-];
+const money = (n: number) => formatTRY(n, { keepDecimals: true });
 
 interface Referral {
   id: string;
@@ -170,6 +71,91 @@ interface SatisOrtakligiContentProps {
   stats: AffiliateStats;
 }
 
+type ReferralState = "paid" | "earned" | "waiting";
+const referralState = (r: Referral): ReferralState => (r.isPaid ? "paid" : r.commission > 0 ? "earned" : "waiting");
+const REFERRAL_META: Record<ReferralState, { label: string; tone: "success" | "warning" | "muted" }> = {
+  paid: { label: "Komisyon ödendi", tone: "success" },
+  earned: { label: "Komisyon kazanıldı", tone: "warning" },
+  waiting: { label: "Alışveriş bekleniyor", tone: "muted" },
+};
+
+function ReferralBadge({ r }: { r: Referral }) {
+  const meta = REFERRAL_META[referralState(r)];
+  return <StatusBadge tone={meta.tone} label={meta.label} />;
+}
+
+const shortId = (id: string) => id.slice(-8).toUpperCase();
+
+const referralColumns: ColumnDef<Referral>[] = [
+  {
+    accessorKey: "referredEmail",
+    header: "Müşteri",
+    cell: ({ row }) => <span className="font-medium">{row.original.referredEmail}</span>,
+  },
+  {
+    id: "registeredAt",
+    accessorFn: (r) => r.registeredAt,
+    header: "Kayıt tarihi",
+    cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{formatDate(row.original.registeredAt)}</span>,
+  },
+  {
+    id: "state",
+    accessorFn: (r) => referralState(r),
+    header: "Durum",
+    enableSorting: false,
+    cell: ({ row }) => <ReferralBadge r={row.original} />,
+  },
+  {
+    accessorKey: "commission",
+    header: "Komisyon",
+    meta: { align: "right" },
+    cell: ({ row }) => <span className="whitespace-nowrap font-medium tabular-nums">{money(row.original.commission)}</span>,
+  },
+];
+
+const paymentColumns: ColumnDef<Payment>[] = [
+  {
+    accessorKey: "id",
+    header: "Talep",
+    enableSorting: false,
+    cell: ({ row }) => <span className="font-mono text-[13px]">#{shortId(row.original.id)}</span>,
+  },
+  {
+    id: "createdAt",
+    accessorFn: (p) => p.createdAt,
+    header: "Talep tarihi",
+    cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{formatDate(row.original.createdAt)}</span>,
+  },
+  {
+    id: "paidAt",
+    accessorFn: (p) => p.paidAt ?? "",
+    header: "Ödeme tarihi",
+    cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{formatDate(row.original.paidAt)}</span>,
+  },
+  {
+    accessorKey: "status",
+    header: "Durum",
+    enableSorting: false,
+    cell: ({ row }) => <StatusBadge kind="affiliatePayment" status={row.original.status} />,
+  },
+  {
+    accessorKey: "amount",
+    header: "Tutar",
+    meta: { align: "right" },
+    cell: ({ row }) => <span className="whitespace-nowrap font-medium tabular-nums">{money(row.original.amount)}</span>,
+  },
+];
+
+const steps = [
+  { icon: Share2, title: "Bağlantınızı paylaşın", text: "Referans bağlantınızı sitenizde, sosyal medyada veya çevrenizle paylaşın." },
+  { icon: UserPlus, title: "Hesap açılsın", text: "Bağlantınızla gelen ziyaretçi KLEACORE hesabı oluşturduğunda referansınız olur." },
+  {
+    icon: ShoppingCart,
+    title: "Komisyon kazanın",
+    text: `Referansınızın ödenen her siparişinden %${COMMISSION_PERCENT} komisyon hesabınıza eklenir.`,
+  },
+];
+
 export function SatisOrtakligiContent({
   referralCode,
   referralLink,
@@ -179,22 +165,11 @@ export function SatisOrtakligiContent({
   stats,
 }: SatisOrtakligiContentProps) {
   const router = useRouter();
-  const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"referrals" | "payments">("referrals");
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState("");
   const [payoutIban, setPayoutIban] = useState(initialPayoutIban);
   const [isSubmittingPayout, setIsSubmittingPayout] = useState(false);
   const [isSavingIban, setIsSavingIban] = useState(false);
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(amount);
 
   const handleSaveIban = async () => {
     setIsSavingIban(true);
@@ -234,445 +209,264 @@ export function SatisOrtakligiContent({
     toast.success("Ödeme talebiniz alındı");
     setPayoutDialogOpen(false);
     setPayoutAmount("");
-    setActiveTab("payments");
     router.refresh();
   };
 
-  const availableBalance = stats.availableBalance;
+  const availableBalance = Math.max(0, stats.availableBalance);
   const canRequestPayout = availableBalance >= MIN_PAYOUT_AMOUNT;
-  const conversionRate = stats.totalReferrals > 0
-    ? Math.round((referrals.filter((r) => r.commission > 0).length / stats.totalReferrals) * 100)
-    : 0;
+  const purchasingReferrals = referrals.filter((r) => r.commission > 0).length;
+
+  const payoutButton = canRequestPayout ? (
+    <button
+      type="button"
+      className={appButton()}
+      onClick={() => {
+        setPayoutAmount(String(availableBalance));
+        setPayoutDialogOpen(true);
+      }}
+    >
+      <Wallet aria-hidden />
+      Ödeme talep et
+    </button>
+  ) : (
+    <UnavailableAction
+      variant="primary"
+      icon={<Wallet aria-hidden />}
+      label="Ödeme talep et"
+      reason={`En az ${formatTRY(MIN_PAYOUT_AMOUNT)} bakiye gerekir`}
+    />
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <BlurFade delay={0.1} inView>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Satış Ortaklığı</h1>
-            <p className="text-muted-foreground">
-              Referans linkinizi paylaşarak komisyon kazanın.
-            </p>
-          </div>
-          <Button
-            onClick={() => {
-              setPayoutAmount(canRequestPayout ? String(availableBalance) : "");
-              setPayoutDialogOpen(true);
-            }}
-            disabled={!canRequestPayout}
-          >
-            <Wallet className="mr-2 h-4 w-4" />
-            Ödeme Talep Et
-          </Button>
-        </div>
-      </BlurFade>
+    <>
+      <PageHeader
+        title="Satış ortaklığı"
+        description={`Referans bağlantınızla gelen müşterilerin ödenen siparişlerinden %${COMMISSION_PERCENT} komisyon kazanın.`}
+        actions={payoutButton}
+      />
 
-      {/* Stats */}
-      <BlurFade delay={0.15} inView>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <Wallet className="h-5 w-5 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Toplam Kazanç</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.totalEarnings)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-emerald-500/10">
-                  <Wallet className="h-5 w-5 text-emerald-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Kullanılabilir Bakiye</p>
-                  <p className="text-2xl font-bold">{formatCurrency(availableBalance)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-500/10">
-                  <Clock className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Bekleyen Ödemeler</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.pendingPayments)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Users className="h-5 w-5 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Toplam Referans</p>
-                  <p className="text-2xl font-bold">{stats.totalReferrals}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-purple-500/10">
-                  <TrendingUp className="h-5 w-5 text-purple-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Dönüşüm Oranı</p>
-                  <p className="text-2xl font-bold">%{conversionRate}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </BlurFade>
+      <StatGrid columns={4}>
+        <StatCard
+          label="Kullanılabilir"
+          value={money(availableBalance)}
+          hint={canRequestPayout ? "Ödeme talep edebilirsiniz" : `Talep için en az ${formatTRY(MIN_PAYOUT_AMOUNT)}`}
+          tone={canRequestPayout ? "success" : undefined}
+        />
+        <StatCard label="Toplam kazanç" value={money(stats.totalEarnings)} hint="Tüm zamanlar" />
+        <StatCard
+          label="Bekleyen ödeme"
+          value={money(stats.pendingPayments)}
+          hint={stats.pendingPayments > 0 ? "İnceleniyor" : "Bekleyen talep yok"}
+          tone={stats.pendingPayments > 0 ? "warning" : undefined}
+        />
+        <StatCard
+          label="Referans"
+          value={stats.totalReferrals}
+          hint={stats.totalReferrals ? `${purchasingReferrals} tanesi alışveriş yaptı` : "Henüz referans yok"}
+        />
+      </StatGrid>
 
-      <BlurFade delay={0.18} inView>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              Ödeme IBAN Bilgisi
-            </CardTitle>
-            <CardDescription>
-              Komisyon ödemeleri bu hesaba yapılır. Ödeme talebi oluşturmadan önce kaydedin.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col sm:flex-row gap-3">
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <SectionCard
+          className="lg:col-span-2"
+          title="Referans bağlantınız"
+          description="Bu bağlantıyla hesap açan herkes sizin referansınız olarak kaydedilir."
+        >
+          {referralLink ? (
+            <div className="space-y-4">
+              <div className="flex min-w-0 items-center gap-1 rounded-md border bg-muted/30 py-1 pl-3 pr-1">
+                <Link2 aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate font-mono text-[13px]" title={referralLink}>
+                  {referralLink}
+                </span>
+                <CopyButton value={referralLink} label="Referans bağlantısını kopyala" />
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <span className="text-muted-foreground">Referans kodu</span>
+                <span className="inline-flex items-center gap-0.5 rounded-md border px-2 py-0.5">
+                  <code className="font-mono text-[13px] font-medium">{referralCode}</code>
+                  <CopyButton value={referralCode} label="Referans kodunu kopyala" className="size-8 md:size-7" />
+                </span>
+              </div>
+            </div>
+          ) : (
+            <EmptyState
+              compact
+              icon={Link2}
+              title="Referans kodunuz henüz oluşturulmamış"
+              description="Kodunuzun tanımlanması için destek ekibimize yazabilirsiniz."
+            />
+          )}
+
+          <ol className="mt-5 grid gap-4 border-t border-dashed pt-5 sm:grid-cols-3">
+            {steps.map((s, i) => (
+              <li key={s.title} className="space-y-1.5">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <span className="flex size-6 items-center justify-center rounded-full border font-mono text-[11px] text-muted-foreground">
+                    {i + 1}
+                  </span>
+                  {s.title}
+                </p>
+                <p className="text-[13px] text-muted-foreground">{s.text}</p>
+              </li>
+            ))}
+          </ol>
+        </SectionCard>
+
+        <SectionCard
+          title="Ödeme hesabı"
+          description="Komisyon ödemeleri bu IBAN'a havale/EFT ile yapılır."
+          footer={
+            <button type="button" className={appButton({ variant: "outline" })} onClick={handleSaveIban} disabled={isSavingIban}>
+              {isSavingIban ? <Loader2 aria-hidden className="animate-spin" /> : <CreditCard aria-hidden />}
+              {isSavingIban ? "Kaydediliyor…" : "IBAN'ı kaydet"}
+            </button>
+          }
+        >
+          <FormField label="IBAN" htmlFor="affiliate-iban" hint="TR ile başlayan 26 karakter.">
             <Input
+              id="affiliate-iban"
               value={payoutIban}
               onChange={(event) => setPayoutIban(event.target.value.toUpperCase())}
               placeholder="TR00 0000 0000 0000 0000 0000 00"
-              className="font-mono"
+              autoComplete="off"
+              spellCheck={false}
+              className="h-11 font-mono md:h-9"
             />
-            <Button onClick={handleSaveIban} disabled={isSavingIban}>
-              {isSavingIban ? "Kaydediliyor..." : "IBAN Kaydet"}
-            </Button>
-          </CardContent>
-        </Card>
-      </BlurFade>
+          </FormField>
+        </SectionCard>
+      </div>
 
-      {/* Referral Link */}
-      <BlurFade delay={0.2} inView>
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Link2 className="h-5 w-5 text-primary" />
-              Referans Linkiniz
-            </CardTitle>
-            <CardDescription>
-              Bu linki paylaşarak yeni müşteriler kazandırın ve komisyon alın.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1">
-                <Input
-                  value={referralLink}
-                  readOnly
-                  className="bg-background"
-                />
-              </div>
-              <Button onClick={() => handleCopy(referralLink)}>
-                {copied ? (
-                  <>
-                    <Check className="mr-2 h-4 w-4" />
-                    Kopyalandı
-                  </>
-                ) : (
-                  <>
-                    <Copy className="mr-2 h-4 w-4" />
-                    Kopyala
-                  </>
-                )}
-              </Button>
-            </div>
-            <div className="flex items-center gap-4 text-sm">
-              <span className="text-muted-foreground">Referans Kodu:</span>
-              <code className="px-2 py-1 rounded bg-muted font-mono">
-                {referralCode}
-              </code>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleCopy(referralCode)}
-              >
-                <Copy className="h-3 w-3" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
+      <section aria-labelledby="referanslar-title" className="space-y-3">
+        <h2 id="referanslar-title" className="text-sm font-semibold tracking-tight">
+          Referanslarınız
+        </h2>
+        <DataTable
+          caption="Referanslar"
+          columns={referralColumns}
+          data={referrals}
+          initialSort={[{ id: "registeredAt", desc: true }]}
+          searchFn={(r, q) => r.referredEmail.toLocaleLowerCase("tr-TR").includes(q)}
+          searchPlaceholder="E-posta ara…"
+          filters={[
+            {
+              id: "state",
+              label: "Durum",
+              options: (Object.keys(REFERRAL_META) as ReferralState[]).map((k) => ({ value: k, label: REFERRAL_META[k].label })),
+              getValue: (r) => referralState(r),
+            },
+          ]}
+          mobileCard={(r) => (
+            <ListRow
+              title={r.referredEmail}
+              trailing={money(r.commission)}
+              meta={
+                <>
+                  <ReferralBadge r={r} />
+                  <span className="tabular-nums">Kayıt {formatDate(r.registeredAt)}</span>
+                </>
+              }
+            />
+          )}
+          emptyState={
+            <EmptyState
+              icon={Users}
+              title="Henüz referansınız yok"
+              description="Referans bağlantınızla hesap açan müşteriler burada listelenir. E-posta adresleri gizlilik için kısaltılarak gösterilir."
+            />
+          }
+          noResultsText="Aramanızla eşleşen referans bulunamadı."
+        />
+      </section>
 
-      {/* How it works */}
-      <BlurFade delay={0.25} inView>
-        <Card>
-          <CardHeader>
-            <CardTitle>Nasıl Çalışır?</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              {steps.map((step, index) => (
-                <div key={step.step} className="relative">
-                  {index < steps.length - 1 && (
-                    <div className="hidden lg:block absolute top-8 left-[60%] w-[80%] border-t-2 border-dashed border-muted-foreground/30" />
-                  )}
-                  <div className="flex flex-col items-center text-center">
-                    <div className="flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-                      <step.icon className="h-7 w-7 text-primary" />
-                    </div>
-                    <span className="text-xs font-medium text-primary mb-1">Adım {step.step}</span>
-                    <h4 className="font-semibold mb-1">{step.title}</h4>
-                    <p className="text-sm text-muted-foreground">{step.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
+      <section aria-labelledby="odemeler-title" className="space-y-3">
+        <h2 id="odemeler-title" className="text-sm font-semibold tracking-tight">
+          Ödeme talepleri
+        </h2>
+        <DataTable
+          caption="Ödeme talepleri"
+          columns={paymentColumns}
+          data={payments}
+          initialSort={[{ id: "createdAt", desc: true }]}
+          mobileCard={(p) => (
+            <ListRow
+              title={<span className="font-mono text-[13px]">#{shortId(p.id)}</span>}
+              trailing={money(p.amount)}
+              meta={
+                <>
+                  <StatusBadge kind="affiliatePayment" status={p.status} />
+                  <span className="tabular-nums">
+                    {p.paidAt ? `Ödendi ${formatDate(p.paidAt)}` : `Talep ${formatDate(p.createdAt)}`}
+                  </span>
+                </>
+              }
+            />
+          )}
+          emptyState={
+            <EmptyState
+              compact
+              icon={Wallet}
+              title="Henüz ödeme talebiniz yok"
+              description={`Kullanılabilir bakiyeniz ${formatTRY(MIN_PAYOUT_AMOUNT)} tutarına ulaştığında ödeme talep edebilirsiniz.`}
+            />
+          }
+        />
+      </section>
 
-      {/* Commission Rates */}
-      <BlurFade delay={0.3} inView>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Gift className="h-5 w-5 text-primary" />
-              Komisyon Oranları
-            </CardTitle>
-            <CardDescription>
-              Her kategoride farklı komisyon oranları uygulanmaktadır.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {commissionRates.map((item) => (
-                <div
-                  key={item.category}
-                  className="p-4 rounded-lg border bg-muted/30 text-center"
-                >
-                  <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10 mx-auto mb-3">
-                    <item.icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <p className="font-medium">{item.category}</p>
-                  <p className="text-3xl font-bold text-primary mt-1">%{item.rate}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{item.description}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-
-      {/* Tabs for Referrals & Payments */}
-      <BlurFade delay={0.35} inView>
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <CardTitle>Detaylar</CardTitle>
-              <div className="flex gap-2">
-                <Button
-                  variant={activeTab === "referrals" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setActiveTab("referrals")}
-                >
-                  <Users className="mr-2 h-4 w-4" />
-                  Referanslar
-                </Button>
-                <Button
-                  variant={activeTab === "payments" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setActiveTab("payments")}
-                >
-                  <Wallet className="mr-2 h-4 w-4" />
-                  Ödemeler
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {activeTab === "referrals" ? (
-              <div className="space-y-3">
-                {referrals.map((referral) => {
-                  const statusKey = referral.isPaid ? "active" : referral.commission > 0 ? "pending" : "inactive";
-                  const status = statusConfig[statusKey as keyof typeof statusConfig];
-                  const StatusIcon = status.icon;
-
-                  return (
-                    <div
-                      key={referral.id}
-                      className="flex items-center gap-4 p-4 rounded-lg border hover:shadow-sm transition-shadow"
-                    >
-                      <div className="p-2 rounded-full bg-muted">
-                        <Users className="h-5 w-5 text-muted-foreground" />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-medium">{referral.referredEmail}</p>
-                          <span className={cn(
-                            "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
-                            status.bgColor,
-                            status.color
-                          )}>
-                            <StatusIcon className="h-3 w-3" />
-                            {status.label}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-0.5">
-                          Kayıt: {new Date(referral.registeredAt).toLocaleDateString("tr-TR")}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="text-sm text-muted-foreground">Komisyon</p>
-                        <p className="font-bold text-green-500">+{formatCurrency(Number(referral.commission))}</p>
-                      </div>
-
-                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                  );
-                })}
-
-                {referrals.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Henüz referans bulunmuyor.
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {payments.map((payment) => {
-                  const status = statusConfig[payment.status as keyof typeof statusConfig] || statusConfig.PENDING;
-                  const StatusIcon = status.icon;
-
-                  return (
-                    <div
-                      key={payment.id}
-                      className="flex items-center gap-4 p-4 rounded-lg border hover:shadow-sm transition-shadow"
-                    >
-                      <div className={cn("p-2 rounded-lg", status.bgColor)}>
-                        <Wallet className={cn("h-5 w-5", status.color)} />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium">{payment.id}</p>
-                          <span className={cn(
-                            "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
-                            status.bgColor,
-                            status.color
-                          )}>
-                            <StatusIcon className="h-3 w-3" />
-                            {status.label}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-0.5">
-                          Talep: {new Date(payment.createdAt).toLocaleDateString("tr-TR")}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="text-lg font-bold">{formatCurrency(Number(payment.amount))}</p>
-                        {payment.paidAt && (
-                          <p className="text-xs text-muted-foreground">
-                            Ödendi: {new Date(payment.paidAt).toLocaleDateString("tr-TR")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {payments.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Henüz ödeme talebi bulunmuyor.
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </BlurFade>
+      <SectionCard title="Ödeme koşulları" headingLevel={2}>
+        <ul className="space-y-2 text-[13px] text-muted-foreground">
+          <li>• Komisyon, referansınızın ödenen siparişleri üzerinden %{COMMISSION_PERCENT} olarak hesaplanır.</li>
+          <li>• En düşük ödeme talebi tutarı {formatTRY(MIN_PAYOUT_AMOUNT)}.</li>
+          <li>• Ödemeler kayıtlı IBAN&apos;ınıza havale/EFT ile yapılır; talepler ekibimiz tarafından incelenerek işleme alınır.</li>
+        </ul>
+      </SectionCard>
 
       <Dialog open={payoutDialogOpen} onOpenChange={setPayoutDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ödeme Talep Et</DialogTitle>
+            <DialogTitle>Ödeme talep et</DialogTitle>
             <DialogDescription>
-              Kullanılabilir bakiyeniz: {formatCurrency(availableBalance)}. Minimum talep tutarı{" "}
-              {formatCurrency(MIN_PAYOUT_AMOUNT)}&apos;dir.
+              Kullanılabilir bakiyeniz {money(availableBalance)}. En düşük talep tutarı {formatTRY(MIN_PAYOUT_AMOUNT)}.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="payout-iban">IBAN</Label>
+            <FormField label="IBAN" htmlFor="payout-iban">
               <Input
                 id="payout-iban"
                 value={payoutIban}
                 onChange={(event) => setPayoutIban(event.target.value.toUpperCase())}
                 placeholder="TR00 0000 0000 0000 0000 0000 00"
-                className="font-mono"
+                autoComplete="off"
+                spellCheck={false}
+                className="h-11 font-mono md:h-9"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="payout-amount">Talep Tutarı (TL)</Label>
+            </FormField>
+            <FormField label="Talep tutarı (₺)" htmlFor="payout-amount">
               <Input
                 id="payout-amount"
                 type="number"
+                inputMode="decimal"
                 min={MIN_PAYOUT_AMOUNT}
                 max={availableBalance}
                 step="0.01"
                 value={payoutAmount}
                 onChange={(event) => setPayoutAmount(event.target.value)}
                 placeholder={String(MIN_PAYOUT_AMOUNT)}
+                className="h-11 tabular-nums md:h-9"
               />
-            </div>
+            </FormField>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPayoutDialogOpen(false)}>
-              İptal
-            </Button>
-            <Button onClick={handleRequestPayout} disabled={isSubmittingPayout}>
-              {isSubmittingPayout ? "Gönderiliyor..." : "Talep Oluştur"}
-            </Button>
+          <DialogFooter className="gap-2">
+            <button type="button" className={appButton({ variant: "outline" })} onClick={() => setPayoutDialogOpen(false)}>
+              Vazgeç
+            </button>
+            <button type="button" className={appButton()} onClick={handleRequestPayout} disabled={isSubmittingPayout}>
+              {isSubmittingPayout ? <Loader2 aria-hidden className="animate-spin" /> : null}
+              {isSubmittingPayout ? "Gönderiliyor…" : "Talep oluştur"}
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Info Note */}
-      <BlurFade delay={0.4} inView>
-        <Card className="border-dashed">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-muted">
-                <Info className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div className="text-sm text-muted-foreground">
-                <p className="font-medium text-foreground mb-1">Ödeme Koşulları</p>
-                <ul className="space-y-1">
-                  <li>- Minimum ödeme talep tutarı 100 TL&apos;dir.</li>
-                  <li>- Komisyonlar, referansın ödemesi onaylandıktan 30 gün sonra kullanılabilir hale gelir.</li>
-                  <li>- Ödemeler havale/EFT veya bakiye transferi olarak yapılabilir.</li>
-                  <li>- Ödeme talepleri 3-5 iş günü içinde işleme alınır.</li>
-                </ul>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+    </>
   );
 }

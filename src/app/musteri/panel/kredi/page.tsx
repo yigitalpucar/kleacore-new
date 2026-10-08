@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getTransactions } from "@/lib/dal/transactions";
 import { getCustomerDashboardStats } from "@/lib/dal/dashboard";
 import { KrediContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Bakiye yükle" };
 
 export default async function KrediPage() {
   const session = await auth();
@@ -27,10 +30,5 @@ export default async function KrediPage() {
 
   const balance = Number(dashboardStats.balance);
 
-  return (
-    <KrediContent
-      transactions={serializedTransactions}
-      balance={balance}
-    />
-  );
+  return <KrediContent transactions={serializedTransactions} balance={balance} />;
 }

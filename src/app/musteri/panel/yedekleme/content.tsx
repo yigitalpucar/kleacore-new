@@ -1,33 +1,35 @@
 "use client";
 
 import { useState } from "react";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import { Cloud, Database, Download, FileArchive, HardDrive, Loader2, Plus, RefreshCcw, RotateCcw, Server, Trash2 } from "lucide-react";
 import {
-  HardDrive,
-  Download,
-  RotateCcw,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Calendar,
-  Server,
-  Database,
-  FileArchive,
-  Trash2,
-  RefreshCcw,
-  Plus,
-  Search,
-  Settings,
-  History,
-  Shield,
-  Cloud,
-  AlertTriangle,
-  Play,
-} from "lucide-react";
+  DataTable,
+  EmptyState,
+  FormField,
+  IconTile,
+  ListRow,
+  PageHeader,
+  SectionCard,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  appButton,
+  enumLabel,
+  getStatusOptions,
+  type ColumnDef,
+  type RowAction,
+} from "@/components/app";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { formatDate, formatDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 import {
   triggerManualBackup,
@@ -40,6 +42,7 @@ import { toast } from "@/lib/toast";
 
 interface BackupItem {
   id: string;
+  serviceId: string;
   serviceName: string;
   serviceType: string;
   type: string;
@@ -80,38 +83,6 @@ interface YedeklemeContentProps {
   stats: BackupStats;
 }
 
-const statusConfig: Record<string, {
-  label: string;
-  color: string;
-  bgColor: string;
-  icon: typeof CheckCircle2;
-}> = {
-  COMPLETED: {
-    label: "Tamamlandı",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-    icon: CheckCircle2,
-  },
-  IN_PROGRESS: {
-    label: "Devam Ediyor",
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
-    icon: RefreshCcw,
-  },
-  FAILED: {
-    label: "Başarısız",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
-    icon: AlertCircle,
-  },
-  SCHEDULED: {
-    label: "Planlanmış",
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
-    icon: Clock,
-  },
-};
-
 const serviceIcons: Record<string, typeof HardDrive> = {
   hosting: HardDrive,
   server: Server,
@@ -120,11 +91,11 @@ const serviceIcons: Record<string, typeof HardDrive> = {
   domain: Cloud,
 };
 
-const typeLabels: Record<string, string> = {
-  FULL: "Tam Yedek",
-  INCREMENTAL: "Artımlı",
-  DATABASE: "Veritabanı",
-  FILES: "Dosyalar",
+const serviceTypeLabels: Record<string, string> = {
+  hosting: "Hosting",
+  server: "Sunucu",
+  vds: "VDS",
+  vps: "VPS",
 };
 
 const frequencyLabels: Record<string, string> = {
@@ -133,59 +104,58 @@ const frequencyLabels: Record<string, string> = {
   monthly: "Aylık",
 };
 
-const filterOptions = [
-  { value: "all", label: "Tümü" },
-  { value: "hosting", label: "Hosting" },
-  { value: "server", label: "Sunucu" },
-  { value: "vds", label: "VDS" },
-];
-
-function formatSize(sizeInGB: number): string {
-  if (sizeInGB === 0) return "0 B";
-  if (sizeInGB < 1) return `${(sizeInGB * 1024).toFixed(0)} MB`;
-  return `${sizeInGB.toFixed(1)} GB`;
+/** Backup sizes are stored in MB (same unit as the admin panel and service detail). */
+function formatSize(mb: number): string {
+  if (!mb) return "—";
+  if (mb >= 1024) return `${(mb / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} GB`;
+  return `${mb.toLocaleString("tr-TR", { maximumFractionDigits: 0 })} MB`;
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("tr-TR", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function ServiceIcon({ type }: { type: string }) {
+  const Icon = serviceIcons[type] ?? Database;
+  return (
+    <IconTile size="sm">
+      <Icon />
+    </IconTile>
+  );
 }
 
 export function YedeklemeContent({ backups, schedules, stats }: YedeklemeContentProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [activeTab, setActiveTab] = useState<"backups" | "schedules">("backups");
   const [localBackups, setLocalBackups] = useState(backups);
   const [localSchedules, setLocalSchedules] = useState(schedules);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
+  // Services the customer can back up manually (from schedules and existing backups).
+  const serviceOptions = Array.from(
+    new Map(
+      [...schedules, ...backups].map((s) => [s.serviceId, { value: s.serviceId, label: s.serviceName }])
+    ).values()
+  );
+  const [isTriggerOpen, setIsTriggerOpen] = useState(false);
+  const [triggerServiceId, setTriggerServiceId] = useState(serviceOptions[0]?.value ?? "");
+
   const handleTriggerBackup = async () => {
-    // Use first available service from schedules or backups
-    const serviceId = schedules[0]?.serviceId || backups[0]?.serviceName;
-    if (!serviceId && schedules.length === 0) {
+    if (!triggerServiceId) {
       toast.error("Yedeklenecek hizmet bulunamadı");
       return;
     }
     setActionInProgress("trigger");
-    const result = await triggerManualBackup(schedules[0]?.serviceId || "");
+    const result = await triggerManualBackup(triggerServiceId);
     if (result.success) {
       toast.success("Manuel yedekleme başlatıldı");
+      setIsTriggerOpen(false);
     } else {
       toast.error(result.error || "Yedekleme başlatılamadı");
     }
     setActionInProgress(null);
   };
 
-  const handleDeleteBackup = async (backupId: string) => {
-    setActionInProgress(backupId);
-    const result = await deleteBackup(backupId);
+  const handleDeleteBackup = async (backup: BackupItem) => {
+    if (!window.confirm(`${backup.serviceName} için ${formatDateTime(backup.createdAt)} tarihli yedek kalıcı olarak silinsin mi?`)) return;
+    setActionInProgress(backup.id);
+    const result = await deleteBackup(backup.id);
     if (result.success) {
-      setLocalBackups((prev) => prev.filter((b) => b.id !== backupId));
+      setLocalBackups((prev) => prev.filter((b) => b.id !== backup.id));
       toast.success("Yedek silindi");
     } else {
       toast.error(result.error || "Yedek silinemedi");
@@ -193,9 +163,15 @@ export function YedeklemeContent({ backups, schedules, stats }: YedeklemeContent
     setActionInProgress(null);
   };
 
-  const handleRestoreBackup = async (backupId: string) => {
-    setActionInProgress(backupId);
-    const result = await restoreBackup(backupId);
+  const handleRestoreBackup = async (backup: BackupItem) => {
+    if (
+      !window.confirm(
+        `${backup.serviceName} hizmeti ${formatDateTime(backup.createdAt)} tarihli yedeğe geri döndürülecek. Bu tarihten sonraki değişiklikler kaybolabilir. Devam edilsin mi?`
+      )
+    )
+      return;
+    setActionInProgress(backup.id);
+    const result = await restoreBackup(backup.id);
     if (result.success) {
       toast.success("Geri yükleme başlatıldı");
     } else {
@@ -208,9 +184,7 @@ export function YedeklemeContent({ backups, schedules, stats }: YedeklemeContent
     setActionInProgress(backupId);
     const result = await retryBackup(backupId);
     if (result.success) {
-      setLocalBackups((prev) =>
-        prev.map((b) => (b.id === backupId ? { ...b, status: "IN_PROGRESS" } : b))
-      );
+      setLocalBackups((prev) => prev.map((b) => (b.id === backupId ? { ...b, status: "IN_PROGRESS" } : b)));
       toast.success("Yedekleme tekrar başlatıldı");
     } else {
       toast.error(result.error || "İşlem başarısız");
@@ -222,9 +196,7 @@ export function YedeklemeContent({ backups, schedules, stats }: YedeklemeContent
     setActionInProgress(scheduleId);
     const result = await toggleSchedule(scheduleId);
     if (result.success) {
-      setLocalSchedules((prev) =>
-        prev.map((s) => (s.id === scheduleId ? { ...s, isActive: result.isActive! } : s))
-      );
+      setLocalSchedules((prev) => prev.map((s) => (s.id === scheduleId ? { ...s, isActive: result.isActive! } : s)));
       toast.success(result.isActive ? "Zamanlama etkinleştirildi" : "Zamanlama devre dışı bırakıldı");
     } else {
       toast.error(result.error || "İşlem başarısız");
@@ -232,396 +204,290 @@ export function YedeklemeContent({ backups, schedules, stats }: YedeklemeContent
     setActionInProgress(null);
   };
 
-  const filteredBackups = localBackups.filter((backup) => {
-    const matchesSearch = backup.serviceName
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesFilter =
-      filter === "all" || backup.serviceType === filter;
-    return matchesSearch && matchesFilter;
-  });
+  const rowActions = (b: BackupItem): RowAction[] => {
+    const busy = actionInProgress === b.id ? "İşlem sürüyor" : undefined;
+    if (b.status === "COMPLETED") {
+      return [
+        { label: "Geri yükle", icon: <RotateCcw aria-hidden />, onSelect: () => void handleRestoreBackup(b), disabledReason: busy },
+        { label: "İndir", icon: <Download aria-hidden />, disabledReason: "Yakında" },
+        { label: "Sil", icon: <Trash2 aria-hidden />, onSelect: () => void handleDeleteBackup(b), disabledReason: busy, destructive: true, separator: true },
+      ];
+    }
+    if (b.status === "FAILED") {
+      return [{ label: "Tekrar dene", icon: <RefreshCcw aria-hidden />, onSelect: () => void handleRetryBackup(b.id), disabledReason: busy }];
+    }
+    return [];
+  };
+
+  const PrimaryAction = ({ b }: { b: BackupItem }) => {
+    const busy = actionInProgress === b.id;
+    if (b.status === "COMPLETED") {
+      return (
+        <button
+          type="button"
+          className={appButton({ variant: "outline", size: "sm" })}
+          onClick={() => void handleRestoreBackup(b)}
+          disabled={busy}
+        >
+          {busy ? <Loader2 aria-hidden className="animate-spin" /> : <RotateCcw aria-hidden />}
+          Geri yükle
+        </button>
+      );
+    }
+    if (b.status === "FAILED") {
+      return (
+        <button
+          type="button"
+          className={appButton({ variant: "outline", size: "sm" })}
+          onClick={() => void handleRetryBackup(b.id)}
+          disabled={busy}
+        >
+          {busy ? <Loader2 aria-hidden className="animate-spin" /> : <RefreshCcw aria-hidden />}
+          Tekrar dene
+        </button>
+      );
+    }
+    return null;
+  };
+
+  const columns: ColumnDef<BackupItem>[] = [
+    {
+      accessorKey: "serviceName",
+      header: "Hizmet",
+      cell: ({ row }) => {
+        const b = row.original;
+        return (
+          <div className="flex min-w-0 items-center gap-3">
+            <ServiceIcon type={b.serviceType} />
+            <div className="min-w-0">
+              <p className="truncate font-medium">{b.serviceName}</p>
+              <p className="text-xs text-muted-foreground">
+                {enumLabel("backupType", b.type)} yedek
+                {b.scheduleId ? " · otomatik" : " · manuel"}
+              </p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "createdAt",
+      accessorFn: (b) => b.createdAt,
+      header: "Tarih",
+      cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{formatDateTime(row.original.createdAt)}</span>,
+    },
+    {
+      accessorKey: "size",
+      header: "Boyut",
+      meta: { align: "right" },
+      cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{formatSize(row.original.size)}</span>,
+    },
+    {
+      accessorKey: "status",
+      header: "Durum",
+      enableSorting: false,
+      cell: ({ row }) => <StatusBadge kind="backup" status={row.original.status} />,
+    },
+    {
+      id: "primary",
+      header: () => <span className="sr-only">İşlem</span>,
+      enableSorting: false,
+      meta: { align: "right", className: "w-px" },
+      cell: ({ row }) => <PrimaryAction b={row.original} />,
+    },
+  ];
+
+  const usedTypes = Array.from(new Set(localBackups.map((b) => b.serviceType)));
+  const typeOptions = usedTypes.map((t) => ({ value: t, label: serviceTypeLabels[t] ?? t }));
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <BlurFade delay={0.1} inView>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Yedekleme</h1>
-            <p className="text-muted-foreground">
-              Yedeklerinizi görüntüleyin ve yönetin.
-            </p>
+    <>
+      <PageHeader
+        title="Yedekler"
+        description="Hizmetlerinizin yedeklerini görüntüleyin, geri yükleyin ve otomatik yedekleme zamanlamalarını yönetin."
+        actions={
+          <button
+            type="button"
+            className={appButton()}
+            onClick={() => setIsTriggerOpen(true)}
+            disabled={serviceOptions.length === 0}
+          >
+            <Plus aria-hidden />
+            Manuel yedek al
+          </button>
+        }
+      />
+
+      <Dialog open={isTriggerOpen} onOpenChange={setIsTriggerOpen}>
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manuel yedek al</DialogTitle>
+            <DialogDescription>Seçtiğiniz hizmetin tam yedeği hemen alınmaya başlar.</DialogDescription>
+          </DialogHeader>
+          <FormField label="Hizmet" htmlFor="backup-service">
+            <Select value={triggerServiceId} onValueChange={setTriggerServiceId}>
+              <SelectTrigger id="backup-service" className="h-11 md:h-9">
+                <SelectValue placeholder="Hizmet seçin" />
+              </SelectTrigger>
+              <SelectContent>
+                {serviceOptions.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+          <DialogFooter className="gap-2 pt-2">
+            <button
+              type="button"
+              className={appButton({ variant: "outline" })}
+              onClick={() => setIsTriggerOpen(false)}
+              disabled={actionInProgress === "trigger"}
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              className={appButton()}
+              onClick={() => void handleTriggerBackup()}
+              disabled={actionInProgress === "trigger" || !triggerServiceId}
+            >
+              {actionInProgress === "trigger" ? <Loader2 aria-hidden className="animate-spin" /> : null}
+              {actionInProgress === "trigger" ? "Başlatılıyor…" : "Yedeği başlat"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <StatGrid>
+        <StatCard
+          label="Toplam yedek"
+          value={stats.total}
+          hint={stats.inProgress ? `${stats.inProgress} yedek sürüyor` : `${stats.completed} başarılı`}
+          tone={stats.inProgress ? "info" : undefined}
+        />
+        <StatCard label="Toplam boyut" value={formatSize(stats.totalSize)} />
+        <StatCard
+          label="Son yedek"
+          value={stats.lastBackupAt ? formatDate(stats.lastBackupAt) : "Yok"}
+          hint={stats.lastBackupAt ? `Saat ${formatDateTime(stats.lastBackupAt).split(" ").pop()}` : "Henüz yedek alınmadı"}
+        />
+        <StatCard
+          label="Başarısız"
+          value={stats.failed}
+          tone={stats.failed ? "danger" : undefined}
+          hint={stats.failed ? "Tekrar denemeniz gerekiyor" : "Başarısız yedek yok"}
+        />
+      </StatGrid>
+
+      <DataTable
+        caption="Yedekler"
+        columns={columns}
+        data={localBackups}
+        getRowId={(b) => b.id}
+        initialSort={[{ id: "createdAt", desc: true }]}
+        searchFn={(b, q) => b.serviceName.toLocaleLowerCase("tr-TR").includes(q)}
+        searchPlaceholder="Hizmet adına göre ara…"
+        filters={[
+          {
+            id: "status",
+            label: "Durum",
+            options: getStatusOptions("backup").filter((o) => localBackups.some((b) => b.status === o.value)),
+            getValue: (b) => b.status,
+          },
+          ...(typeOptions.length > 1
+            ? [
+                {
+                  id: "type",
+                  label: "Hizmet türü",
+                  variant: "select" as const,
+                  allLabel: "Tüm hizmetler",
+                  options: typeOptions,
+                  getValue: (b: BackupItem) => b.serviceType,
+                },
+              ]
+            : []),
+        ]}
+        rowActions={rowActions}
+        mobileCard={(b) => (
+          <div className="space-y-3">
+            <ListRow
+              leading={<ServiceIcon type={b.serviceType} />}
+              title={b.serviceName}
+              subtitle={`${enumLabel("backupType", b.type)} yedek · ${formatDateTime(b.createdAt)}`}
+              trailing={b.size ? formatSize(b.size) : undefined}
+              meta={<StatusBadge kind="backup" status={b.status} />}
+            />
+            {b.status === "COMPLETED" || b.status === "FAILED" ? (
+              <div className="pl-11">
+                <PrimaryAction b={b} />
+              </div>
+            ) : null}
           </div>
-          <Button onClick={handleTriggerBackup} disabled={actionInProgress === "trigger"}>
-            <Plus className="mr-2 h-4 w-4" />
-            {actionInProgress === "trigger" ? "Başlatılıyor..." : "Manuel Yedek Al"}
-          </Button>
-        </div>
-      </BlurFade>
+        )}
+        emptyState={
+          <EmptyState
+            icon={FileArchive}
+            title="Henüz yedek yok"
+            description="Otomatik yedekleme zamanlaması olan hizmetlerinizin yedekleri burada listelenir."
+          />
+        }
+        noResultsText="Aramanızla eşleşen yedek bulunamadı."
+      />
 
-      {/* Stats */}
-      <BlurFade delay={0.15} inView>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <FileArchive className="h-5 w-5 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Toplam Yedek</p>
-                  <p className="text-2xl font-bold">{stats.total}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-purple-500/10">
-                  <HardDrive className="h-5 w-5 text-purple-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Toplam Boyut</p>
-                  <p className="text-2xl font-bold">{formatSize(stats.totalSize)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <Clock className="h-5 w-5 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Son Yedek</p>
-                  <p className="text-lg font-bold">
-                    {stats.lastBackupAt
-                      ? formatDate(stats.lastBackupAt)
-                      : "Yok"}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-500/10">
-                  <CheckCircle2 className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Başarılı</p>
-                  <p className="text-2xl font-bold">{stats.completed}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-red-500/10">
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Başarısız</p>
-                  <p className="text-2xl font-bold">{stats.failed}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </BlurFade>
-
-      {/* Tabs */}
-      <BlurFade delay={0.25} inView>
-        <div className="flex gap-2 border-b pb-2">
-          <Button
-            variant={activeTab === "backups" ? "default" : "ghost"}
-            onClick={() => setActiveTab("backups")}
-            className="gap-2"
-          >
-            <FileArchive className="h-4 w-4" />
-            Yedekler
-          </Button>
-          <Button
-            variant={activeTab === "schedules" ? "default" : "ghost"}
-            onClick={() => setActiveTab("schedules")}
-            className="gap-2"
-          >
-            <Settings className="h-4 w-4" />
-            Zamanlamalar
-          </Button>
-        </div>
-      </BlurFade>
-
-      {/* Backups Tab */}
-      {activeTab === "backups" && (
-        <>
-          {/* Filters */}
-          <BlurFade delay={0.3} inView>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Yedek ara..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
+      <SectionCard
+        title="Otomatik yedekleme"
+        description="Hizmetlerinize tanımlı zamanlamaları buradan açıp kapatabilirsiniz."
+        flush
+      >
+        {localSchedules.length === 0 ? (
+          <div className="p-4 md:p-5">
+            <EmptyState compact icon={RefreshCcw} title="Yedekleme zamanlaması yok" description="Hizmetlerinize tanımlı bir otomatik yedekleme zamanlaması bulunmuyor." />
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {localSchedules.map((schedule) => {
+              const switchId = `schedule-${schedule.id}`;
+              return (
+                <li key={schedule.id} className="flex items-start gap-3 px-4 py-4 md:items-center md:px-5">
+                  <ServiceIcon type={schedule.serviceType} />
+                  <div className={cn("min-w-0 flex-1 space-y-1", !schedule.isActive && "text-muted-foreground")}>
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
+                      <label htmlFor={switchId} className="cursor-pointer">
+                        {schedule.serviceName}
+                      </label>
+                      <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {frequencyLabels[schedule.frequency] ?? schedule.frequency}
+                      </span>
+                    </p>
+                    <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                      <span>{schedule.retention} gün saklanır</span>
+                      <span>{schedule.backupCount} yedek</span>
+                      <span>Son: {schedule.lastRunAt ? formatDateTime(schedule.lastRunAt) : "henüz çalışmadı"}</span>
+                      <span>
+                        Sonraki: {schedule.isActive && schedule.nextRunAt ? formatDateTime(schedule.nextRunAt) : "devre dışı"}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 pt-1 md:pt-0">
+                    <span className="hidden text-xs text-muted-foreground sm:inline">
+                      {schedule.isActive ? "Açık" : "Kapalı"}
+                    </span>
+                    <Switch
+                      id={switchId}
+                      checked={schedule.isActive}
+                      onCheckedChange={() => void handleToggleSchedule(schedule.id)}
+                      disabled={actionInProgress === schedule.id}
+                      aria-label={`${schedule.serviceName} otomatik yedekleme`}
                     />
                   </div>
-                  <div className="flex gap-2">
-                    {filterOptions.map((option) => (
-                      <Button
-                        key={option.value}
-                        variant={filter === option.value ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setFilter(option.value)}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
-
-          {/* Backups List */}
-          <BlurFade delay={0.35} inView>
-            <Card>
-              <CardHeader>
-                <CardTitle>Son Yedekler ({filteredBackups.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {filteredBackups.map((backup) => {
-                    const status =
-                      statusConfig[backup.status] ?? statusConfig.COMPLETED;
-                    const StatusIcon = status.icon;
-                    const ServiceIcon =
-                      serviceIcons[backup.serviceType] ?? Database;
-
-                    return (
-                      <div
-                        key={backup.id}
-                        className="flex items-center gap-4 p-4 rounded-lg border hover:shadow-sm transition-shadow"
-                      >
-                        <div className={cn("p-3 rounded-lg", status.bgColor)}>
-                          <ServiceIcon
-                            className={cn("h-6 w-6", status.color)}
-                          />
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold truncate">
-                              {backup.serviceName}
-                            </p>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-muted">
-                              {typeLabels[backup.type] ?? backup.type}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {formatDate(backup.createdAt)}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <HardDrive className="h-3 w-3" />
-                              {formatSize(backup.size)}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={cn(
-                              "flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
-                              status.bgColor,
-                              status.color
-                            )}
-                          >
-                            <StatusIcon
-                              className={cn(
-                                "h-3 w-3",
-                                backup.status === "IN_PROGRESS" &&
-                                  "animate-spin"
-                              )}
-                            />
-                            {status.label}
-                          </div>
-
-                          {backup.status === "COMPLETED" && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                title="İndir"
-                                disabled={!!actionInProgress}
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                title="Geri Yükle"
-                                onClick={() => handleRestoreBackup(backup.id)}
-                                disabled={actionInProgress === backup.id}
-                              >
-                                <RotateCcw className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                title="Sil"
-                                onClick={() => handleDeleteBackup(backup.id)}
-                                disabled={actionInProgress === backup.id}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                          {backup.status === "FAILED" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleRetryBackup(backup.id)}
-                              disabled={actionInProgress === backup.id}
-                            >
-                              <RefreshCcw className="mr-2 h-4 w-4" />
-                              Tekrar Dene
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {filteredBackups.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      {searchQuery || filter !== "all"
-                        ? "Aramanızla eşleşen yedek bulunamadı."
-                        : "Henüz yedek bulunmuyor."}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
-        </>
-      )}
-
-      {/* Schedules Tab */}
-      {activeTab === "schedules" && (
-        <BlurFade delay={0.3} inView>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Yedekleme Zamanlamaları</CardTitle>
-                  <CardDescription>
-                    Otomatik yedekleme programlarınızı görüntüleyin
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {localSchedules.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Henüz yedekleme zamanlama bulunamadı.
-                  </div>
-                )}
-                {localSchedules.map((schedule) => {
-                  const ServiceIcon =
-                    serviceIcons[schedule.serviceType] ?? Shield;
-
-                  return (
-                    <div
-                      key={schedule.id}
-                      className={cn(
-                        "flex items-center gap-4 p-4 rounded-lg border",
-                        !schedule.isActive && "opacity-60"
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "p-3 rounded-lg",
-                          schedule.isActive
-                            ? "bg-green-500/10"
-                            : "bg-muted"
-                        )}
-                      >
-                        <ServiceIcon
-                          className={cn(
-                            "h-6 w-6",
-                            schedule.isActive
-                              ? "text-green-500"
-                              : "text-muted-foreground"
-                          )}
-                        />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold">
-                            {schedule.serviceName}
-                          </p>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-muted">
-                            {frequencyLabels[schedule.frequency] ??
-                              schedule.frequency}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            Saklama: {schedule.retention} gun
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <FileArchive className="h-3 w-3" />
-                            {schedule.backupCount} yedek
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                          <span>
-                            Son calisma:{" "}
-                            {schedule.lastRunAt
-                              ? formatDate(schedule.lastRunAt)
-                              : "Henüz çalışmadı"}
-                          </span>
-                          <span>
-                            Sonraki:{" "}
-                            {schedule.isActive && schedule.nextRunAt
-                              ? formatDate(schedule.nextRunAt)
-                              : "Devre Disi"}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">
-                            {schedule.isActive ? "Aktif" : "Devre Dışı"}
-                          </span>
-                          <Switch
-                            checked={schedule.isActive}
-                            onCheckedChange={() => handleToggleSchedule(schedule.id)}
-                            disabled={actionInProgress === schedule.id}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </BlurFade>
-      )}
-    </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </SectionCard>
+    </>
   );
 }

@@ -1,11 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { ExternalLink, Forward, Loader2, Mail, PauseCircle, PlayCircle, Plus, Reply, Trash2 } from "lucide-react";
+import {
+  AppBreadcrumbLabel,
+  CopyButton,
+  DataTable,
+  DetailList,
+  EmptyState,
+  FormField,
+  IconTile,
+  ListRow,
+  PageHeader,
+  SectionCard,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  appButton,
+  getStatusOptions,
+  type ColumnDef,
+  type RowAction,
+} from "@/components/app";
 import {
   Dialog,
   DialogContent,
@@ -13,48 +29,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Mail,
-  Search,
-  Plus,
-  ExternalLink,
-  HardDrive,
-  Users,
-  Settings,
-  Trash2,
-  Forward,
-  Clock,
-  MoreVertical,
-  Copy,
-  CheckCircle2,
-  Globe,
-  Loader2,
-  PauseCircle,
-  PlayCircle,
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatDate } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
-import {
-  createEmailAccount,
-  deleteEmailAccount,
-  updateEmailAccountStatus,
-} from "@/lib/actions/customer/emails";
+import { createEmailAccount, deleteEmailAccount, updateEmailAccountStatus } from "@/lib/actions/customer/emails";
 import { toast } from "@/lib/toast";
 
 const webmailClients = [
@@ -81,17 +60,25 @@ const webmailClients = [
   },
 ];
 
+const quotaOptions = [
+  { value: "512", label: "512 MB" },
+  { value: "1024", label: "1 GB" },
+  { value: "2048", label: "2 GB" },
+  { value: "5120", label: "5 GB" },
+  { value: "10240", label: "10 GB" },
+];
+
 function formatBytes(mb: number): string {
-  if (mb >= 1024) {
-    return `${(mb / 1024).toFixed(1)} GB`;
-  }
-  return `${mb} MB`;
+  if (mb >= 1024) return `${(mb / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} GB`;
+  return `${mb.toLocaleString("tr-TR")} MB`;
 }
 
 function getUsagePercentage(used: number, quota: number): number {
   if (quota === 0) return 0;
   return Math.round((used / quota) * 100);
 }
+
+const statusEnum = { active: "ACTIVE", suspended: "SUSPENDED", closed: "CLOSED" } as const;
 
 interface EmailAccount {
   id: string;
@@ -117,27 +104,60 @@ interface WebmailContentProps {
   };
 }
 
+function QuotaBar({ used, quota, className }: { used: number; quota: number; className?: string }) {
+  const pct = Math.min(100, getUsagePercentage(used, quota));
+  const fill = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-foreground";
+  return (
+    <div className={cn("w-full min-w-[160px] max-w-[220px] space-y-1", className)}>
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="whitespace-nowrap tabular-nums">
+          {formatBytes(used)} <span className="text-muted-foreground">/ {formatBytes(quota)}</span>
+        </span>
+        <span className="tabular-nums text-muted-foreground">%{pct}</span>
+      </div>
+      <div
+        role="meter"
+        aria-label="Kota kullanımı"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        className="h-1 overflow-hidden rounded-full bg-muted"
+      >
+        <div className={cn("h-full rounded-full", fill)} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function AccountFlags({ account }: { account: EmailAccount }) {
+  if (!account.forwardTo && !account.autoResponder) return null;
+  return (
+    <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      {account.forwardTo ? (
+        <span className="inline-flex items-center gap-1" title={`Yönlendirme: ${account.forwardTo}`}>
+          <Forward aria-hidden className="size-3" />
+          Yönlendirmeli
+        </span>
+      ) : null}
+      {account.autoResponder ? (
+        <span className="inline-flex items-center gap-1">
+          <Reply aria-hidden className="size-3" />
+          Otomatik yanıt
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function WebmailContent({ emailAccounts, domains, stats }: WebmailContentProps) {
   const [accounts, setAccounts] = useState(emailAccounts);
   const [statsState, setStatsState] = useState(stats);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedDomain, setSelectedDomain] = useState("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [newEmailDomain, setNewEmailDomain] = useState(domains[0]?.value || "");
   const [newEmailQuota, setNewEmailQuota] = useState("2048");
-  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [processingAccountId, setProcessingAccountId] = useState<string | null>(null);
-
-  const filteredAccounts = accounts.filter((account) => {
-    const matchesSearch =
-      account.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDomain =
-      selectedDomain === "all" ||
-      account.domain.toLowerCase() === selectedDomain.toLowerCase();
-    return matchesSearch && matchesDomain;
-  });
 
   const recalculateStats = (items: EmailAccount[]) => {
     const totalAccounts = items.length;
@@ -145,16 +165,6 @@ export function WebmailContent({ emailAccounts, domains, stats }: WebmailContent
     const totalStorage = items.reduce((sum, item) => sum + item.quota, 0);
     const usedStorage = items.reduce((sum, item) => sum + item.used, 0);
     setStatsState({ totalAccounts, activeAccounts, totalStorage, usedStorage });
-  };
-
-  const handleCopyEmail = async (email: string) => {
-    try {
-      await navigator.clipboard.writeText(email);
-      setCopiedEmail(email);
-      setTimeout(() => setCopiedEmail(null), 2000);
-    } catch {
-      toast.error("E-posta adresi kopyalanamadı.");
-    }
   };
 
   const handleCreateEmail = async () => {
@@ -166,7 +176,7 @@ export function WebmailContent({ emailAccounts, domains, stats }: WebmailContent
     }
 
     if (!newEmailDomain) {
-      toast.error("Lütfen bir domain seçin.");
+      toast.error("Lütfen bir alan adı seçin.");
       return;
     }
 
@@ -214,22 +224,13 @@ export function WebmailContent({ emailAccounts, domains, stats }: WebmailContent
 
       const updated = accounts.map((item) =>
         item.id === account.id
-          ? {
-              ...item,
-              status: (nextStatus === "ACTIVE"
-                ? "active"
-                : "suspended") as EmailAccount["status"],
-            }
+          ? { ...item, status: (nextStatus === "ACTIVE" ? "active" : "suspended") as EmailAccount["status"] }
           : item
       );
 
       setAccounts(updated);
       recalculateStats(updated);
-      toast.success(
-        nextStatus === "ACTIVE"
-          ? "Hesap aktifleştirildi."
-          : "Hesap askıya alındı."
-      );
+      toast.success(nextStatus === "ACTIVE" ? "Hesap aktifleştirildi." : "Hesap askıya alındı.");
     } finally {
       setProcessingAccountId(null);
     }
@@ -239,7 +240,7 @@ export function WebmailContent({ emailAccounts, domains, stats }: WebmailContent
     if (processingAccountId) return;
 
     const approved = window.confirm(
-      `${account.email} hesabını silmek istediğinize emin misiniz?`
+      `${account.email} hesabını silmek istediğinize emin misiniz? Hesaptaki tüm e-postalar silinir.`
     );
     if (!approved) return;
 
@@ -260,447 +261,364 @@ export function WebmailContent({ emailAccounts, domains, stats }: WebmailContent
     }
   };
 
-  const openWebmail = (client: typeof webmailClients[0], email?: string) => {
+  const openWebmail = (client: (typeof webmailClients)[0], email?: string) => {
     const url = email ? `${client.url}?_user=${encodeURIComponent(email)}` : client.url;
-    window.open(url, "_blank");
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <BlurFade delay={0.1} inView>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Webmail</h1>
-            <p className="text-muted-foreground">
-              E-posta hesaplarınızı yönetin ve webmail erişimi sağlayın.
-            </p>
+  const rowActions = (account: EmailAccount): RowAction[] => {
+    const busy = processingAccountId ? "İşlem sürüyor" : undefined;
+    const clients: RowAction[] =
+      account.status === "active"
+        ? webmailClients.map((client) => ({
+            label: `${client.name} ile aç${client.recommended ? " (önerilen)" : ""}`,
+            icon: <ExternalLink aria-hidden />,
+            onSelect: () => openWebmail(client, account.email),
+          }))
+        : [];
+    return [
+      ...clients,
+      {
+        label: account.status === "active" ? "Askıya al" : "Aktifleştir",
+        icon: account.status === "active" ? <PauseCircle aria-hidden /> : <PlayCircle aria-hidden />,
+        onSelect: () => void handleToggleStatus(account),
+        disabledReason: busy,
+        separator: clients.length > 0,
+      },
+      {
+        label: "Hesabı sil",
+        icon: <Trash2 aria-hidden />,
+        onSelect: () => void handleDeleteAccount(account),
+        disabledReason: busy,
+        destructive: true,
+        separator: true,
+      },
+    ];
+  };
+
+  const WebmailButton = ({ account }: { account: EmailAccount }) =>
+    account.status === "active" ? (
+      <button
+        type="button"
+        className={appButton({ variant: "outline", size: "sm" })}
+        onClick={() => openWebmail(webmailClients[0], account.email)}
+        disabled={processingAccountId === account.id}
+        aria-label={`${account.email} için webmail'i aç`}
+      >
+        {processingAccountId === account.id ? <Loader2 aria-hidden className="animate-spin" /> : <ExternalLink aria-hidden />}
+        Webmail
+      </button>
+    ) : null;
+
+  const columns: ColumnDef<EmailAccount>[] = [
+    {
+      accessorKey: "email",
+      header: "E-posta adresi",
+      cell: ({ row }) => {
+        const a = row.original;
+        return (
+          <div className="min-w-0 space-y-1">
+            <span className="inline-flex items-center gap-1 font-medium">
+              {a.email}
+              <CopyButton value={a.email} label="E-posta adresini kopyala" />
+            </span>
+            <AccountFlags account={a} />
           </div>
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button disabled={domains.length === 0}>
-                <Plus className="mr-2 h-4 w-4" />
-                Yeni E-posta
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Yeni E-posta Hesabı</DialogTitle>
-                <DialogDescription>
-                  Yeni bir e-posta hesabı oluşturun.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>E-posta Adresi</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="kullanıcı"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                      className="flex-1"
-                    />
-                    <span className="flex items-center text-muted-foreground">@</span>
-                    <Select
-                      value={newEmailDomain}
-                      onValueChange={setNewEmailDomain}
-                      disabled={domains.length === 0}
-                    >
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Domain seçin" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {domains.map((domain) => (
-                          <SelectItem key={domain.value} value={domain.value}>
-                            {domain.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Kota</Label>
-                  <Select value={newEmailQuota} onValueChange={setNewEmailQuota}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="512">512 MB</SelectItem>
-                      <SelectItem value="1024">1 GB</SelectItem>
-                      <SelectItem value="2048">2 GB</SelectItem>
-                      <SelectItem value="5120">5 GB</SelectItem>
-                      <SelectItem value="10240">10 GB</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsCreateDialogOpen(false)}
-                  disabled={isCreating}
-                >
-                  İptal
-                </Button>
-                <Button
-                  onClick={() => void handleCreateEmail()}
-                  disabled={isCreating || !newEmail.trim() || !newEmailDomain}
-                >
-                  {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {isCreating ? "Oluşturuluyor..." : "Oluştur"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-        {domains.length === 0 && (
-          <p className="text-sm text-amber-600 dark:text-amber-400">
-            E-posta hesabı oluşturmak için önce aktif bir domaininiz olmalı.
-          </p>
-        )}
-      </BlurFade>
+        );
+      },
+    },
+    {
+      id: "usage",
+      accessorFn: (a) => getUsagePercentage(a.used, a.quota),
+      header: "Kota",
+      cell: ({ row }) => <QuotaBar used={row.original.used} quota={row.original.quota} />,
+    },
+    {
+      id: "lastLogin",
+      accessorFn: (a) => a.lastLogin ?? "",
+      header: "Son giriş",
+      cell: ({ row }) => (
+        <span className="tabular-nums text-muted-foreground">
+          {row.original.lastLogin ? formatDate(row.original.lastLogin) : "Hiç"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: "Durum",
+      enableSorting: false,
+      cell: ({ row }) => <StatusBadge kind="emailAccount" status={statusEnum[row.original.status]} />,
+    },
+    {
+      id: "webmail",
+      header: () => <span className="sr-only">Webmail</span>,
+      enableSorting: false,
+      meta: { align: "right", className: "w-px" },
+      cell: ({ row }) => <WebmailButton account={row.original} />,
+    },
+  ];
 
-      {/* Stats */}
-      <BlurFade delay={0.15} inView>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Mail className="h-5 w-5 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Toplam Hesap</p>
-                  <p className="text-2xl font-bold">{statsState.totalAccounts}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <Users className="h-5 w-5 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Aktif Hesap</p>
-                  <p className="text-2xl font-bold">{statsState.activeAccounts}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-purple-500/10">
-                  <HardDrive className="h-5 w-5 text-purple-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Toplam Kota</p>
-                  <p className="text-2xl font-bold">{formatBytes(statsState.totalStorage)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-500/10">
-                  <HardDrive className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Kullanılan</p>
-                  <p className="text-2xl font-bold">{formatBytes(statsState.usedStorage)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </BlurFade>
+  const usedPct = getUsagePercentage(statsState.usedStorage, statsState.totalStorage);
+  const domainFilterOptions = domains.filter((d) => accounts.some((a) => a.domain.toLowerCase() === d.value.toLowerCase()));
 
-      {/* Quick Webmail Access */}
-      <BlurFade delay={0.2} inView>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5" />
-              Hızlı Webmail Erişimi
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {webmailClients.map((client) => (
-                <button
-                  key={client.name}
-                  onClick={() => openWebmail(client)}
-                  className={cn(
-                    "flex items-start gap-3 p-4 rounded-lg border text-left transition-all hover:shadow-md",
-                    client.recommended
-                      ? "border-primary/50 bg-primary/5"
-                      : "hover:border-primary/30"
-                  )}
-                >
-                  <span className="text-sm font-bold px-2 py-1 rounded bg-muted">{client.icon}</span>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{client.name}</p>
-                      {client.recommended && (
-                        <Badge variant="secondary" className="text-xs">
-                          Önerilen
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      {client.description}
-                    </p>
-                  </div>
-                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
+  return (
+    <>
+      <AppBreadcrumbLabel segment="webmail" label="E-posta hesapları" />
+      <PageHeader
+        title="E-posta hesapları"
+        description="Alan adlarınıza ait e-posta hesaplarını oluşturun, yönetin ve webmail ile erişin."
+        actions={
+          <button
+            type="button"
+            className={appButton()}
+            disabled={domains.length === 0}
+            onClick={() => setIsCreateDialogOpen(true)}
+          >
+            <Plus aria-hidden />
+            Yeni e-posta hesabı
+          </button>
+        }
+        meta={
+          domains.length === 0 ? (
+            <span>
+              E-posta hesabı oluşturmak için önce{" "}
+              <Link href="/musteri/panel/domainler" className="font-medium text-foreground underline-offset-4 hover:underline">
+                aktif bir alan adınız
+              </Link>{" "}
+              olmalı.
+            </span>
+          ) : undefined
+        }
+      />
 
-      {/* Filters */}
-      <BlurFade delay={0.25} inView>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Select value={selectedDomain} onValueChange={setSelectedDomain}>
-                <SelectTrigger className="w-full sm:w-[200px]">
-                  <SelectValue placeholder="Domain seçin" />
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Yeni e-posta hesabı</DialogTitle>
+            <DialogDescription>Alan adlarınızdan birinde yeni bir posta kutusu oluşturun.</DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleCreateEmail();
+            }}
+          >
+            <FormField label="E-posta adresi" htmlFor="new-email-local" required>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  id="new-email-local"
+                  placeholder="kullanici"
+                  autoComplete="off"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="h-11 w-full min-w-0 flex-1 rounded-md border bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9"
+                />
+                <span aria-hidden className="hidden text-muted-foreground sm:inline">
+                  @
+                </span>
+                <Select value={newEmailDomain} onValueChange={setNewEmailDomain} disabled={domains.length === 0}>
+                  <SelectTrigger aria-label="Alan adı" className="h-11 w-full sm:w-[200px] md:h-9">
+                    <SelectValue placeholder="Alan adı seçin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {domains.map((domain) => (
+                      <SelectItem key={domain.value} value={domain.value}>
+                        @{domain.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </FormField>
+            <FormField label="Kota" htmlFor="new-email-quota">
+              <Select value={newEmailQuota} onValueChange={setNewEmailQuota}>
+                <SelectTrigger id="new-email-quota" className="h-11 md:h-9">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Tüm Domainler</SelectItem>
-                  {domains.map((domain) => (
-                    <SelectItem key={domain.value} value={domain.value}>
-                      {domain.label}
+                  {quotaOptions.map((q) => (
+                    <SelectItem key={q.value} value={q.value}>
+                      {q.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="E-posta hesabı ara..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+            </FormField>
+            <DialogFooter className="gap-2 pt-2">
+              <button
+                type="button"
+                className={appButton({ variant: "outline" })}
+                onClick={() => setIsCreateDialogOpen(false)}
+                disabled={isCreating}
+              >
+                Vazgeç
+              </button>
+              <button type="submit" className={appButton()} disabled={isCreating || !newEmail.trim() || !newEmailDomain}>
+                {isCreating ? <Loader2 aria-hidden className="animate-spin" /> : null}
+                {isCreating ? "Oluşturuluyor…" : "Hesabı oluştur"}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <StatGrid>
+        <StatCard label="Toplam hesap" value={statsState.totalAccounts} />
+        <StatCard
+          label="Aktif"
+          value={statsState.activeAccounts}
+          tone={statsState.activeAccounts ? "success" : undefined}
+          hint={
+            statsState.totalAccounts - statsState.activeAccounts > 0
+              ? `${statsState.totalAccounts - statsState.activeAccounts} hesap askıda veya kapalı`
+              : "Tüm hesaplar aktif"
+          }
+        />
+        <StatCard label="Toplam kota" value={formatBytes(statsState.totalStorage)} />
+        <StatCard
+          label="Kullanılan"
+          value={formatBytes(statsState.usedStorage)}
+          hint={statsState.totalStorage ? `Kotanın %${usedPct} kadarı` : undefined}
+          tone={usedPct >= 90 ? "danger" : usedPct >= 70 ? "warning" : undefined}
+        />
+      </StatGrid>
+
+      <DataTable
+        caption="E-posta hesapları"
+        columns={columns}
+        data={accounts}
+        getRowId={(a) => a.id}
+        searchFn={(a, q) => a.email.toLocaleLowerCase("tr-TR").includes(q)}
+        searchPlaceholder="E-posta hesabı ara…"
+        filters={[
+          {
+            id: "status",
+            label: "Durum",
+            options: getStatusOptions("emailAccount")
+              .filter((o) => accounts.some((a) => statusEnum[a.status] === o.value)),
+            getValue: (a) => statusEnum[a.status],
+          },
+          ...(domainFilterOptions.length > 1
+            ? [
+                {
+                  id: "domain",
+                  label: "Alan adı",
+                  variant: "select" as const,
+                  allLabel: "Tüm alan adları",
+                  options: domainFilterOptions,
+                  getValue: (a: EmailAccount) =>
+                    domainFilterOptions.find((d) => d.value.toLowerCase() === a.domain.toLowerCase())?.value,
+                },
+              ]
+            : []),
+        ]}
+        rowActions={rowActions}
+        mobileCard={(a) => (
+          <div className="space-y-3">
+            <ListRow
+              leading={
+                <IconTile size="sm">
+                  <Mail />
+                </IconTile>
+              }
+              title={<span className="block truncate">{a.email}</span>}
+              subtitle={a.lastLogin ? `Son giriş ${formatDate(a.lastLogin)}` : "Henüz giriş yapılmadı"}
+              meta={
+                <>
+                  <StatusBadge kind="emailAccount" status={statusEnum[a.status]} />
+                  <AccountFlags account={a} />
+                </>
+              }
+            />
+            <div className="space-y-3 pl-11">
+              <QuotaBar used={a.used} quota={a.quota} className="max-w-none" />
+              <WebmailButton account={a} />
             </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
+          </div>
+        )}
+        emptyState={
+          <EmptyState
+            icon={Mail}
+            title="Henüz e-posta hesabınız yok"
+            description={
+              domains.length
+                ? "info@ veya ad.soyad@ gibi adresleri dakikalar içinde oluşturabilirsiniz."
+                : "E-posta hesabı açmak için önce aktif bir alan adınız olmalı."
+            }
+            action={
+              domains.length ? (
+                <button type="button" className={appButton()} onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus aria-hidden />
+                  Yeni e-posta hesabı
+                </button>
+              ) : (
+                <Link href="/domain" className={appButton()}>
+                  Alan adı al
+                </Link>
+              )
+            }
+          />
+        }
+        noResultsText="Aramanızla eşleşen e-posta hesabı bulunamadı."
+      />
 
-      {/* Email Accounts List */}
-      <BlurFade delay={0.3} inView>
-        <Card>
-          <CardHeader>
-            <CardTitle>E-posta Hesapları ({filteredAccounts.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {filteredAccounts.map((account) => {
-                const usagePercent = getUsagePercentage(account.used, account.quota);
-                const isHighUsage = usagePercent >= 80;
-                const isProcessing = processingAccountId === account.id;
-
-                return (
-                  <div
-                    key={account.id}
-                    className="flex items-center gap-4 p-4 rounded-lg border hover:shadow-sm transition-shadow"
-                  >
-                    <div className={cn(
-                      "p-3 rounded-lg",
-                      account.status === "active" ? "bg-green-500/10" : "bg-gray-500/10"
-                    )}>
-                      <Mail className={cn(
-                        "h-6 w-6",
-                        account.status === "active" ? "text-green-500" : "text-gray-500"
-                      )} />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold">{account.email}</p>
-                        <button
-                          onClick={() => void handleCopyEmail(account.email)}
-                          className="p-1 rounded hover:bg-muted transition-colors"
-                          title="Kopyala"
-                        >
-                          {copiedEmail === account.email ? (
-                            <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                          ) : (
-                            <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                          )}
-                        </button>
-                        {account.status === "suspended" && (
-                          <Badge variant="destructive" className="text-xs">
-                            Askıda
-                          </Badge>
-                        )}
-                        {account.forwardTo && (
-                          <Badge variant="secondary" className="text-xs">
-                            <Forward className="h-3 w-3 mr-1" />
-                            Yönlendirmeli
-                          </Badge>
-                        )}
-                        {account.autoResponder && (
-                          <Badge variant="secondary" className="text-xs">
-                            <Clock className="h-3 w-3 mr-1" />
-                            Oto-Yanıt
-                          </Badge>
-                        )}
-                      </div>
-
-                      {/* Storage Progress */}
-                      <div className="mt-2">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                          <span>
-                            {formatBytes(account.used)} / {formatBytes(account.quota)}
-                          </span>
-                          <span className={isHighUsage ? "text-orange-500 font-medium" : ""}>
-                            {usagePercent}%
-                          </span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className={cn(
-                              "h-full rounded-full transition-all",
-                              isHighUsage ? "bg-orange-500" : "bg-primary"
-                            )}
-                            style={{ width: `${usagePercent}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Globe className="h-3 w-3" />
-                          {account.domain}
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <SectionCard title="Webmail" description="Tarayıcıdan posta kutunuza giriş yapın." flush>
+          <ul className="divide-y">
+            {webmailClients.map((client) => (
+              <li key={client.name}>
+                <button
+                  type="button"
+                  onClick={() => openWebmail(client)}
+                  className="group flex min-h-[60px] w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none md:px-5"
+                >
+                  <IconTile size="sm" className="font-mono text-[11px] font-semibold text-foreground">
+                    {client.icon}
+                  </IconTile>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      {client.name}
+                      {client.recommended ? (
+                        <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Önerilen
                         </span>
-                        {account.lastLogin && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            Son giriş: {account.lastLogin}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                      ) : null}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">{client.description}</span>
+                  </span>
+                  <ExternalLink aria-hidden className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
+                  <span className="sr-only">(yeni sekmede açılır)</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
 
-                    <div className="flex items-center gap-2">
-                      {account.status === "active" && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" disabled={isProcessing}>
-                              <ExternalLink className="mr-2 h-4 w-4" />
-                              Webmail
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {webmailClients.map((client) => (
-                              <DropdownMenuItem
-                                key={client.name}
-                                onClick={() => openWebmail(client, account.email)}
-                              >
-                                <span className="mr-2 text-xs font-bold">{client.icon}</span>
-                                {client.name}
-                                {client.recommended && (
-                                  <Badge variant="secondary" className="ml-2 text-xs">
-                                    Önerilen
-                                  </Badge>
-                                )}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" disabled={isProcessing}>
-                            {isProcessing ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <MoreVertical className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => void handleToggleStatus(account)}
-                          >
-                            {account.status === "active" ? (
-                              <>
-                                <PauseCircle className="mr-2 h-4 w-4" />
-                                Askıya Al
-                              </>
-                            ) : (
-                              <>
-                                <PlayCircle className="mr-2 h-4 w-4" />
-                                Aktifleştir
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => void handleDeleteAccount(account)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Hesabı Sil
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {filteredAccounts.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Aramanızla eşleşen e-posta hesabı bulunamadı.</p>
-                </div>
-              )}
+        <SectionCard title="E-posta istemcisi ayarları" description="Outlook, Apple Mail, Thunderbird veya telefonunuz için.">
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Gelen sunucu · IMAP</p>
+              <DetailList
+                items={[
+                  { label: "Sunucu", value: "mail.kleacore.com", mono: true, copy: "mail.kleacore.com" },
+                  { label: "Port", value: "993 (SSL/TLS)", mono: true },
+                ]}
+              />
             </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-
-      {/* Email Client Settings */}
-      <BlurFade delay={0.35} inView>
-        <Card className="border-dashed">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-muted">
-                <Settings className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div className="text-sm">
-                <p className="font-medium text-foreground mb-2">E-posta İstemci Ayarları</p>
-                <div className="grid gap-4 sm:grid-cols-2 text-muted-foreground">
-                  <div>
-                    <p className="font-medium text-foreground text-xs mb-1">Gelen Sunucu (IMAP)</p>
-                    <p>mail.kleacore.com</p>
-                    <p>Port: 993 (SSL/TLS)</p>
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground text-xs mb-1">Giden Sunucu (SMTP)</p>
-                    <p>mail.kleacore.com</p>
-                    <p>Port: 465 (SSL/TLS) veya 587 (STARTTLS)</p>
-                  </div>
-                </div>
-                <p className="mt-2 text-xs">
-                  Kullanıcı adı olarak tam e-posta adresinizi kullanın.
-                </p>
-              </div>
+            <div className="space-y-2">
+              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Giden sunucu · SMTP</p>
+              <DetailList
+                items={[
+                  { label: "Sunucu", value: "mail.kleacore.com", mono: true, copy: "mail.kleacore.com" },
+                  { label: "Port", value: "465 (SSL/TLS) · 587 (STARTTLS)", mono: true },
+                ]}
+              />
             </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+            <p className="text-xs text-muted-foreground">Kullanıcı adı olarak tam e-posta adresinizi kullanın.</p>
+          </div>
+        </SectionCard>
+      </div>
+    </>
   );
 }

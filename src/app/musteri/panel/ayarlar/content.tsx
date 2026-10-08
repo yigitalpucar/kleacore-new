@@ -1,50 +1,49 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import {
-  User,
-  Mail,
-  Phone,
-  Lock,
   Bell,
-  Shield,
-  Key,
-  Smartphone,
-  Building,
-  MapPin,
-  Save,
+  BookOpen,
+  CheckCircle2,
+  Copy,
   Eye,
   EyeOff,
-  Copy,
-  RefreshCw,
+  Key,
+  KeyRound,
+  LifeBuoy,
+  Lock,
+  Mail,
+  Plus,
+  ShieldCheck,
+  Smartphone,
   Trash2,
-  AlertTriangle,
-  Monitor,
-  LogOut,
-  Clock,
-  CheckCircle2,
-  Globe,
+  User,
+  X,
+  Ban,
 } from "lucide-react";
+import {
+  DetailList,
+  EmptyState,
+  FormField,
+  FormSection,
+  IconTile,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+  ToneDot,
+  UnavailableAction,
+  appButton,
+} from "@/components/app";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { formatDate, formatDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 import { updateProfile, changePassword } from "@/lib/actions/customer/profile";
-import {
-  createApiKey,
-  revokeApiKey,
-  deleteApiKey,
-} from "@/lib/actions/customer/api-keys";
-import {
-  disable2FA,
-  enable2FA,
-  verify2FASetup,
-} from "@/lib/actions/customer/two-factor";
+import { createApiKey, revokeApiKey, deleteApiKey } from "@/lib/actions/customer/api-keys";
+import { disable2FA, enable2FA, verify2FASetup } from "@/lib/actions/customer/two-factor";
 
 interface ProfileData {
   name: string;
@@ -75,20 +74,42 @@ interface AyarlarContentProps {
   twoFactorGloballyEnabled: boolean;
 }
 
-const notificationSettings = [
-  { id: "email_invoices", label: "Fatura bildirimleri", description: "Yeni fatura ve ödeme hatırlatmaları", enabled: true },
-  { id: "email_services", label: "Hizmet bildirimleri", description: "Hizmet yenileme ve sona erme uyarilari", enabled: true },
-  { id: "email_support", label: "Destek bildirimleri", description: "Destek talebi yanitlari", enabled: true },
-  { id: "email_marketing", label: "Pazarlama e-postalari", description: "Kampanya ve duyurular", enabled: false },
-  { id: "sms_critical", label: "SMS bildirimleri", description: "Kritik uyarılar için SMS", enabled: true },
-];
-
 interface NewlyCreatedApiKey {
   id: string;
   name: string;
   key: string;
   createdAt: string;
 }
+
+// Shown for reference only: preferences can't be saved yet (no server action).
+const notificationGroups = [
+  {
+    title: "E-posta",
+    items: [
+      { id: "email_invoices", enabled: true, label: "Fatura bildirimleri", description: "Yeni fatura ve ödeme hatırlatmaları" },
+      { id: "email_services", enabled: true, label: "Hizmet bildirimleri", description: "Hizmet yenileme ve süre bitimi uyarıları" },
+      { id: "email_support", enabled: true, label: "Destek bildirimleri", description: "Destek taleplerinize gelen yanıtlar" },
+      { id: "email_marketing", enabled: false, label: "Kampanya ve duyurular", description: "İndirimler, yeni ürünler ve duyurular" },
+    ],
+  },
+  {
+    title: "SMS",
+    items: [{ id: "sms_critical", enabled: true, label: "Kritik uyarılar", description: "Hizmet kesintisi gibi acil durumlar için SMS" }],
+  },
+];
+
+type TabId = "profile" | "security" | "notifications" | "api";
+
+const tabs: { id: TabId; label: string; description: string; icon: typeof User }[] = [
+  { id: "profile", label: "Profil", description: "Kişisel ve fatura bilgileri", icon: User },
+  { id: "security", label: "Güvenlik", description: "Şifre ve iki faktörlü doğrulama", icon: ShieldCheck },
+  { id: "notifications", label: "Bildirimler", description: "E-posta ve SMS tercihleri", icon: Bell },
+  { id: "api", label: "API erişimi", description: "API anahtarları", icon: KeyRound },
+];
+
+const inputCls = "h-11 md:h-10";
+// The settings nav already takes the left column, so stack FormSection titles above their cards.
+const sectionCls = "lg:grid-cols-1 lg:gap-4";
 
 export function AyarlarContent({
   profile,
@@ -98,7 +119,7 @@ export function AyarlarContent({
   twoFactorGloballyEnabled,
 }: AyarlarContentProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState<TabId>("profile");
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState(
     profile ?? {
@@ -114,7 +135,6 @@ export function AyarlarContent({
       country: "Turkiye",
     }
   );
-  const [notifications, setNotifications] = useState(notificationSettings);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -150,19 +170,9 @@ export function AyarlarContent({
     })();
   }, [twoFactorSetupPending, twoFactorQrCode, twoFactorActive]);
 
-  const tabs = [
-    { id: "profile", label: "Profil", icon: User },
-    { id: "security", label: "Guvenlik", icon: Shield },
-    { id: "notifications", label: "Bildirimler", icon: Bell },
-    { id: "api", label: "API", icon: Key },
-  ];
-
-  const toggleNotification = (id: string) => {
-    setNotifications(
-      notifications.map((n) =>
-        n.id === id ? { ...n, enabled: !n.enabled } : n
-      )
-    );
+  const selectTab = (id: TabId) => {
+    setActiveTab(id);
+    setMessage(null);
   };
 
   const copyToClipboard = (key: string, id: string) => {
@@ -171,7 +181,8 @@ export function AyarlarContent({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleProfileSave = async () => {
+  const handleProfileSave = async (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
     setSaving(true);
     setMessage(null);
     const fd = new FormData();
@@ -195,26 +206,20 @@ export function AyarlarContent({
 
   const handlePasswordChange = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const form = e.currentTarget;
     setSaving(true);
     setMessage(null);
-    const fd = new FormData(e.currentTarget);
+    const fd = new FormData(form);
 
     const result = await changePassword(fd);
     setSaving(false);
     if (result.success) {
       setMessage({ type: "success", text: "Şifre başarıyla değiştirildi." });
-      e.currentTarget.reset();
+      form.reset();
     } else {
       setMessage({ type: "error", text: result.error ?? "Bir hata oluştu." });
     }
   };
-
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
 
   const handleCreateApiKey = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -266,94 +271,6 @@ export function AyarlarContent({
     }
   };
 
-  const handleEnableTwoFactor = async () => {
-    setTwoFactorLoading(true);
-    setMessage(null);
-
-    const result = await enable2FA();
-    setTwoFactorLoading(false);
-
-    if (result.success && result.qrCodeDataUrl && result.manualEntryKey) {
-      setTwoFactorSetupOpen(true);
-      setTwoFactorQrCode(result.qrCodeDataUrl);
-      setTwoFactorManualKey(result.manualEntryKey);
-      setMessage({
-        type: "success",
-        text: "QR kodu oluşturuldu. Authenticator uygulamanıza ekleyip doğrulama kodunu girin.",
-      });
-      return;
-    }
-
-    setMessage({
-      type: "error",
-      text: result.error ?? "İki faktörlü doğrulama başlatılamadı.",
-    });
-  };
-
-  const handleVerifyTwoFactorSetup = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setTwoFactorLoading(true);
-    setMessage(null);
-
-    const fd = new FormData();
-    fd.set("code", twoFactorVerifyCode.trim());
-
-    const result = await verify2FASetup(fd);
-    setTwoFactorLoading(false);
-
-    if (result.success && result.backupCodes) {
-      setTwoFactorActive(true);
-      setTwoFactorSetupOpen(false);
-      setTwoFactorBackupCodes(result.backupCodes);
-      setTwoFactorVerifyCode("");
-      setTwoFactorQrCode(null);
-      setTwoFactorManualKey("");
-      setMessage({
-        type: "success",
-        text: "İki faktörlü doğrulama başarıyla etkinleştirildi.",
-      });
-      router.refresh();
-      return;
-    }
-
-    setMessage({
-      type: "error",
-      text: result.error ?? "Doğrulama kodu hatalı.",
-    });
-  };
-
-  const handleDisableTwoFactor = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setTwoFactorLoading(true);
-    setMessage(null);
-
-    const fd = new FormData();
-    fd.set("password", twoFactorDisablePassword);
-    fd.set("code", twoFactorDisableCode.trim());
-
-    const result = await disable2FA(fd);
-    setTwoFactorLoading(false);
-
-    if (result.success) {
-      setTwoFactorActive(false);
-      setTwoFactorSetupOpen(false);
-      setTwoFactorBackupCodes([]);
-      setTwoFactorDisablePassword("");
-      setTwoFactorDisableCode("");
-      setMessage({
-        type: "success",
-        text: "İki faktörlü doğrulama devre dışı bırakıldı.",
-      });
-      router.refresh();
-      return;
-    }
-
-    setMessage({
-      type: "error",
-      text: result.error ?? "İki faktörlü doğrulama kapatılamadı.",
-    });
-  };
-
   const handleDeleteApiKey = async (id: string) => {
     if (!confirm("Bu API anahtarını kalıcı olarak silmek istediğinize emin misiniz?")) {
       return;
@@ -379,797 +296,766 @@ export function AyarlarContent({
     }
   };
 
+  const handleEnableTwoFactor = async () => {
+    setTwoFactorLoading(true);
+    setMessage(null);
+
+    const result = await enable2FA();
+    setTwoFactorLoading(false);
+
+    if (result.success && result.qrCodeDataUrl && result.manualEntryKey) {
+      setTwoFactorSetupOpen(true);
+      setTwoFactorQrCode(result.qrCodeDataUrl);
+      setTwoFactorManualKey(result.manualEntryKey);
+      setMessage({
+        type: "success",
+        text: "QR kodu oluşturuldu. Authenticator uygulamanıza ekleyip doğrulama kodunu girin.",
+      });
+      return;
+    }
+
+    setMessage({ type: "error", text: result.error ?? "İki faktörlü doğrulama başlatılamadı." });
+  };
+
+  const handleVerifyTwoFactorSetup = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setTwoFactorLoading(true);
+    setMessage(null);
+
+    const fd = new FormData();
+    fd.set("code", twoFactorVerifyCode.trim());
+
+    const result = await verify2FASetup(fd);
+    setTwoFactorLoading(false);
+
+    if (result.success && result.backupCodes) {
+      setTwoFactorActive(true);
+      setTwoFactorSetupOpen(false);
+      setTwoFactorBackupCodes(result.backupCodes);
+      setTwoFactorVerifyCode("");
+      setTwoFactorQrCode(null);
+      setTwoFactorManualKey("");
+      setMessage({ type: "success", text: "İki faktörlü doğrulama başarıyla etkinleştirildi." });
+      router.refresh();
+      return;
+    }
+
+    setMessage({ type: "error", text: result.error ?? "Doğrulama kodu hatalı." });
+  };
+
+  const handleDisableTwoFactor = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setTwoFactorLoading(true);
+    setMessage(null);
+
+    const fd = new FormData();
+    fd.set("password", twoFactorDisablePassword);
+    fd.set("code", twoFactorDisableCode.trim());
+
+    const result = await disable2FA(fd);
+    setTwoFactorLoading(false);
+
+    if (result.success) {
+      setTwoFactorActive(false);
+      setTwoFactorSetupOpen(false);
+      setTwoFactorBackupCodes([]);
+      setTwoFactorDisablePassword("");
+      setTwoFactorDisableCode("");
+      setMessage({ type: "success", text: "İki faktörlü doğrulama devre dışı bırakıldı." });
+      router.refresh();
+      return;
+    }
+
+    setMessage({ type: "error", text: result.error ?? "İki faktörlü doğrulama kapatılamadı." });
+  };
+
+  const initials = `${formData.name?.[0] ?? ""}${formData.surname?.[0] ?? ""}`.toLocaleUpperCase("tr-TR") || "?";
+  const fullName = `${formData.name} ${formData.surname}`.trim();
+
+  const twoFactorStatus = twoFactorActive
+    ? { tone: "success" as const, label: "Etkin" }
+    : twoFactorSetupOpen
+      ? { tone: "warning" as const, label: "Kurulum sürüyor" }
+      : { tone: "muted" as const, label: "Kapalı" };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <BlurFade delay={0.1} inView>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Hesap Ayarlari</h1>
-          <p className="text-muted-foreground">
-            Hesap bilgilerinizi ve tercihlerinizi yonetin.
-          </p>
-        </div>
-      </BlurFade>
+    <>
+      <PageHeader title="Hesap ayarları" description="Profil, güvenlik, bildirim ve API ayarlarınızı yönetin." />
 
-      {/* Status message */}
-      {message && (
+      <div className="flex flex-col gap-6 lg:flex-row lg:gap-10">
+        {/* Section nav: horizontal scroll row on phones, sidebar on lg */}
+        <nav aria-label="Ayar bölümleri" className="lg:w-56 lg:shrink-0">
+          <div
+            role="tablist"
+            className="grid grid-cols-2 gap-1 md:flex md:flex-wrap lg:sticky lg:top-20 lg:flex-col"
+          >
+            {tabs.map((tab) => {
+              const active = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  id={`tab-${tab.id}`}
+                  aria-selected={active}
+                  aria-controls={`panel-${tab.id}`}
+                  onClick={() => selectTab(tab.id)}
+                  className={cn(
+                    "relative flex h-11 shrink-0 items-center gap-2.5 rounded-md border px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-auto lg:w-full lg:border-transparent lg:py-2",
+                    active
+                      ? "border-border bg-muted font-medium text-foreground"
+                      : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  )}
+                >
+                  {active ? (
+                    <span aria-hidden className="absolute inset-y-1.5 left-0 hidden w-0.5 rounded-full bg-foreground lg:block" />
+                  ) : null}
+                  <tab.icon aria-hidden className="size-4 shrink-0" />
+                  <span className="lg:flex lg:flex-col lg:items-start">
+                    <span>{tab.label}</span>
+                    <span className="hidden text-xs font-normal text-muted-foreground lg:block">{tab.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
         <div
-          className={cn(
-            "p-3 rounded-lg text-sm",
-            message.type === "success"
-              ? "bg-green-500/10 text-green-500"
-              : "bg-red-500/10 text-red-500"
-          )}
+          role="tabpanel"
+          id={`panel-${activeTab}`}
+          aria-labelledby={`tab-${activeTab}`}
+          className="min-w-0 flex-1 space-y-8"
         >
-          {message.text}
-        </div>
-      )}
-
-      {/* Tabs */}
-      <BlurFade delay={0.15} inView>
-        <div className="flex gap-2 border-b pb-2 overflow-x-auto">
-          {tabs.map((tab) => (
-            <Button
-              key={tab.id}
-              variant={activeTab === tab.id ? "default" : "ghost"}
-              onClick={() => setActiveTab(tab.id)}
-              className="gap-2 shrink-0"
+          {message ? (
+            <div
+              role={message.type === "error" ? "alert" : "status"}
+              className={cn(
+                "flex items-start gap-3 rounded-lg border bg-card px-4 py-3 text-sm shadow-sm",
+                message.type === "error" && "border-red-500/40"
+              )}
             >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-            </Button>
-          ))}
-        </div>
-      </BlurFade>
+              <ToneDot tone={message.type === "success" ? "success" : "danger"} className="mt-1.5" />
+              <p className="min-w-0 flex-1">{message.text}</p>
+              <button
+                type="button"
+                onClick={() => setMessage(null)}
+                aria-label="Mesajı kapat"
+                className={cn(appButton({ variant: "ghost", size: "icon-sm" }), "-my-1.5 -mr-2")}
+              >
+                <X aria-hidden />
+              </button>
+            </div>
+          ) : null}
 
-      {/* Profile Tab */}
-      {activeTab === "profile" && (
-        <BlurFade delay={0.2} inView>
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Personal Info */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Kisisel Bilgiler</CardTitle>
-                <CardDescription>
-                  Ad, soyad ve iletisim bilgileriniz
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Ad</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          {activeTab === "profile" ? (
+            <>
+              <div className="flex items-center gap-4 rounded-lg border bg-card p-4 shadow-sm md:p-5">
+                <span
+                  aria-hidden
+                  className="flex size-14 shrink-0 items-center justify-center rounded-full border bg-muted text-lg font-semibold tracking-tight"
+                >
+                  {initials}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-base font-semibold tracking-tight">{fullName || "İsimsiz kullanıcı"}</p>
+                  <p className="truncate text-sm text-muted-foreground">{formData.email}</p>
+                  {formData.companyName ? (
+                    <p className="truncate text-xs text-muted-foreground">{formData.companyName}</p>
+                  ) : null}
+                </div>
+              </div>
+
+              <form onSubmit={handleProfileSave} className="space-y-8">
+                <FormSection
+                className={sectionCls}
+                  title="Kişisel bilgiler"
+                  description="Ad, soyad ve iletişim bilgileriniz. Faturalarınızda bu bilgiler kullanılır."
+                  footer={
+                    <button type="submit" className={appButton()} disabled={saving}>
+                      {saving ? "Kaydediliyor…" : "Kaydet"}
+                    </button>
+                  }
+                >
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <FormField label="Ad" htmlFor="name">
                       <Input
                         id="name"
+                        autoComplete="given-name"
                         value={formData.name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, name: e.target.value })
-                        }
-                        className="pl-10"
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className={inputCls}
                       />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="surname">Soyad</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    </FormField>
+                    <FormField label="Soyad" htmlFor="surname">
                       <Input
                         id="surname"
+                        autoComplete="family-name"
                         value={formData.surname}
-                        onChange={(e) =>
-                          setFormData({ ...formData, surname: e.target.value })
-                        }
-                        className="pl-10"
+                        onChange={(e) => setFormData({ ...formData, surname: e.target.value })}
+                        className={inputCls}
                       />
-                    </div>
+                    </FormField>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-posta</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      disabled
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Telefon</Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <FormField label="E-posta" htmlFor="email" hint="Giriş adresiniz bu sayfadan değiştirilemez.">
+                    <Input id="email" type="email" value={formData.email} disabled className={inputCls} />
+                  </FormField>
+                  <FormField label="Telefon" htmlFor="phone">
                     <Input
                       id="phone"
+                      type="tel"
+                      autoComplete="tel"
+                      placeholder="+90 5xx xxx xx xx"
                       value={formData.phone}
-                      onChange={(e) =>
-                        setFormData({ ...formData, phone: e.target.value })
-                      }
-                      className="pl-10"
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className={inputCls}
                     />
-                  </div>
-                </div>
+                  </FormField>
+                </FormSection>
 
-                <Button
-                  className="w-full sm:w-auto"
-                  onClick={handleProfileSave}
-                  disabled={saving}
+                <FormSection
+                className={sectionCls}
+                  title="Şirket ve fatura adresi"
+                  description="Kurumsal fatura için şirket unvanı ve vergi bilgilerinizi girin."
+                  footer={
+                    <button type="submit" className={appButton()} disabled={saving}>
+                      {saving ? "Kaydediliyor…" : "Kaydet"}
+                    </button>
+                  }
                 >
-                  <Save className="mr-2 h-4 w-4" />
-                  {saving ? "Kaydediliyor..." : "Kaydet"}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Company & Address */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Sirket & Adres</CardTitle>
-                <CardDescription>
-                  Fatura ve teslimat bilgileri
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="companyName">Sirket Adi</Label>
-                    <div className="relative">
-                      <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="companyName"
-                        value={formData.companyName}
-                        onChange={(e) =>
-                          setFormData({ ...formData, companyName: e.target.value })
-                        }
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="taxNumber">Vergi No</Label>
+                  <FormField label="Şirket adı" htmlFor="companyName" hint="Bireysel faturada boş bırakın.">
                     <Input
-                      id="taxNumber"
-                      value={formData.taxNumber}
-                      onChange={(e) =>
-                        setFormData({ ...formData, taxNumber: e.target.value })
-                      }
+                      id="companyName"
+                      autoComplete="organization"
+                      value={formData.companyName}
+                      onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                      className={inputCls}
                     />
+                  </FormField>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <FormField label="Vergi dairesi" htmlFor="taxOffice">
+                      <Input
+                        id="taxOffice"
+                        value={formData.taxOffice}
+                        onChange={(e) => setFormData({ ...formData, taxOffice: e.target.value })}
+                        className={inputCls}
+                      />
+                    </FormField>
+                    <FormField label="Vergi / T.C. kimlik no" htmlFor="taxNumber">
+                      <Input
+                        id="taxNumber"
+                        inputMode="numeric"
+                        value={formData.taxNumber}
+                        onChange={(e) => setFormData({ ...formData, taxNumber: e.target.value })}
+                        className={cn(inputCls, "font-mono")}
+                      />
+                    </FormField>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="address">Adres</Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <FormField label="Adres" htmlFor="address">
                     <Textarea
                       id="address"
+                      autoComplete="street-address"
+                      rows={3}
                       value={formData.address}
-                      onChange={(e) =>
-                        setFormData({ ...formData, address: e.target.value })
-                      }
-                      className="pl-10 min-h-[80px]"
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     />
+                  </FormField>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <FormField label="Şehir" htmlFor="city">
+                      <Input
+                        id="city"
+                        autoComplete="address-level1"
+                        value={formData.city}
+                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        className={inputCls}
+                      />
+                    </FormField>
+                    <FormField label="Ülke" htmlFor="country">
+                      <Input id="country" value={formData.country} disabled className={inputCls} />
+                    </FormField>
                   </div>
-                </div>
+                </FormSection>
+              </form>
+            </>
+          ) : null}
 
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="city">Sehir</Label>
-                    <Input
-                      id="city"
-                      value={formData.city}
-                      onChange={(e) =>
-                        setFormData({ ...formData, city: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="country">Ulke</Label>
-                    <Input
-                      id="country"
-                      value={formData.country}
-                      disabled
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="taxOffice">Vergi Dairesi</Label>
-                    <Input
-                      id="taxOffice"
-                      value={formData.taxOffice}
-                      onChange={(e) =>
-                        setFormData({ ...formData, taxOffice: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  className="w-full sm:w-auto"
-                  onClick={handleProfileSave}
-                  disabled={saving}
+          {activeTab === "security" ? (
+            <>
+              <form onSubmit={handlePasswordChange}>
+                <FormSection
+                className={sectionCls}
+                  title="Şifre"
+                  description="En az 8 karakter; büyük harf, küçük harf ve rakam içermeli."
+                  footer={
+                    <button type="submit" className={appButton()} disabled={saving}>
+                      <Lock aria-hidden />
+                      {saving ? "Değiştiriliyor…" : "Şifreyi değiştir"}
+                    </button>
+                  }
                 >
-                  <Save className="mr-2 h-4 w-4" />
-                  {saving ? "Kaydediliyor..." : "Kaydet"}
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </BlurFade>
-      )}
-
-      {/* Security Tab */}
-      {activeTab === "security" && (
-        <BlurFade delay={0.2} inView>
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Change Password */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Şifre Değiştir</CardTitle>
-                <CardDescription>
-                  Hesap güvenliğiniz için güçlü bir şifre kullanın
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handlePasswordChange} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="currentPassword">Mevcut Şifre</Label>
+                  <FormField label="Mevcut şifre" htmlFor="currentPassword">
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="currentPassword"
                         name="currentPassword"
                         type={showPassword ? "text" : "password"}
-                        className="pl-10 pr-10"
+                        autoComplete="current-password"
+                        className={cn(inputCls, "pr-12")}
                         required
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
+                        aria-label={showPassword ? "Şifreleri gizle" : "Şifreleri göster"}
+                        aria-pressed={showPassword}
+                        className={cn(
+                          appButton({ variant: "ghost", size: "icon-sm" }),
+                          "absolute right-0.5 top-1/2 -translate-y-1/2 text-muted-foreground md:right-1"
                         )}
+                      >
+                        {showPassword ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
                       </button>
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword">Yeni Şifre</Label>
-                    <div className="relative">
-                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  </FormField>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <FormField label="Yeni şifre" htmlFor="newPassword">
                       <Input
                         id="newPassword"
                         name="newPassword"
                         type={showPassword ? "text" : "password"}
-                        className="pl-10"
+                        autoComplete="new-password"
+                        className={inputCls}
                         required
                       />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Yeni Şifre (Tekrar)</Label>
-                    <div className="relative">
-                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    </FormField>
+                    <FormField label="Yeni şifre (tekrar)" htmlFor="confirmPassword">
                       <Input
                         id="confirmPassword"
                         name="confirmPassword"
                         type={showPassword ? "text" : "password"}
-                        className="pl-10"
+                        autoComplete="new-password"
+                        className={inputCls}
                         required
                       />
-                    </div>
+                    </FormField>
                   </div>
+                </FormSection>
+              </form>
 
-                  <Button type="submit" disabled={saving}>
-                    <Lock className="mr-2 h-4 w-4" />
-                    {saving ? "Değiştiriliyor..." : "Şifreyi Değiştir"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-
-            {/* Two-Factor Authentication */}
-            <Card>
-              <CardHeader>
-                <CardTitle>İki Faktörlü Doğrulama</CardTitle>
-                <CardDescription>
-                  Hesabınıza ekstra güvenlik katmanı ekleyin
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!twoFactorGloballyEnabled && (
-                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
+              <FormSection
+                className={sectionCls}
+                title="İki faktörlü doğrulama"
+                description="Girişte şifrenize ek olarak authenticator uygulamanızdaki 6 haneli kod istenir."
+              >
+                {!twoFactorGloballyEnabled ? (
+                  <p className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2.5 text-sm text-muted-foreground">
+                    <ToneDot tone="warning" className="mt-1.5" />
                     İki faktörlü doğrulama sistem yöneticisi tarafından devre dışı bırakılmış.
-                  </div>
-                )}
+                  </p>
+                ) : null}
 
-                <div className="flex items-center justify-between p-4 rounded-lg border">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-green-500/10">
-                      <Smartphone className="h-5 w-5 text-green-500" />
-                    </div>
-                    <div>
-                      <p className="font-medium">Authenticator Uygulaması</p>
-                      <p className="text-sm text-muted-foreground">
-                        Google Authenticator veya Authy
-                      </p>
-                    </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <IconTile>
+                    <Smartphone />
+                  </IconTile>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">Authenticator uygulaması</p>
+                    <p className="text-[13px] text-muted-foreground">Google Authenticator, Authy veya benzeri</p>
                   </div>
-                  {twoFactorActive ? (
-                    <span className="text-sm text-green-500 font-medium">Aktif</span>
-                  ) : twoFactorSetupOpen ? (
-                    <span className="text-sm text-amber-500 font-medium">Kurulumda</span>
+                  {twoFactorActive || twoFactorSetupOpen ? (
+                    <StatusBadge tone={twoFactorStatus.tone} label={twoFactorStatus.label} />
                   ) : (
-                    <Button
-                      variant="outline"
+                    <button
+                      type="button"
+                      className={appButton({ variant: "outline" })}
                       onClick={handleEnableTwoFactor}
                       disabled={!twoFactorGloballyEnabled || twoFactorLoading}
                     >
-                      {twoFactorLoading ? "Hazırlanıyor..." : "Aktifleştir"}
-                    </Button>
+                      {twoFactorLoading ? "Hazırlanıyor…" : "Etkinleştir"}
+                    </button>
                   )}
                 </div>
 
-                {twoFactorSetupOpen && (
-                  <div className="space-y-4 rounded-lg border p-4">
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">1. Authenticator uygulamanıza ekleyin</p>
+                {twoFactorSetupOpen ? (
+                  <div className="grid gap-5 rounded-lg border border-dashed p-4 md:grid-cols-[auto_minmax(0,1fr)] md:gap-6">
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium leading-none">Adım 1 · QR kodu tarayın</p>
                       {twoFactorQrCode ? (
-                        <div className="flex flex-col items-center gap-3">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={twoFactorQrCode}
-                            alt="İki faktörlü doğrulama QR kodu"
-                            className="h-56 w-56 rounded-md border bg-white p-2"
-                          />
-                          <div className="w-full space-y-2">
-                            <p className="text-xs text-muted-foreground">
-                              QR kodu tarayamıyorsanız bu anahtarı manuel girin:
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <p className="flex-1 rounded-md border bg-muted/40 p-2 font-mono text-xs break-all">
-                                {twoFactorManualKey}
-                              </p>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => copyToClipboard(twoFactorManualKey, "2fa-secret")}
-                              >
-                                {copiedKey === "2fa-secret" ? (
-                                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                ) : (
-                                  <Copy className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </div>
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={twoFactorQrCode}
+                          alt="İki faktörlü doğrulama QR kodu"
+                          className="mx-auto size-48 rounded-md border bg-white p-2 md:mx-0"
+                        />
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {twoFactorLoading
+                            ? "QR kodu hazırlanıyor…"
+                            : "Kurulum bekleniyor. Lütfen “Etkinleştir” düğmesine tekrar tıklayın."}
+                        </p>
+                      )}
+                    </div>
+                    <div className="min-w-0 space-y-5">
+                      {twoFactorManualKey ? (
+                        <div className="space-y-1.5">
+                          <p className="text-xs text-muted-foreground">QR kodu tarayamıyorsanız bu anahtarı elle girin:</p>
+                          <div className="flex items-center gap-2">
+                            <code className="min-w-0 flex-1 break-all rounded-md border bg-muted/40 px-3 py-2 font-mono text-xs">
+                              {twoFactorManualKey}
+                            </code>
+                            <button
+                              type="button"
+                              className={appButton({ variant: "outline", size: "icon" })}
+                              onClick={() => copyToClipboard(twoFactorManualKey, "2fa-secret")}
+                              aria-label="Anahtarı kopyala"
+                            >
+                              {copiedKey === "2fa-secret" ? <CheckCircle2 aria-hidden /> : <Copy aria-hidden />}
+                            </button>
                           </div>
                         </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          Kurulum bekleniyor. Lütfen &quot;Aktifleştir&quot; butonuna tekrar tıklayın.
-                        </p>
-                      )}
+                      ) : null}
+                      <form onSubmit={handleVerifyTwoFactorSetup} className="space-y-3">
+                        <FormField label="Adım 2 · Doğrulama kodu" htmlFor="twoFactorVerifyCode">
+                          <Input
+                            id="twoFactorVerifyCode"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            placeholder="123456"
+                            value={twoFactorVerifyCode}
+                            onChange={(e) => setTwoFactorVerifyCode(e.target.value)}
+                            required
+                            disabled={twoFactorLoading}
+                            className={cn(inputCls, "max-w-[200px] font-mono tracking-[0.3em]")}
+                          />
+                        </FormField>
+                        <button
+                          type="submit"
+                          className={appButton()}
+                          disabled={twoFactorLoading || !twoFactorVerifyCode.trim()}
+                        >
+                          {twoFactorLoading ? "Doğrulanıyor…" : "Doğrula ve etkinleştir"}
+                        </button>
+                      </form>
                     </div>
-
-                    <form onSubmit={handleVerifyTwoFactorSetup} className="space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="twoFactorVerifyCode">2. Doğrulama kodunu girin</Label>
-                        <Input
-                          id="twoFactorVerifyCode"
-                          inputMode="numeric"
-                          autoComplete="one-time-code"
-                          placeholder="123456"
-                          value={twoFactorVerifyCode}
-                          onChange={(e) => setTwoFactorVerifyCode(e.target.value)}
-                          required
-                          disabled={twoFactorLoading}
-                        />
-                      </div>
-                      <Button type="submit" disabled={twoFactorLoading || !twoFactorVerifyCode.trim()}>
-                        {twoFactorLoading ? "Doğrulanıyor..." : "Doğrula ve Etkinleştir"}
-                      </Button>
-                    </form>
                   </div>
-                )}
+                ) : null}
 
-                {twoFactorBackupCodes.length > 0 && (
-                  <div className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+                {twoFactorBackupCodes.length > 0 ? (
+                  <div className="space-y-3 rounded-lg border border-amber-500/40 p-4">
                     <div className="flex items-start gap-2">
-                      <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                      <ToneDot tone="warning" className="mt-1.5" />
                       <div>
-                        <p className="font-medium">Yedek kodlarınızı kaydedin</p>
-                        <p className="text-sm text-muted-foreground">
-                          Telefonunuza erişemezseniz bu kodlardan birini kullanabilirsiniz. Her kod yalnızca bir kez kullanılabilir.
+                        <p className="text-sm font-medium">Yedek kodlarınızı kaydedin</p>
+                        <p className="text-[13px] text-muted-foreground">
+                          Telefonunuza erişemezseniz bu kodlardan birini kullanabilirsiniz. Her kod yalnızca bir kez
+                          kullanılabilir ve bir daha gösterilmez.
                         </p>
                       </div>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {twoFactorBackupCodes.map((code) => (
-                        <p
+                        <li
                           key={code}
-                          className="rounded-md border bg-background/80 px-3 py-2 font-mono text-sm"
+                          className="rounded-md border bg-muted/40 px-3 py-2 text-center font-mono text-sm tracking-wider"
                         >
                           {code}
-                        </p>
+                        </li>
                       ))}
-                    </div>
-                    <Button
+                    </ul>
+                    <button
                       type="button"
-                      variant="outline"
-                      size="sm"
+                      className={appButton({ variant: "outline", size: "sm" })}
                       onClick={() => copyToClipboard(twoFactorBackupCodes.join("\n"), "2fa-backup")}
                     >
-                      {copiedKey === "2fa-backup" ? (
-                        <>
-                          <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
-                          Kopyalandı
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="mr-2 h-4 w-4" />
-                          Tümünü Kopyala
-                        </>
-                      )}
-                    </Button>
+                      {copiedKey === "2fa-backup" ? <CheckCircle2 aria-hidden /> : <Copy aria-hidden />}
+                      {copiedKey === "2fa-backup" ? "Kopyalandı" : "Tümünü kopyala"}
+                    </button>
                   </div>
-                )}
+                ) : null}
 
-                {twoFactorActive && (
-                  <form onSubmit={handleDisableTwoFactor} className="space-y-3 rounded-lg border p-4">
-                    <p className="text-sm font-medium">İki faktörlü doğrulamayı kapat</p>
-                    <div className="space-y-2">
-                      <Label htmlFor="twoFactorDisablePassword">Mevcut Şifre</Label>
-                      <Input
-                        id="twoFactorDisablePassword"
-                        type="password"
-                        value={twoFactorDisablePassword}
-                        onChange={(e) => setTwoFactorDisablePassword(e.target.value)}
-                        required
-                        disabled={twoFactorLoading}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="twoFactorDisableCode">Authenticator veya yedek kod</Label>
-                      <Input
-                        id="twoFactorDisableCode"
-                        value={twoFactorDisableCode}
-                        onChange={(e) => setTwoFactorDisableCode(e.target.value)}
-                        required
-                        disabled={twoFactorLoading}
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      className="text-red-500 hover:text-red-500"
-                      disabled={twoFactorLoading}
-                    >
-                      {twoFactorLoading ? "Kapatılıyor..." : "2FA'yı Devre Dışı Bırak"}
-                    </Button>
-                  </form>
-                )}
-
-                <div className="flex items-center justify-between p-4 rounded-lg border">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-blue-500/10">
-                      <Mail className="h-5 w-5 text-blue-500" />
-                    </div>
+                {twoFactorActive ? (
+                  <form onSubmit={handleDisableTwoFactor} className="space-y-4 border-t border-dashed pt-5">
                     <div>
-                      <p className="font-medium">E-posta Doğrulama</p>
-                      <p className="text-sm text-muted-foreground">
-                        Giriş kodunu e-posta ile al
+                      <p className="text-sm font-medium">İki faktörlü doğrulamayı kapat</p>
+                      <p className="text-[13px] text-muted-foreground">
+                        Onaylamak için şifrenizi ve authenticator ya da yedek kodunuzu girin.
                       </p>
                     </div>
-                  </div>
-                  <span className="text-sm text-green-500 font-medium">Aktif</span>
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-purple-500/10">
-                      <Phone className="h-5 w-5 text-purple-500" />
-                    </div>
-                    <div>
-                      <p className="font-medium">SMS Doğrulama</p>
-                      <p className="text-sm text-muted-foreground">
-                        Giriş kodunu SMS ile al
-                      </p>
-                    </div>
-                  </div>
-                  <Button variant="outline">Aktiflestir</Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Danger Zone */}
-            <Card className="lg:col-span-2 border-red-500/20">
-              <CardHeader>
-                <CardTitle className="text-red-500 flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5" />
-                  Tehlikeli Bolge
-                </CardTitle>
-                <CardDescription>
-                  Bu işlemler geri alınamaz. Dikkatli olun.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border border-red-500/20 bg-red-500/5">
-                  <div>
-                    <p className="font-medium">Hesabi Sil</p>
-                    <p className="text-sm text-muted-foreground">
-                      Hesabınızı ve tüm verilerinizi kalıcı olarak silin. Bu işlem geri alınamaz.
-                    </p>
-                  </div>
-                  <Button variant="destructive" className="shrink-0">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Hesabi Sil
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </BlurFade>
-      )}
-
-      {/* Notifications Tab */}
-      {activeTab === "notifications" && (
-        <BlurFade delay={0.2} inView>
-          <Card>
-            <CardHeader>
-              <CardTitle>Bildirim Tercihleri</CardTitle>
-              <CardDescription>
-                Hangi bildirimleri almak istediginizi secin
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {notifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className="flex items-center justify-between p-4 rounded-lg border"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          "p-2 rounded-lg",
-                          notification.enabled
-                            ? "bg-green-500/10"
-                            : "bg-muted"
-                        )}
-                      >
-                        <Bell
-                          className={cn(
-                            "h-5 w-5",
-                            notification.enabled
-                              ? "text-green-500"
-                              : "text-muted-foreground"
-                          )}
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <FormField label="Mevcut şifre" htmlFor="twoFactorDisablePassword">
+                        <Input
+                          id="twoFactorDisablePassword"
+                          type="password"
+                          autoComplete="current-password"
+                          value={twoFactorDisablePassword}
+                          onChange={(e) => setTwoFactorDisablePassword(e.target.value)}
+                          required
+                          disabled={twoFactorLoading}
+                          className={inputCls}
                         />
-                      </div>
-                      <div>
-                        <p className="font-medium">{notification.label}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {notification.description}
-                        </p>
-                      </div>
+                      </FormField>
+                      <FormField label="Authenticator veya yedek kod" htmlFor="twoFactorDisableCode">
+                        <Input
+                          id="twoFactorDisableCode"
+                          autoComplete="one-time-code"
+                          value={twoFactorDisableCode}
+                          onChange={(e) => setTwoFactorDisableCode(e.target.value)}
+                          required
+                          disabled={twoFactorLoading}
+                          className={cn(inputCls, "font-mono")}
+                        />
+                      </FormField>
                     </div>
-                    <Switch
-                      checked={notification.enabled}
-                      onCheckedChange={() => toggleNotification(notification.id)}
+                    <button type="submit" className={appButton({ variant: "destructive" })} disabled={twoFactorLoading}>
+                      {twoFactorLoading ? "Kapatılıyor…" : "İki faktörlü doğrulamayı kapat"}
+                    </button>
+                  </form>
+                ) : null}
+
+                <div className="space-y-3 border-t border-dashed pt-5">
+                  <p className="text-[13px] text-muted-foreground">Diğer doğrulama yöntemleri</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <UnavailableAction
+                      layout="tile"
+                      icon={<Mail aria-hidden />}
+                      label="E-posta ile kod"
+                      description="Kod e-postayla gelir"
+                    />
+                    <UnavailableAction
+                      layout="tile"
+                      icon={<Smartphone aria-hidden />}
+                      label="SMS ile kod"
+                      description="Kod SMS ile gelir"
                     />
                   </div>
-                ))}
-              </div>
-
-              <div className="mt-6">
-                <Button>
-                  <Save className="mr-2 h-4 w-4" />
-                  Tercihleri Kaydet
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </BlurFade>
-      )}
-
-      {/* API Tab */}
-      {activeTab === "api" && (
-        <BlurFade delay={0.2} inView>
-          <div className="space-y-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>API Anahtarlari</CardTitle>
-                  <CardDescription>
-                    API entegrasyonlarınız için anahtarlarınızı yönetin
-                  </CardDescription>
                 </div>
-                <Button
-                  onClick={() => setShowCreateKeyForm((prev) => !prev)}
-                  disabled={saving}
-                >
-                  <Key className="mr-2 h-4 w-4" />
-                  Yeni Anahtar
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {showCreateKeyForm && (
-                  <form
-                    onSubmit={handleCreateApiKey}
-                    className="mb-6 p-4 rounded-lg border space-y-4"
-                  >
-                    <div className="space-y-2">
-                      <Label htmlFor="apiKeyName">Anahtar Adı</Label>
+              </FormSection>
+
+              <FormSection
+                className={sectionCls}
+                title="Hesabı kapat"
+                description="Hesabınız ve ona bağlı tüm veriler kalıcı olarak silinir. Bu işlem geri alınamaz."
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Panelden hesap silme henüz yok. Hesabınızı kapatmak için destek talebi oluşturabilirsiniz.
+                  </p>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <Link href="/musteri/panel/destek/yeni" className={appButton({ variant: "outline" })}>
+                      <LifeBuoy aria-hidden />
+                      Destek talebi
+                    </Link>
+                    <UnavailableAction icon={<Trash2 aria-hidden />} label="Hesabı sil" />
+                  </div>
+                </div>
+              </FormSection>
+            </>
+          ) : null}
+
+          {activeTab === "notifications" ? (
+            <FormSection
+                className={sectionCls}
+              title="Bildirim tercihleri"
+              description="Hangi konularda e-posta veya SMS almak istediğinizi seçin."
+              footer={<UnavailableAction variant="primary" label="Tercihleri kaydet" />}
+            >
+              <p className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2.5 text-[13px] text-muted-foreground">
+                <ToneDot tone="info" className="mt-1.5" />
+                Varsayılan tercihler gösteriliyor. Tercihleri değiştirip kaydetme özelliği yakında eklenecek.
+              </p>
+              {notificationGroups.map((group) => (
+                <fieldset key={group.title} className="space-y-2">
+                  <legend className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    {group.title}
+                  </legend>
+                  <div className="divide-y rounded-md border">
+                    {group.items.map((item) => (
+                      <div key={item.id} className="flex min-h-14 items-center justify-between gap-4 px-3 py-3">
+                        <div className="min-w-0 space-y-0.5">
+                          <label htmlFor={`notif-${item.id}`} className="text-sm font-medium">
+                            {item.label}
+                          </label>
+                          <p className="text-[13px] text-muted-foreground">{item.description}</p>
+                        </div>
+                        <Switch id={`notif-${item.id}`} checked={item.enabled} disabled />
+                      </div>
+                    ))}
+                  </div>
+                </fieldset>
+              ))}
+            </FormSection>
+          ) : null}
+
+          {activeTab === "api" ? (
+            <>
+              <SectionCard
+                title="API anahtarları"
+                description="Entegrasyonlarınız için anahtar oluşturun. Anahtarın tamamı yalnızca oluşturulduğunda gösterilir."
+                actions={
+                  !showCreateKeyForm ? (
+                    <button
+                      type="button"
+                      className={appButton({ size: "sm" })}
+                      onClick={() => setShowCreateKeyForm(true)}
+                      disabled={saving}
+                    >
+                      <Plus aria-hidden />
+                      Yeni anahtar
+                    </button>
+                  ) : null
+                }
+                flush
+              >
+                {showCreateKeyForm ? (
+                  <form onSubmit={handleCreateApiKey} className="space-y-3 border-b bg-muted/30 p-4 md:p-5">
+                    <FormField label="Anahtar adı" htmlFor="apiKeyName" hint="Anahtarı nerede kullandığınızı hatırlatacak bir ad verin.">
                       <Input
                         id="apiKeyName"
                         value={newKeyName}
                         onChange={(e) => setNewKeyName(e.target.value)}
-                        placeholder="Örn: Üretim Entegrasyonu"
+                        placeholder="Örn: Muhasebe entegrasyonu"
                         maxLength={100}
                         required
+                        autoFocus
+                        className={cn(inputCls, "bg-background sm:max-w-sm")}
                       />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button type="submit" disabled={saving || !newKeyName.trim()}>
-                        {saving ? "Oluşturuluyor..." : "Oluştur"}
-                      </Button>
-                      <Button
+                    </FormField>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="submit" className={appButton()} disabled={saving || !newKeyName.trim()}>
+                        {saving ? "Oluşturuluyor…" : "Oluştur"}
+                      </button>
+                      <button
                         type="button"
-                        variant="outline"
+                        className={appButton({ variant: "outline" })}
                         onClick={() => {
                           setShowCreateKeyForm(false);
                           setNewKeyName("");
                         }}
                         disabled={saving}
                       >
-                        İptal
-                      </Button>
+                        Vazgeç
+                      </button>
                     </div>
                   </form>
-                )}
+                ) : null}
 
-                {newlyCreatedKey && (
-                  <div className="mb-6 p-4 rounded-lg border border-amber-500/30 bg-amber-500/10 space-y-3">
+                {newlyCreatedKey ? (
+                  <div className="space-y-3 border-b p-4 md:p-5">
                     <div className="flex items-start gap-2">
-                      <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                      <ToneDot tone="warning" className="mt-1.5" />
                       <div>
-                        <p className="font-medium">Yeni API anahtarınız oluşturuldu</p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm font-medium">“{newlyCreatedKey.name}” anahtarı oluşturuldu</p>
+                        <p className="text-[13px] text-muted-foreground">
                           Bu anahtarı yalnızca bir kez görebilirsiniz. Güvenli bir yere kaydedin.
                         </p>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">{newlyCreatedKey.name}</p>
-                      <p className="text-sm font-mono break-all bg-background/80 p-3 rounded-md border">
-                        {newlyCreatedKey.key}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          copyToClipboard(newlyCreatedKey.key, newlyCreatedKey.id)
-                        }
+                    <code className="block break-all rounded-md border bg-muted/40 px-3 py-2.5 font-mono text-[13px]">
+                      {newlyCreatedKey.key}
+                    </code>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className={appButton({ variant: "outline", size: "sm" })}
+                        onClick={() => copyToClipboard(newlyCreatedKey.key, newlyCreatedKey.id)}
                       >
-                        {copiedKey === newlyCreatedKey.id ? (
-                          <>
-                            <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
-                            Kopyalandı
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="mr-2 h-4 w-4" />
-                            Kopyala
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
+                        {copiedKey === newlyCreatedKey.id ? <CheckCircle2 aria-hidden /> : <Copy aria-hidden />}
+                        {copiedKey === newlyCreatedKey.id ? "Kopyalandı" : "Kopyala"}
+                      </button>
+                      <button
+                        type="button"
+                        className={appButton({ variant: "ghost", size: "sm" })}
                         onClick={() => setNewlyCreatedKey(null)}
                       >
-                        Anladım
-                      </Button>
+                        Kaydettim
+                      </button>
                     </div>
                   </div>
+                ) : null}
+
+                {apiKeys.length === 0 ? (
+                  <div className="p-4 md:p-5">
+                    <EmptyState
+                      compact
+                      icon={Key}
+                      title="Henüz API anahtarınız yok"
+                      description="Hizmet, fatura ve destek işlemlerinizi otomatikleştirmek için bir anahtar oluşturun."
+                    />
+                  </div>
+                ) : (
+                  <ul className="divide-y">
+                    {apiKeys.map((apiKey) => {
+                      const busy = apiKeyActionId === apiKey.id;
+                      return (
+                        <li
+                          key={apiKey.id}
+                          className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between md:px-5"
+                        >
+                          <div className="flex min-w-0 items-start gap-3">
+                            <IconTile size="sm">
+                              <Key />
+                            </IconTile>
+                            <div className="min-w-0 space-y-0.5">
+                              <p className="truncate text-sm font-medium">{apiKey.name}</p>
+                              <p className="truncate font-mono text-xs text-muted-foreground">{apiKey.key}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Oluşturuldu {formatDate(apiKey.createdAt)}
+                                <span aria-hidden> · </span>
+                                {apiKey.lastUsedAt ? `Son kullanım ${formatDateTime(apiKey.lastUsedAt)}` : "Hiç kullanılmadı"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 pl-11 sm:pl-0">
+                            <button
+                              type="button"
+                              className={appButton({ variant: "outline", size: "sm" })}
+                              onClick={() => handleRevokeApiKey(apiKey.id)}
+                              disabled={busy}
+                            >
+                              <Ban aria-hidden />
+                              {busy ? "İşleniyor…" : "İptal et"}
+                            </button>
+                            <button
+                              type="button"
+                              className={appButton({ variant: "destructive", size: "icon-sm" })}
+                              onClick={() => handleDeleteApiKey(apiKey.id)}
+                              disabled={busy}
+                              aria-label={`${apiKey.name} anahtarını sil`}
+                            >
+                              <Trash2 aria-hidden />
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
+              </SectionCard>
 
-                <div className="space-y-4">
-                  {apiKeys.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      Henüz API anahtarı oluşturulmamış.
-                    </div>
-                  )}
-                  {apiKeys.map((apiKey) => (
-                    <div
-                      key={apiKey.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                          <Key className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium">{apiKey.name}</p>
-                          <p className="text-sm font-mono text-muted-foreground">
-                            {apiKey.key}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Oluşturuldu: {formatDate(apiKey.createdAt)}
-                            {apiKey.lastUsedAt &&
-                              ` \u2022 Son kullanım: ${formatDate(apiKey.lastUsedAt)}`}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRevokeApiKey(apiKey.id)}
-                          disabled={apiKeyActionId === apiKey.id}
-                        >
-                          <RefreshCw className="mr-2 h-4 w-4" />
-                          {apiKeyActionId === apiKey.id ? "İptal ediliyor..." : "İptal Et"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-red-500 hover:text-red-500"
-                          onClick={() => handleDeleteApiKey(apiKey.id)}
-                          disabled={apiKeyActionId === apiKey.id}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>API Dokumantasyonu</CardTitle>
-                <CardDescription>
-                  API entegrasyonunuz için gerekli bilgiler
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="p-4 rounded-lg border">
-                    <p className="text-sm text-muted-foreground">Base URL</p>
-                    <p className="font-mono text-sm mt-1">https://api.kleacore.com/v1</p>
-                  </div>
-                  <div className="p-4 rounded-lg border">
-                    <p className="text-sm text-muted-foreground">Rate Limit</p>
-                    <p className="font-mono text-sm mt-1">1000 istek/dakika</p>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <Button variant="outline" asChild>
-                    <a href="/api-docs" target="_blank">
-                      <Globe className="mr-2 h-4 w-4" />
-                      API Dokümantasyonunu Görüntüle
-                    </a>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </BlurFade>
-      )}
-    </div>
+              <SectionCard
+                title="API kullanımı"
+                description="Entegrasyon için temel bilgiler. Ayrıntılar API dokümantasyonunda."
+                footer={
+                  <a href="/api-docs" target="_blank" rel="noopener noreferrer" className={appButton({ variant: "outline", size: "sm" })}>
+                    <BookOpen aria-hidden />
+                    API dokümantasyonu
+                  </a>
+                }
+              >
+                <DetailList
+                  layout="grid"
+                  columns={3}
+                  items={[
+                    { label: "Ana adres", value: "https://kleacore.com/api/v1", mono: true, copy: "https://kleacore.com/api/v1" },
+                    { label: "Yetkilendirme", value: "Authorization: Bearer kc_live_…", mono: true },
+                    { label: "İstek limiti", value: "30 istek / 10 dakika (anahtar başına)" },
+                  ]}
+                />
+              </SectionCard>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </>
   );
 }

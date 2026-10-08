@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { isTwoFactorGloballyEnabled } from "@/lib/auth/two-factor-settings";
 import { getUserProfile, getApiKeysByUser } from "@/lib/dal/settings";
 import { AyarlarContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Hesap ayarları" };
 
 function maskApiKey(key: string): string {
   if (key.length <= 8) return "****";

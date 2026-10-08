@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import {
   getEmailAccountsByCustomer,
@@ -7,6 +8,8 @@ import {
 import { WebmailContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "E-posta hesapları" };
 
 export default async function WebmailPage() {
   const session = await auth();
@@ -37,13 +40,7 @@ export default async function WebmailPage() {
     forwardTo: account.forwardTo,
     autoResponder: account.autoResponder,
     createdAt: account.createdAt.toISOString(),
-    lastLogin: account.lastLoginAt
-      ? account.lastLoginAt.toLocaleDateString("tr-TR", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        })
-      : null,
+    lastLogin: account.lastLoginAt ? account.lastLoginAt.toISOString() : null,
   }));
 
   return (
