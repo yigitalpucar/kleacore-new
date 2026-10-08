@@ -45,11 +45,10 @@ export default async function DestekPage({
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
     messageCount: t._count.messages,
-    customer: {
-      id: t.customer.id,
-      name: `${t.customer.name} ${t.customer.surname}`.trim(),
-      email: t.customer.email,
-    },
+    source: t.source,
+    customer: t.customer
+      ? { id: t.customer.id, name: `${t.customer.name} ${t.customer.surname}`.trim(), email: t.customer.email }
+      : { id: null, name: t.guestName || t.guestEmail || "Bilinmeyen gönderen", email: t.guestEmail ?? "" },
   }));
 
   return (

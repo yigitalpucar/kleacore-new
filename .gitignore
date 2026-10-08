@@ -47,3 +47,6 @@ Thumbs.db
 # background worker bundle (scripts/build-worker.mjs)
 /.worker/
 /.scratch/
+
+# local uploads (STORAGE_LOCAL_DIR default in development)
+/.uploads/

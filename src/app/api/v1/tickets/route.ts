@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
       department: parsed.data.department ?? "GENERAL",
       priority: parsed.data.priority ?? "MEDIUM",
       status: "OPEN",
+      source: "API",
       relatedServiceId: parsed.data.relatedServiceId ?? null,
       messages: {
         create: {
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
           senderName,
           senderRole: "CUSTOMER",
           message: parsed.data.message,
+          source: "API",
         },
       },
     },

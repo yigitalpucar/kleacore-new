@@ -51,6 +51,9 @@ COPY --from=builder /app/scripts/cron-run.sh ./cron-run.sh
 # Its npm imports resolve from the standalone node_modules above.
 COPY --from=builder --chown=nextjs:nodejs /app/.worker/worker.mjs ./worker.mjs
 RUN chmod +x ./docker-entrypoint.sh ./cron-run.sh
+# Ticket attachments (STORAGE_DRIVER=local). Mount a persistent volume here
+# (docs/ops-storage.md); a named volume inherits this owner on first mount.
+RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads && chmod 700 /app/uploads
 
 USER nextjs
 EXPOSE 3000

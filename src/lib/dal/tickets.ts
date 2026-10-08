@@ -111,6 +111,12 @@ export async function getTicketWithMessages(id: string) {
       },
       messages: {
         orderBy: { createdAt: "asc" },
+        include: {
+          files: {
+            select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+            orderBy: { createdAt: "asc" },
+          },
+        },
       },
     },
   });
