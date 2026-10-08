@@ -22,7 +22,7 @@ import {
 import {
   createManualDomainTransferTicket,
   processAutomatedDomainTransfer,
-} from "@/lib/actions/customer/domain-transfer";
+} from "@/lib/domains/transfer";
 import type { DomainStatus } from "@prisma/client";
 
 const DOMAIN_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;

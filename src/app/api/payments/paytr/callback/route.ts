@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPaymentGatewayConfig } from "@/lib/integrations/payment-gateways";
 import { buildPaytrCallbackHash } from "@/lib/integrations/payment-gateways/paytr-hash";
 import { fulfillGatewayReference } from "@/lib/payments/gateway-fulfillment";
+import { timingSafeStringEqual } from "@/lib/secrets/compare";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
     merchantKey
   );
 
-  if (expectedHash !== receivedHash) {
+  if (!timingSafeStringEqual(expectedHash, receivedHash)) {
     return new NextResponse("PAYTR notification failed: bad hash", { status: 400 });
   }
 

@@ -1,3 +1,5 @@
+import { timingSafeStringEqual } from "@/lib/secrets/compare";
+
 function getCronSecret() {
   return process.env.CRON_SECRET?.trim() || "";
 }
@@ -13,10 +15,10 @@ export function verifyCronRequest(request: Request) {
   }
 
   const authorization = request.headers.get("authorization")?.trim();
-  if (authorization === `Bearer ${secret}`) {
+  if (timingSafeStringEqual(authorization, `Bearer ${secret}`)) {
     return true;
   }
 
   const headerSecret = request.headers.get("x-cron-secret")?.trim();
-  return headerSecret === secret;
+  return timingSafeStringEqual(headerSecret, secret);
 }

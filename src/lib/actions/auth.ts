@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { signIn, signOut } from "@/lib/auth";
+import { findUserByEmail } from "@/lib/auth/email";
 import { createLoginTwoFactorChallenge } from "@/lib/auth/two-factor-settings";
 import {
   AFFILIATE_REF_COOKIE,
@@ -86,14 +87,7 @@ export async function loginAction(formData: FormData) {
   }
 
   try {
-    const user = await db.user.findUnique({
-      where: { email: parsed.data.email },
-      select: {
-        id: true,
-        password: true,
-        status: true,
-      },
-    });
+    const user = await findUserByEmail(parsed.data.email);
 
     if (!user || user.status !== "ACTIVE") {
       return { success: false, error: "E-posta veya şifre hatalı" };
@@ -105,7 +99,7 @@ export async function loginAction(formData: FormData) {
     }
 
     const challengeToken = await createLoginTwoFactorChallenge(
-      parsed.data.email,
+      user.email,
       user.id
     );
 
@@ -118,7 +112,7 @@ export async function loginAction(formData: FormData) {
     }
 
     await signIn("credentials", {
-      email: parsed.data.email,
+      email: user.email,
       password: parsed.data.password,
       redirect: false,
     });
@@ -165,9 +159,7 @@ export async function registerAction(formData: FormData) {
   }
 
   try {
-    const existing = await db.user.findUnique({
-      where: { email: parsed.data.email },
-    });
+    const existing = await findUserByEmail(parsed.data.email);
 
     if (existing) {
       return { success: false, error: "Bu e-posta adresi zaten kayıtlı" };
@@ -228,9 +220,7 @@ export async function requestPasswordReset(formData: FormData) {
   }
 
   try {
-    const user = await db.user.findUnique({
-      where: { email: parsed.data.email },
-    });
+    const user = await findUserByEmail(parsed.data.email);
 
     // Güvenlik: Kullanıcı bulunamasa bile aynı mesajı göster
     if (!user) {
@@ -314,7 +304,12 @@ export async function resetPasswordAction(formData: FormData) {
     await db.$transaction([
       db.user.update({
         where: { id: resetToken.userId },
-        data: { password: hashedPassword },
+        // Bumping sessionVersion revokes every session issued before the reset.
+        data: {
+          password: hashedPassword,
+          sessionVersion: { increment: 1 },
+          loginTokenNonceHash: null,
+        },
       }),
       db.passwordResetToken.update({
         where: { id: resetToken.id },

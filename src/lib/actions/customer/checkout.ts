@@ -24,6 +24,7 @@ import {
   CUSTOMER_PAYMENT_METHODS,
   type CustomerPaymentMethod,
 } from "@/lib/payments/methods";
+import { claimPromotionUse } from "@/lib/billing/promo-usage";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
 import {
   addonPeriodTotal,
@@ -301,6 +302,7 @@ async function calculatePromotion(
   return {
     id: promo.id,
     code: promo.code,
+    maxUses: promo.maxUses,
     discountAmount: discount,
     applicableTotal,
     applicableCategories: promo.applicableCategories,
@@ -593,10 +595,7 @@ export async function checkoutCart(input: CheckoutInput) {
       }
 
       if (promotion) {
-        await tx.promotionCode.update({
-          where: { id: promotion.id },
-          data: { currentUses: { increment: 1 } },
-        });
+        await claimPromotionUse(tx, promotion);
       }
 
       const orderNumbers = await tx.order.findMany({

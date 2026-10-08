@@ -3,6 +3,7 @@ import {
   loginSchema,
   passwordResetRequestSchema,
   passwordResetSchema,
+  registerApiSchema,
   registerSchema,
 } from "./auth";
 
@@ -115,5 +116,47 @@ describe("passwordResetSchema", () => {
 
     expect(tokenResult.success).toBe(false);
     expect(mismatchResult.success).toBe(false);
+  });
+});
+describe("email normalisation", () => {
+  it("trims and lowercases emails on login and register", () => {
+    const login = loginSchema.parse({ email: "  Ada@Example.COM ", password: "x" });
+    expect(login.email).toBe("ada@example.com");
+
+    const register = registerApiSchema.parse({
+      name: " Ada ",
+      surname: "Lovelace",
+      email: "ADA@example.com",
+      password: validPassword,
+    });
+    expect(register).toMatchObject({ name: "Ada", email: "ada@example.com" });
+  });
+
+  it("rejects malformed register API payloads", () => {
+    expect(registerApiSchema.safeParse({}).success).toBe(false);
+    expect(
+      registerApiSchema.safeParse({
+        name: ["Ada"],
+        surname: "Lovelace",
+        email: "ada@example.com",
+        password: validPassword,
+      }).success
+    ).toBe(false);
+    expect(
+      registerApiSchema.safeParse({
+        name: "A".repeat(81),
+        surname: "Lovelace",
+        email: "ada@example.com",
+        password: validPassword,
+      }).success
+    ).toBe(false);
+    expect(
+      registerApiSchema.safeParse({
+        name: "Ada",
+        surname: "Lovelace",
+        email: "not-an-email",
+        password: validPassword,
+      }).success
+    ).toBe(false);
   });
 });

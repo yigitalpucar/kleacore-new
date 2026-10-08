@@ -1,4 +1,5 @@
 import type { NextAuthConfig } from "next-auth";
+import { refreshSessionToken } from "@/lib/auth/session-refresh";
 
 export const authConfig = {
   trustHost: true,
@@ -9,11 +10,10 @@ export const authConfig = {
   providers: [],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.role = (user as { role: string }).role;
-      }
-      return token;
+      return refreshSessionToken(
+        token,
+        user as { id?: string; role?: string; sessionVersion?: number } | undefined
+      );
     },
     async session({ session, token }) {
       if (session.user) {

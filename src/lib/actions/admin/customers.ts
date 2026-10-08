@@ -1,6 +1,7 @@
 "use server";
 
 import { generateUniqueAffiliateCode } from "@/lib/affiliate";
+import { findUserByEmail, normalizeEmail } from "@/lib/auth/email";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { logActivity } from "@/lib/activity-log";
@@ -11,7 +12,7 @@ export async function createCustomer(formData: FormData) {
   const session = await requireAdmin();
 
   try {
-    const email = formData.get("email") as string;
+    const email = normalizeEmail((formData.get("email") as string | null) ?? "");
     const password = formData.get("password") as string;
     const name = formData.get("name") as string;
     const surname = formData.get("surname") as string;
@@ -27,7 +28,7 @@ export async function createCustomer(formData: FormData) {
       return { success: false, error: "E-posta, şifre ve ad zorunludur" };
     }
 
-    const existing = await db.user.findUnique({ where: { email } });
+    const existing = await findUserByEmail(email);
     if (existing) {
       return { success: false, error: "Bu e-posta adresi zaten kayıtlı" };
     }

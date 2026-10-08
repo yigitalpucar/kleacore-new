@@ -26,3 +26,12 @@ export async function createLoginTwoFactorChallenge(email: string, userId: strin
 
   return buildTwoFactorChallenge(userId, email);
 }
+
+/** Whether a password alone is NOT enough for this user to sign in. */
+export async function userRequiresTwoFactor(user: { twoFactorEnabled: boolean }) {
+  if (!user.twoFactorEnabled) {
+    return false;
+  }
+
+  return isTwoFactorGloballyEnabled();
+}

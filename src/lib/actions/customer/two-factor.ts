@@ -12,11 +12,12 @@ import {
   encryptTotpSecret,
   generateBackupCodes,
   generateTotpQrDataUrl,
+  matchTotpStep,
   serializeBackupCodes,
   verifyBackupCode,
-  verifyTotpCode,
   verifyTwoFactorChallengeToken,
 } from "@/lib/auth/two-factor";
+import { consumeTotpStep, issueLoginToken } from "@/lib/auth/login-token";
 import { isTwoFactorGloballyEnabled } from "@/lib/auth/two-factor-settings";
 import { db } from "@/lib/db";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
@@ -126,7 +127,8 @@ export async function verify2FASetup(formData: FormData) {
     }
 
     const secret = decryptTotpSecret(user.twoFactorSecret);
-    if (!secret || !verifyTotpCode(secret, user.email, parsedCode.data)) {
+    const setupStep = secret ? matchTotpStep(secret, user.email, parsedCode.data) : null;
+    if (setupStep === null) {
       return { success: false, error: "Doğrulama kodu hatalı" };
     }
 
@@ -137,6 +139,7 @@ export async function verify2FASetup(formData: FormData) {
       data: {
         twoFactorEnabled: true,
         twoFactorBackupCodes: serializeBackupCodes(backupCodes),
+        twoFactorLastUsedStep: setupStep,
       },
     });
 
@@ -195,9 +198,9 @@ export async function disable2FA(formData: FormData) {
 
     const secret = decryptTotpSecret(user.twoFactorSecret);
     const code = parsed.data.code.trim();
+    const totpStep = matchTotpStep(secret, user.email, code);
     const totpValid =
-      /^\d{6}$/.test(code.replace(/\s+/g, "")) &&
-      verifyTotpCode(secret, user.email, code);
+      totpStep !== null && (await consumeTotpStep(session.user.id, totpStep));
 
     let backupResult = { valid: false, remainingCodes: [] as string[] };
     if (!totpValid) {
@@ -293,9 +296,9 @@ export async function verify2FALogin(formData: FormData) {
     }
 
     const secret = decryptTotpSecret(user.twoFactorSecret);
-    const totpValid =
-      /^\d{6}$/.test(code.replace(/\s+/g, "")) &&
-      verifyTotpCode(secret, user.email, code);
+    // A code is accepted once: replaying it inside its 30s window fails.
+    const totpStep = matchTotpStep(secret, user.email, code);
+    const totpValid = totpStep !== null && (await consumeTotpStep(user.id, totpStep));
 
     let backupResult = { valid: false, remainingCodes: [] as string[] };
     if (!totpValid) {
@@ -315,10 +318,14 @@ export async function verify2FALogin(formData: FormData) {
       });
     }
 
+    // The pending challenge token is never a login credential; mint a
+    // separate single-use token that the credentials provider will accept.
+    const loginToken = await issueLoginToken(user);
+
     try {
       await signIn("credentials", {
         email: user.email,
-        twoFactorToken: raw.challengeToken,
+        loginToken,
         redirect: false,
       });
     } catch (err) {
