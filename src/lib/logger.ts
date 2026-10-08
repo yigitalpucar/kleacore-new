@@ -7,9 +7,10 @@ type Context = Record<string, unknown>;
 
 const REDACTED = "[REDACTED]";
 
-// Context keys whose values never belong in logs (card data, secrets).
+// Context keys whose values never belong in logs (card data, secrets, and the
+// gateway tokens of stored cards — utoken/ctoken/cardToken charge a card).
 const SENSITIVE_KEY =
-  /(card.?number|^pan$|cvv|cvc|cvv2|security.?code|card.?expire|expiry|password|passwd|secret|hashdata|authorization|^md$|^cookie$)/i;
+  /(card.?number|^pan$|cvv|cvc|cvv2|security.?code|card.?expire|expiry|password|passwd|secret|hashdata|authorization|^md$|^cookie$|utoken|ctoken|card.?token|card.?user.?key|gateway.?customer.?ref)/i;
 
 // cPanel/WHM single sign-on URLs: the cpsess token and the session parameter
 // are a live login (create_user_session); never let one reach the logs.

@@ -120,20 +120,43 @@ export const notificationPlanners: PlannerMap = {
     },
   ],
 
-  "payment.failed": (payload, event) => [
-    {
-      template: "billing.payment-failed",
-      userId: payload.customerId,
-      data: {
-        invoiceId: payload.invoiceId,
-        invoiceNumber: payload.invoiceNumber,
-        amount: payload.amount,
-        reason: payload.reason,
-        automatic: payload.automatic,
+  "payment.failed": (payload, event) => {
+    // A failed automatic charge of a stored card has its own template
+    // (card, try n of max); one mail per PaymentAttempt.
+    if (payload.automatic && payload.attemptId && payload.invoiceNumber && payload.amount && payload.dueDate) {
+      return [
+        {
+          template: "billing.auto-charge-failed",
+          userId: payload.customerId,
+          data: {
+            invoiceId: payload.invoiceId,
+            invoiceNumber: payload.invoiceNumber,
+            amount: payload.amount,
+            dueDate: payload.dueDate,
+            card: payload.card || "Kayıtlı kart",
+            reason: payload.reason?.slice(0, 200) || undefined,
+            attempt: Math.max(1, Math.min(payload.attempt ?? 1, payload.maxAttempts ?? 1)),
+            maxAttempts: Math.max(1, payload.maxAttempts ?? 1),
+          },
+          dedupeKey: `auto-charge.failed:${payload.attemptId}`,
+        },
+      ];
+    }
+    return [
+      {
+        template: "billing.payment-failed",
+        userId: payload.customerId,
+        data: {
+          invoiceId: payload.invoiceId,
+          invoiceNumber: payload.invoiceNumber,
+          amount: payload.amount,
+          reason: payload.reason,
+          automatic: payload.automatic,
+        },
+        dedupeKey: `payment.failed:${event.id}`,
       },
-      dedupeKey: `payment.failed:${event.id}`,
-    },
-  ],
+    ];
+  },
 
   "refund.completed": (payload) => [
     {

@@ -31,6 +31,7 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 | KLEACORE: SSL Süre Kontrolü | `0 4 * * *` | `/app/cron-run.sh ssl-expiry` |
 | KLEACORE: Hosting Kullanım Senkronu | `30 4 * * *` | `/app/cron-run.sh usage-sync` |
 | KLEACORE: Gecikmiş Faturalar | `0 5 * * *` | `/app/cron-run.sh overdue-invoices` |
+| KLEACORE: Otomatik Tahsilat | `30 5 * * *` | `/app/cron-run.sh auto-charge` (kayıtlı kart, docs/payments-saved-cards.md) |
 | KLEACORE: Hizmet Askıya Alma | `0 6 * * *` | `/app/cron-run.sh suspend-services` |
 | KLEACORE: Domain Süre Bildirimleri | `0 10 * * *` | `/app/cron-run.sh domain-notices` |
 | KLEACORE: Provisioning Retry | `*/15 * * * *` | `/app/cron-run.sh retry-provisioning` |

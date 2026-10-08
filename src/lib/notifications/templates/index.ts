@@ -13,6 +13,7 @@ import {
   billingPaymentReceived,
   billingRefundIssued,
 } from "./billing";
+import { billingAutoChargeFailed, billingCardExpiring } from "./cards";
 import { domainExpiryNotice, domainRegistered, domainRenewed } from "./domains";
 import {
   serviceActivated,
@@ -48,6 +49,8 @@ const definitions = [
   billingBankTransferApproved,
   billingBankTransferRejected,
   billingRefundIssued,
+  billingAutoChargeFailed,
+  billingCardExpiring,
   affiliatePayoutCompleted,
   serviceActivated,
   serviceSuspended,

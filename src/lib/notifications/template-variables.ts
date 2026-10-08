@@ -79,6 +79,13 @@ const DESCRIPTIONS: Record<string, string> = {
   path: "Yönetim paneli yolu",
   eventType: "Olay türü",
   automatic: "Otomatik tahsilat mı",
+  card: "Kart (maskeli, ör. Visa •••• 4242)",
+  attempt: "Deneme sırası",
+  maxAttempts: "En fazla deneme",
+  autoPay: "Otomatik ödeme açık mı",
+  closesAt: "Otomatik kapanma zamanı",
+  hasAccount: "Müşteri hesabı var mı",
+  replyTo: "Yanıt adresi (destek posta kutusu)",
   receipt: "Makbuz mu",
 };
 

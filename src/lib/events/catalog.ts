@@ -190,6 +190,12 @@ const paymentFailed = defineEvent({
     reason: z.string().optional(),
     /** Automatic charge of a stored card (3.7) vs. a customer attempt. */
     automatic: z.boolean().optional(),
+    /** Stored-card charge details (3.7): PaymentAttempt id, masked card label, try n of max. */
+    attemptId: z.string().optional(),
+    card: z.string().optional(),
+    attempt: z.number().int().optional(),
+    maxAttempts: z.number().int().optional(),
+    dueDate: isoDate.optional(),
   }),
 });
 
