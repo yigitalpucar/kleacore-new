@@ -19,6 +19,7 @@ export default async function SunucularPage() {
     domain: s.domain ?? null,
     ipAddress: s.ipAddress ?? null,
     status: s.status,
+    suspendReason: s.suspendReason ?? null,
     cpuUsage: Number(s.cpuUsage ?? 0),
     ramUsage: Number(s.ramUsage ?? 0),
     diskUsed: Number(s.diskUsed ?? 0),

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
 import { runRemoteServerAction } from "@/lib/integrations/provisioning-provider";
 import { revalidatePath } from "next/cache";
+import { CUSTOMER_STOPPED_REASON, customerStartBlockReason } from "@/lib/services/server-power";
 
 async function findOwnedService(serviceId: string, userId: string) {
   return db.service.findFirst({
@@ -63,7 +64,7 @@ export async function stopServer(serviceId: string) {
 
   await db.service.update({
     where: { id: serviceId },
-    data: { status: "SUSPENDED", suspendedAt: new Date() },
+    data: { status: "SUSPENDED", suspendedAt: new Date(), suspendReason: CUSTOMER_STOPPED_REASON },
   });
 
   revalidatePath("/musteri/panel/sunucular");
@@ -79,19 +80,18 @@ export async function startServer(serviceId: string) {
     return { success: false, error: "Sunucu bulunamadi" };
   }
 
-  if (service.status === "ACTIVE") {
-    return { success: false, error: "Sunucu zaten aktif" };
-  }
-
-  if (service.status === "CANCELLED") {
-    return { success: false, error: "Iptal edilmis sunucu baslatilamaz" };
+  // Only a server the customer stopped may be started here; billing/admin
+  // suspensions and expired services must not be reopened from the panel.
+  const blockReason = customerStartBlockReason(service);
+  if (blockReason) {
+    return { success: false, error: blockReason };
   }
 
   const integration = await runRemoteServerAction(service, "start");
 
   await db.service.update({
     where: { id: serviceId },
-    data: { status: "ACTIVE", suspendedAt: null },
+    data: { status: "ACTIVE", suspendedAt: null, suspendReason: null },
   });
 
   revalidatePath("/musteri/panel/sunucular");

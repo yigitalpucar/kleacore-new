@@ -22,6 +22,7 @@ import {
 import { formatDate } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 import { restartServer, stopServer, startServer } from "@/lib/actions/customer/servers";
+import { CUSTOMER_STOPPED_REASON, customerStartBlockReason } from "@/lib/services/server-power";
 import { toast } from "@/lib/toast";
 
 interface ServerServiceItem {
@@ -32,6 +33,7 @@ interface ServerServiceItem {
   domain: string | null;
   ipAddress: string | null;
   status: string;
+  suspendReason: string | null;
   cpuUsage: number;
   ramUsage: number;
   diskUsed: number;
@@ -120,7 +122,7 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
     setActionInProgress(serviceId);
     const result = await stopServer(serviceId);
     if (result.success) {
-      setLocalServers((prev) => prev.map((s) => (s.id === serviceId ? { ...s, status: "SUSPENDED" } : s)));
+      setLocalServers((prev) => prev.map((s) => (s.id === serviceId ? { ...s, status: "SUSPENDED", suspendReason: CUSTOMER_STOPPED_REASON } : s)));
       toast.success("Sunucu durduruldu");
     } else {
       toast.error(result.error || "İşlem başarısız");
@@ -132,7 +134,7 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
     setActionInProgress(serviceId);
     const result = await startServer(serviceId);
     if (result.success) {
-      setLocalServers((prev) => prev.map((s) => (s.id === serviceId ? { ...s, status: "ACTIVE" } : s)));
+      setLocalServers((prev) => prev.map((s) => (s.id === serviceId ? { ...s, status: "ACTIVE", suspendReason: null } : s)));
       toast.success("Sunucu başlatıldı");
     } else {
       toast.error(result.error || "İşlem başarısız");
@@ -158,7 +160,7 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
             label: "Başlat",
             icon: <Play aria-hidden />,
             onSelect: () => void handleStart(s.id),
-            disabledReason: busy ?? (s.status === "CANCELLED" ? "İptal edilmiş sunucu" : undefined),
+            disabledReason: busy ?? customerStartBlockReason(s) ?? undefined,
           },
       { label: "Snapshot al", icon: <Camera aria-hidden />, disabledReason: "Yakında", separator: true },
       { label: "İşletim sistemini yeniden kur", icon: <HardDrive aria-hidden />, disabledReason: "Yakında" },
@@ -170,11 +172,13 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
     if (s.status === "ACTIVE") {
       return <UnavailableAction label="Konsol" icon={<Terminal aria-hidden />} size="sm" />;
     }
+    const blockReason = customerStartBlockReason(s);
     return (
       <button
         type="button"
         className={appButton({ variant: "outline", size: "sm" })}
-        disabled={busy || s.status === "CANCELLED"}
+        disabled={busy || Boolean(blockReason)}
+        title={blockReason ?? undefined}
         onClick={() => void handleStart(s.id)}
       >
         {busy ? <Loader2 aria-hidden className="animate-spin" /> : <Play aria-hidden />}
@@ -261,10 +265,10 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
           hint={stats.active ? "Çalışan sunucular" : "Çalışan sunucu yok"}
         />
         <StatCard
-          label="Askıda"
+          label="Durdurulan / askıda"
           value={stats.suspended}
           tone={stats.suspended ? "warning" : undefined}
-          hint={stats.suspended ? "Başlatılmayı bekliyor" : "Durdurulan sunucu yok"}
+          hint={stats.suspended ? "Durdurulan veya askıya alınan sunucular" : "Durdurulan sunucu yok"}
         />
       </StatGrid>
 
