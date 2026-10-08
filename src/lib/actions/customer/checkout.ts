@@ -455,7 +455,7 @@ export async function checkoutCart(input: CheckoutInput) {
 
         const order = await tx.order.create({
           data: {
-            orderNumber: generateOrderNumber(),
+            orderNumber: await generateOrderNumber(),
             customerId,
             productId: item.productId,
             domain:
@@ -501,7 +501,7 @@ export async function checkoutCart(input: CheckoutInput) {
 
         const invoice = await tx.invoice.create({
           data: {
-            invoiceNumber: generateInvoiceNumber(),
+            invoiceNumber: await generateInvoiceNumber(),
             customerId,
             orderId: order.id,
             subtotal: payableLineTotal,

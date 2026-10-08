@@ -264,7 +264,7 @@ export async function requestPlanChange(input: RequestPlanChangeInput) {
 
     const order = await tx.order.create({
       data: {
-        orderNumber: generateOrderNumber(),
+        orderNumber: await generateOrderNumber(),
         customerId: input.customerId,
         productId: targetProduct.id,
         serviceId: service.id,
@@ -302,7 +302,7 @@ export async function requestPlanChange(input: RequestPlanChangeInput) {
 
     const invoice = await tx.invoice.create({
       data: {
-        invoiceNumber: generateInvoiceNumber(),
+        invoiceNumber: await generateInvoiceNumber(),
         customerId: input.customerId,
         orderId: order.id,
         subtotal: chargeAmount,

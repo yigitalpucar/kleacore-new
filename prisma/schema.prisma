@@ -1293,6 +1293,16 @@ model Setting {
   @@map("settings")
 }
 
+/// Gap-tolerant document counters (invoice/order numbers), one row per
+/// prefix + year, advanced with an atomic UPDATE ... RETURNING.
+model NumberSequence {
+  key       String   @id
+  value     Int
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("number_sequences")
+}
+
 // =====================
 // SYSTEM STATUS
 // =====================

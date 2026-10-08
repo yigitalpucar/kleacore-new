@@ -51,7 +51,7 @@ export async function createInvoice(data: InvoiceInput) {
       return { success: false, error: "Müşteri bulunamadı" };
     }
 
-    const invoiceNumber = generateInvoiceNumber();
+    const invoiceNumber = await generateInvoiceNumber();
 
     const invoice = await db.invoice.create({
       data: {

@@ -177,7 +177,7 @@ export async function processAutomatedDomainTransfer(
 
     const order = await tx.order.create({
       data: {
-        orderNumber: generateOrderNumber(),
+        orderNumber: await generateOrderNumber(),
         customerId: customer.id,
         productId: domainProduct.product.id,
         domain: normalizedDomain,
@@ -212,7 +212,7 @@ export async function processAutomatedDomainTransfer(
 
     const invoice = await tx.invoice.create({
       data: {
-        invoiceNumber: generateInvoiceNumber(),
+        invoiceNumber: await generateInvoiceNumber(),
         customerId: customer.id,
         orderId: order.id,
         subtotal: pricing.subtotal,

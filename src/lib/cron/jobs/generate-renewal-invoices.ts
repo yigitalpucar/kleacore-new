@@ -71,7 +71,7 @@ export async function generateRenewalInvoices(): Promise<CronJobResult> {
     const invoice = await db.$transaction(async (tx) => {
       const order = await tx.order.create({
         data: {
-          orderNumber: generateOrderNumber(),
+          orderNumber: await generateOrderNumber(),
           customerId: service.customerId,
           productId: service.productId,
           serviceId: service.id,
@@ -105,7 +105,7 @@ export async function generateRenewalInvoices(): Promise<CronJobResult> {
 
       return tx.invoice.create({
         data: {
-          invoiceNumber: generateInvoiceNumber(),
+          invoiceNumber: await generateInvoiceNumber(),
           customerId: service.customerId,
           orderId: order.id,
           subtotal,
