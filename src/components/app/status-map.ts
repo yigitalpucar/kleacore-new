@@ -20,6 +20,8 @@ export type StatusKind =
   | "payment"
   | "backup"
   | "provisioning"
+  | "cronRun"
+  | "queueJob"
   | "cancellation"
   | "planChange"
   | "eInvoice"
@@ -116,6 +118,24 @@ const provisioning: Map = {
   FAILED: { label: "Başarısız", tone: "danger" },
 };
 
+const cronRun: Map = {
+  RUNNING: { label: "Çalışıyor", tone: "info" },
+  SUCCEEDED: { label: "Başarılı", tone: "success" },
+  FAILED: { label: "Başarısız", tone: "danger" },
+  LOCKED: { label: "Kilitli (zaten çalışıyor)", tone: "warning" },
+  SKIPPED: { label: "Atlandı", tone: "muted" },
+};
+
+/** pg-boss job states (lower-case, not a Prisma enum). */
+const queueJob: Map = {
+  created: { label: "Sırada", tone: "neutral" },
+  retry: { label: "Yeniden denenecek", tone: "warning" },
+  active: { label: "Çalışıyor", tone: "info" },
+  completed: { label: "Tamamlandı", tone: "success" },
+  failed: { label: "Başarısız", tone: "danger" },
+  cancelled: { label: "İptal edildi", tone: "muted" },
+};
+
 const cancellation: Map = {
   PENDING: { label: "Beklemede", tone: "warning" },
   APPROVED: { label: "Onaylandı", tone: "success" },
@@ -197,6 +217,8 @@ const MAPS: Record<StatusKind, Map> = {
   payment,
   backup,
   provisioning,
+  cronRun,
+  queueJob,
   cancellation,
   planChange,
   eInvoice,
