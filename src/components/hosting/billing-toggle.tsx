@@ -1,43 +1,26 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { BillingSwitch } from "@/components/site/billing-switch";
 
 interface BillingToggleProps {
   isYearly: boolean;
   onToggle: (isYearly: boolean) => void;
+  /**
+   * Real saving from tier prices (`maxYearlySavings(plans)` in
+   * src/lib/format/price.ts). Omit to hide the savings note.
+   */
+  savingsPercent?: number;
   className?: string;
 }
 
-export function BillingToggle({ isYearly, onToggle, className }: BillingToggleProps) {
+/** Legacy boolean API over the kit's `BillingSwitch`. */
+export function BillingToggle({ isYearly, onToggle, savingsPercent, className }: BillingToggleProps) {
   return (
-    <div className={cn("flex justify-center", className)}>
-      <div className="inline-flex items-center rounded-full border p-1 bg-muted/50">
-        <button
-          onClick={() => onToggle(false)}
-          className={cn(
-            "px-6 py-2 rounded-full text-sm font-medium transition-all",
-            !isYearly
-              ? "bg-background shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Aylık
-        </button>
-        <button
-          onClick={() => onToggle(true)}
-          className={cn(
-            "px-6 py-2 rounded-full text-sm font-medium transition-all relative",
-            isYearly
-              ? "bg-background shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Yıllık
-          <span className="absolute -top-3 -right-2 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">
-            %20 İndirim
-          </span>
-        </button>
-      </div>
-    </div>
+    <BillingSwitch
+      value={isYearly ? "yearly" : "monthly"}
+      onChange={(value) => onToggle(value === "yearly")}
+      savingsPercent={savingsPercent}
+      className={className}
+    />
   );
 }

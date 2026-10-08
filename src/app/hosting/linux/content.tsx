@@ -20,6 +20,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { getIcon } from "@/lib/utils/icon-map";
+import { maxYearlySavings } from "@/lib/format/price";
 import type { Product, PricingTier, ProductCategory } from "@prisma/client";
 
 type ProductWithPricing = Product & {
@@ -96,7 +97,13 @@ export const Content = ({ products }: ContentProps) => {
           description="NVMe SSD diskler, LiteSpeed web server ve cPanel ile güçlü, hızlı ve güvenilir hosting çözümleri."
           accent="emerald"
         >
-          <BillingToggle isYearly={isYearly} onToggle={setIsYearly} />
+          <BillingToggle
+            isYearly={isYearly}
+            onToggle={setIsYearly}
+            savingsPercent={maxYearlySavings(
+              plans.map((p) => ({ monthlyPrice: p.price, yearlyMonthlyPrice: p.yearlyPrice }))
+            )}
+          />
         </PageHero>
 
         <TrustStrip />
@@ -133,7 +140,7 @@ export const Content = ({ products }: ContentProps) => {
             <BlurFade delay={0.2} inView>
               <Card>
                 <CardContent className="p-0 md:p-6">
-                  <FeatureComparison />
+                  <FeatureComparison plans={plans} isYearly={isYearly} />
                 </CardContent>
               </Card>
             </BlurFade>

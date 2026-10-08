@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Link from "next/link";
-import { Search, Check, X, Loader2, ShoppingCart, Globe } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
+import { Check, Loader2, Search, ShoppingCart, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { searchDomainAvailability } from "@/lib/actions/public/domains";
 import { toast } from "@/lib/toast";
 import { useCartStore } from "@/store/cart-store";
+import { formatTRY } from "@/lib/format/price";
+import { buttonClasses } from "@/components/site/button-classes";
+import { Section } from "@/components/site/section";
+import { SectionHeading } from "@/components/site/section-heading";
+import { CornerTicks } from "@/components/site/grid-lines";
 
 interface DomainResult {
   domain: string;
@@ -26,14 +29,18 @@ export interface DomainTldPrice {
 
 interface DomainSearchSectionProps {
   tlds: DomainTldPrice[];
+  /** Section id used as the hero's "#alan-adi" anchor. */
+  id?: string;
 }
 
-export function DomainSearchSection({ tlds }: DomainSearchSectionProps) {
+export function DomainSearchSection({ tlds, id = "alan-adi" }: DomainSearchSectionProps) {
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<DomainResult[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const addDomain = useCartStore((state) => state.addDomain);
+  const inputId = useId();
+  const hintId = useId();
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -82,152 +89,171 @@ export function DomainSearchSection({ tlds }: DomainSearchSectionProps) {
   };
 
   return (
-    <section className="py-20 md:py-28 relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background via-primary/5 to-background" />
+    <Section id={id} tone="muted" divider className="scroll-mt-20">
+      <SectionHeading
+        align="center"
+        eyebrow="Alan adı"
+        title="Markanıza uygun alan adını bulun"
+        description="Alan adınızı yazın, desteklenen uzantılarda müsaitliği ve yıllık fiyatı tek seferde görün."
+        className="mb-10"
+      />
 
-      <div className="container relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          viewport={{ once: true }}
-          className="text-center mb-12"
-        >
-          <div className="inline-flex items-center gap-2 rounded-full border bg-background px-4 py-1.5 text-sm font-medium mb-4">
-            <Globe className="h-4 w-4 text-primary" />
-            500+ Uzantı
-          </div>
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
-            Hayalinizdeki Domain&apos;i Bulun
-          </h2>
-          <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-            Markanız için mükemmel domain adını arayın. Anında müsaitlik kontrolü.
-          </p>
-        </motion.div>
-
-        {/* Search Box */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          viewport={{ once: true }}
-          className="max-w-3xl mx-auto"
-        >
-          <div className="relative p-1 rounded-2xl bg-gradient-to-r from-gray-400/50 via-gray-500/50 to-gray-600/50">
-            <div className="flex flex-col sm:flex-row gap-3 bg-background rounded-xl p-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Domain adınızı yazın (örn: sirketim)"
-                  className="h-14 pl-12 pr-4 text-lg border-0 bg-transparent focus-visible:ring-0"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                />
-              </div>
-              <Button
-                size="lg"
-                className="h-14 px-8 text-lg"
-                onClick={handleSearch}
-                disabled={isSearching || !query.trim()}
-              >
-                {isSearching ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Aranıyor...
-                  </>
-                ) : (
-                  <>
-                    <Search className="mr-2 h-5 w-5" />
-                    Ara
-                  </>
-                )}
-              </Button>
+      <form
+        role="search"
+        aria-label="Alan adı sorgulama"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSearch();
+        }}
+        className="relative mx-auto max-w-3xl"
+      >
+        <div className="relative rounded-xl border bg-background p-2 shadow-[0_16px_32px_-20px_rgba(0,0,0,0.25)] dark:shadow-none">
+          <CornerTicks />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative flex-1">
+              <label htmlFor={inputId} className="sr-only">
+                Alan adı
+              </label>
+              <Search
+                aria-hidden
+                className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground"
+              />
+              <input
+                id={inputId}
+                type="text"
+                inputMode="url"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                aria-describedby={hintId}
+                placeholder="ornek-sirket"
+                className="h-12 w-full rounded-lg bg-transparent pl-12 pr-4 text-base outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring sm:h-14 sm:text-lg"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
             </div>
+            <button
+              type="submit"
+              className={buttonClasses({ size: "lg", className: "h-12 sm:h-14 sm:px-8" })}
+              disabled={isSearching || !query.trim()}
+            >
+              {isSearching ? (
+                <>
+                  <Loader2 aria-hidden className="size-4 animate-spin" />
+                  Sorgulanıyor…
+                </>
+              ) : (
+                <>
+                  <Search aria-hidden className="size-4" />
+                  Sorgula
+                </>
+              )}
+            </button>
           </div>
-        </motion.div>
+        </div>
+        <p id={hintId} className="mt-3 text-center text-xs text-muted-foreground">
+          Uzantı yazmanıza gerek yok; aşağıdaki uzantılarda birlikte sorgulanır. Fiyatlar yıllık ve KDV hariçtir.
+        </p>
+      </form>
 
-        {/* Results */}
-        {isSearching && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      {tlds.length > 0 ? (
+        <ul className="mx-auto mt-8 grid max-w-3xl grid-cols-2 gap-2 sm:grid-cols-4">
+          {tlds.slice(0, 8).map((tld) => (
+            <li
+              key={tld.ext}
+              className="flex items-baseline justify-between gap-2 rounded-lg border border-dashed bg-background/60 px-3 py-2.5"
+            >
+              <span className="font-mono text-sm font-medium">{tld.ext}</span>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {formatTRY(tld.price)}
+                <span aria-hidden>/yıl</span>
+                <span className="sr-only"> yıllık</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <div aria-live="polite" className="mx-auto max-w-3xl">
+        {isSearching ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 aria-hidden className="size-6 animate-spin text-muted-foreground" />
+            <span className="sr-only">Sorgulanıyor</span>
           </div>
-        )}
+        ) : null}
 
-        {!isSearching && hasSearched && results.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="max-w-3xl mx-auto mt-8 space-y-3"
-          >
-            {results.map((result, idx) => (
-              <motion.div
-                key={result.domain}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className={cn(
-                  "flex flex-col gap-4 p-4 rounded-xl border transition-all sm:flex-row sm:items-center sm:justify-between",
-                  result.available
-                    ? "border-green-500/50 bg-green-500/5 hover:bg-green-500/10"
-                    : "border-border opacity-60"
-                )}
-              >
-                <div className="flex min-w-0 items-center gap-4">
-                  <div
-                    className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-full",
-                      result.available
-                        ? "bg-green-500/20 text-green-500"
-                        : "bg-red-500/20 text-red-500"
-                    )}
-                  >
-                    {result.available ? (
-                      <Check className="h-5 w-5" />
-                    ) : (
-                      <X className="h-5 w-5" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="break-words text-lg font-semibold">{result.domain}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {result.available ? "Bu domain müsait!" : "Bu domain alınmış"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-end">
-                  {result.available && (
-                    <>
-                      <div className="text-right hidden sm:block">
-                        <p className="font-bold text-xl">₺{result.price}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Yenileme: ₺{result.renewPrice}/yıl
-                        </p>
-                      </div>
-                      <Button className="shrink-0" onClick={() => handleAddToCart(result)}>
-                        <ShoppingCart className="mr-2 h-4 w-4" />
-                        Sepete Ekle
-                      </Button>
-                    </>
+        {!isSearching && hasSearched && results.length > 0 ? (
+          <ul className="mt-8 divide-y divide-dashed overflow-hidden rounded-xl border bg-background">
+            <AnimatePresence initial>
+              {results.map((result, idx) => (
+                <motion.li
+                  key={result.domain}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  className={cn(
+                    "flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between",
+                    !result.available && "text-muted-foreground"
                   )}
-                  {!result.available && (
-                    <Button variant="outline" size="sm" asChild>
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      className={cn(
+                        "flex size-8 shrink-0 items-center justify-center rounded-full border",
+                        result.available
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {result.available ? (
+                        <Check aria-hidden className="size-4" />
+                      ) : (
+                        <X aria-hidden className="size-4" />
+                      )}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="break-words font-mono text-base font-medium text-foreground">
+                        {result.domain}
+                      </p>
+                      <p className="text-xs">{result.available ? "Müsait" : "Kayıtlı"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 sm:justify-end">
+                    {result.available ? (
+                      <>
+                        <div className="text-left sm:text-right">
+                          <p className="font-semibold tabular-nums text-foreground">
+                            {formatTRY(result.price)}
+                            <span className="text-xs font-normal text-muted-foreground"> /yıl +KDV</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Yenileme: {formatTRY(result.renewPrice)}/yıl
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className={buttonClasses({ size: "md" })}
+                          onClick={() => handleAddToCart(result)}
+                        >
+                          <ShoppingCart aria-hidden className="size-4" />
+                          Sepete ekle
+                        </button>
+                      </>
+                    ) : (
                       <Link
                         href={`/domain/whois?domain=${encodeURIComponent(result.domain)}`}
+                        className={buttonClasses({ variant: "outline", size: "md" })}
                       >
-                        Whois Sorgula
+                        Whois sorgula
                       </Link>
-                    </Button>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-
+                    )}
+                  </div>
+                </motion.li>
+              ))}
+            </AnimatePresence>
+          </ul>
+        ) : null}
       </div>
-    </section>
+    </Section>
   );
 }
