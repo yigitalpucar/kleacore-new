@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { getProducts } from "@/lib/dal/products";
 import { parsePagination } from "@/lib/utils/pagination";
 import { PackagesContent } from "./content";
 import type { ProductCategorySlug, ProductStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Paketler" };
 
 export default async function PackagesPage({
   searchParams,

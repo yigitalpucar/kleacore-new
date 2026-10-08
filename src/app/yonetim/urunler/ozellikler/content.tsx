@@ -1,42 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Plus,
-  Search,
-  Filter,
-  Edit,
-  Trash2,
-  MoreVertical,
-  Eye,
-  EyeOff,
-  Tag,
-  CheckCircle,
-  Star,
-  ArrowUp,
-  ArrowDown,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { CheckCircle, Edit, Eye, EyeOff, Plus, Star, Tag, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -44,8 +11,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DataTable,
+  EmptyState,
+  FormField,
+  ListRow,
+  PageHeader,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  appButton,
+  type ColumnDef,
+} from "@/components/app";
+import { CatalogDialog, OrderControls, SwitchField } from "@/components/admin-b/katalog";
 import { cn } from "@/lib/utils";
-import { BlurFade } from "@/components/magicui/blur-fade";
 import { categoryConfig } from "@/lib/products/constants";
 import {
   createProductFeature,
@@ -93,20 +72,12 @@ function normalizeSlug(value: string) {
 
 export function FeaturesContent({ features: initialFeatures }: FeaturesContentProps) {
   const [features, setFeatures] = useState(initialFeatures);
-  const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFeature, setEditingFeature] = useState<ProductFeatureData | null>(null);
 
   const filteredFeatures = features
-    .filter((feature) => {
-      const matchesSearch =
-        feature.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        feature.slug.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory =
-        categoryFilter === "all" || feature.categoryId === categoryFilter;
-      return matchesSearch && matchesCategory;
-    })
+    .filter((feature) => categoryFilter === "all" || feature.categoryId === categoryFilter)
     .sort((a, b) => {
       if (a.categoryId !== b.categoryId) {
         return a.categoryId.localeCompare(b.categoryId);
@@ -307,324 +278,231 @@ export function FeaturesContent({ features: initialFeatures }: FeaturesContentPr
     updateLocalOrder(featureId, direction);
   };
 
+  const categoryName = (slug: ProductCategorySlug) =>
+    categoryConfig[slug as keyof typeof categoryConfig]?.name ?? slug;
+
+  const siblingsOf = (feature: ProductFeatureData) =>
+    features
+      .filter((item) => item.categoryId === feature.categoryId)
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+
+  const renderOrder = (feature: ProductFeatureData) => {
+    const siblings = siblingsOf(feature);
+    const index = siblings.findIndex((item) => item.id === feature.id);
+    return (
+      <OrderControls
+        value={feature.displayOrder}
+        itemLabel={feature.name}
+        onUp={() => handleMoveFeature(feature.id, "up")}
+        onDown={() => handleMoveFeature(feature.id, "down")}
+        upDisabled={index <= 0}
+        downDisabled={index === -1 || index >= siblings.length - 1}
+      />
+    );
+  };
+
+  const renderStar = (feature: ProductFeatureData) => (
+    <button
+      type="button"
+      onClick={() => handleToggleHighlighted(feature.id)}
+      aria-pressed={feature.isHighlighted}
+      aria-label={`${feature.name}: ${feature.isHighlighted ? "öne çıkarmayı kaldır" : "öne çıkar"}`}
+      className={appButton({
+        variant: "ghost",
+        size: "icon-sm",
+        className: feature.isHighlighted ? "text-foreground" : "text-muted-foreground/60 hover:text-foreground",
+      })}
+    >
+      <Star aria-hidden className={cn(feature.isHighlighted && "fill-current")} />
+    </button>
+  );
+
+  const statusBadge = (feature: ProductFeatureData) =>
+    feature.isActive ? <StatusBadge tone="success" label="Aktif" /> : <StatusBadge tone="muted" label="Pasif" />;
+
+  const columns: ColumnDef<ProductFeatureData>[] = [
+    {
+      id: "order",
+      header: "Sıra",
+      enableSorting: false,
+      meta: { className: "w-px" },
+      cell: ({ row }) => renderOrder(row.original),
+    },
+    {
+      accessorKey: "name",
+      header: "Özellik",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <p className="truncate font-medium">{row.original.name}</p>
+          <p className="font-mono text-xs text-muted-foreground">{row.original.slug}</p>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "categoryId",
+      header: "Kategori",
+      enableSorting: false,
+      cell: ({ row }) => <span className="text-muted-foreground">{categoryName(row.original.categoryId)}</span>,
+    },
+    {
+      accessorKey: "unit",
+      header: "Birim",
+      enableSorting: false,
+      cell: ({ row }) =>
+        row.original.unit ? (
+          <span className="rounded border bg-muted/40 px-1.5 py-0.5 font-mono text-xs">{row.original.unit}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "highlighted",
+      header: "Öne çıkan",
+      enableSorting: false,
+      meta: { align: "center" },
+      cell: ({ row }) => renderStar(row.original),
+    },
+    {
+      id: "status",
+      header: "Durum",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const f = row.original;
+        return (
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={f.isActive}
+              onCheckedChange={() => handleToggleActive(f.id)}
+              aria-label={`${f.name} özelliğini ${f.isActive ? "pasife al" : "aktif et"}`}
+            />
+            {statusBadge(f)}
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <BlurFade delay={0}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Özellikler</h1>
-            <p className="text-zinc-600 dark:text-zinc-400">Ürün özelliklerini tanımlayın ve yönetin</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10">
-              <Tag className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium text-primary">{features.length} Özellik</span>
-            </div>
-            <Button onClick={handleNewFeature} className="bg-primary hover:bg-primary/90">
-              <Plus className="mr-2 h-4 w-4" />
-              Özellik Ekle
-            </Button>
-          </div>
-        </div>
-      </BlurFade>
+      <PageHeader
+        title="Özellikler"
+        description="Paket karşılaştırmalarında kullanılan ürün özelliklerini tanımlayın ve sıralayın."
+        actions={
+          <button type="button" className={appButton()} onClick={handleNewFeature}>
+            <Plus aria-hidden />
+            Özellik ekle
+          </button>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <BlurFade delay={0.05}>
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <Tag className="h-5 w-5 text-zinc-500" />
-                <span className="text-xs text-zinc-500">Tüm kategorilerde</span>
+      <StatGrid columns={3} className="grid-cols-1 sm:grid-cols-3">
+        <StatCard label="Toplam özellik" value={features.length} icon={Tag} hint="Tüm kategorilerde" />
+        <StatCard
+          label="Aktif özellik"
+          value={activeCount}
+          icon={CheckCircle}
+          hint={
+            features.length > 0
+              ? `%${Math.round((activeCount / features.length) * 100)} aktif`
+              : "Henüz özellik yok"
+          }
+        />
+        <StatCard label="Öne çıkan" value={highlightedCount} icon={Star} hint="Paket kartlarında vurgulanır" />
+      </StatGrid>
+
+      <DataTable
+        caption="Ürün özellikleri"
+        columns={columns}
+        data={filteredFeatures}
+        getRowId={(f) => f.id}
+        pageSize={20}
+        searchFn={(f, q) =>
+          f.name.toLocaleLowerCase("tr-TR").includes(q) || f.slug.toLocaleLowerCase("tr-TR").includes(q)
+        }
+        searchPlaceholder="Özellik adı veya slug ara…"
+        noResultsText="Aramanızla eşleşen özellik bulunamadı."
+        toolbar={
+          <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as CategoryFilter)}>
+            <SelectTrigger aria-label="Kategoriye göre filtrele" className="h-11 w-full sm:w-[200px] md:h-9">
+              <SelectValue placeholder="Kategori" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm kategoriler</SelectItem>
+              {categoryOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+        rowActions={(f) => [
+          { label: "Düzenle", icon: <Edit aria-hidden />, onSelect: () => handleEditFeature(f) },
+          {
+            label: f.isHighlighted ? "Öne çıkarmayı kaldır" : "Öne çıkar",
+            icon: <Star aria-hidden />,
+            onSelect: () => handleToggleHighlighted(f.id),
+          },
+          {
+            label: f.isActive ? "Pasif yap" : "Aktif yap",
+            icon: f.isActive ? <EyeOff aria-hidden /> : <Eye aria-hidden />,
+            onSelect: () => handleToggleActive(f.id),
+            separator: true,
+          },
+          {
+            label: "Sil",
+            icon: <Trash2 aria-hidden />,
+            destructive: true,
+            separator: true,
+            onSelect: () => handleDeleteFeature(f.id),
+          },
+        ]}
+        mobileCard={(f) => (
+          <ListRow
+            title={f.name}
+            subtitle={
+              <>
+                {categoryName(f.categoryId)} · <span className="font-mono text-xs">{f.slug}</span>
+                {f.unit ? ` · ${f.unit}` : ""}
+              </>
+            }
+            trailing={renderStar(f)}
+            meta={
+              <>
+                {statusBadge(f)}
+                {renderOrder(f)}
+              </>
+            }
+          />
+        )}
+        emptyState={
+          <EmptyState
+            icon={Tag}
+            title={categoryFilter === "all" ? "Henüz özellik yok" : "Bu kategoride özellik yok"}
+            description="Disk alanı, bant genişliği gibi paket özelliklerini buradan tanımlayın."
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                {categoryFilter !== "all" ? (
+                  <button
+                    type="button"
+                    className={appButton({ variant: "outline" })}
+                    onClick={() => setCategoryFilter("all")}
+                  >
+                    Tüm kategorileri göster
+                  </button>
+                ) : null}
+                <button type="button" className={appButton()} onClick={handleNewFeature}>
+                  <Plus aria-hidden />
+                  Özellik ekle
+                </button>
               </div>
-              <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">{features.length}</p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">Toplam Özellik</p>
-            </CardContent>
-          </Card>
-        </BlurFade>
-        <BlurFade delay={0.1}>
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                <span className="text-xs text-green-500">
-                  %{features.length > 0 ? ((activeCount / features.length) * 100).toFixed(0) : 0}
-                </span>
-              </div>
-              <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">{activeCount}</p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">Aktif Özellik</p>
-            </CardContent>
-          </Card>
-        </BlurFade>
-        <BlurFade delay={0.15}>
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <Star className="h-5 w-5 text-yellow-500" />
-                <span className="text-xs text-yellow-500">Vurgulanmış</span>
-              </div>
-              <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">{highlightedCount}</p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">Öne Çıkan</p>
-            </CardContent>
-          </Card>
-        </BlurFade>
-      </div>
+            }
+          />
+        }
+      />
 
-      <BlurFade delay={0.2}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex items-center gap-2">
-                <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as CategoryFilter)}>
-                  <SelectTrigger className="w-[180px] bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white">
-                    <Filter className="mr-2 h-4 w-4" />
-                    <SelectValue placeholder="Kategori" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-                    <SelectItem value="all">Tüm Kategoriler</SelectItem>
-                    {categoryOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                <Input
-                  type="search"
-                  placeholder="Özellik adı veya slug ara..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-
-      <BlurFade delay={0.25}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400 w-20">Sıra</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Özellik</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Kategori</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Slug</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Birim</th>
-                    <th className="text-center p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Öne Çıkan</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Durum</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Aktif</th>
-                    <th className="text-right p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">İşlemler</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredFeatures.map((feature) => {
-                    const config = categoryConfig[feature.categoryId as keyof typeof categoryConfig];
-                    const IconComponent = config?.icon;
-
-                    const orderedInCategory = features
-                      .filter((item) => item.categoryId === feature.categoryId)
-                      .sort((a, b) => a.displayOrder - b.displayOrder);
-                    const categoryIndex = orderedInCategory.findIndex((item) => item.id === feature.id);
-
-                    return (
-                      <tr
-                        key={feature.id}
-                        className={cn(
-                          "border-b border-zinc-200 dark:border-zinc-800 last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors",
-                          !feature.isActive && "opacity-60"
-                        )}
-                      >
-                        <td className="p-4">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                              onClick={() => handleMoveFeature(feature.id, "up")}
-                              disabled={categoryIndex <= 0}
-                            >
-                              <ArrowUp className="h-3 w-3" />
-                            </Button>
-                            <span className="text-sm font-medium text-zinc-500 w-4 text-center">
-                              {feature.displayOrder}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                              onClick={() => handleMoveFeature(feature.id, "down")}
-                              disabled={categoryIndex === -1 || categoryIndex >= orderedInCategory.length - 1}
-                            >
-                              <ArrowDown className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <Tag className="h-4 w-4 text-zinc-500" />
-                            <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                              {feature.name}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={cn(
-                                "p-1.5 rounded",
-                                config?.color || "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                              )}
-                            >
-                              {IconComponent && <IconComponent className="h-3.5 w-3.5" />}
-                            </div>
-                            <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                              {config?.name}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <code className="text-xs text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded font-mono">
-                            {feature.slug}
-                          </code>
-                        </td>
-                        <td className="p-4">
-                          <Badge className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                            {feature.unit || "-"}
-                          </Badge>
-                        </td>
-                        <td className="p-4 text-center">
-                          <button
-                            onClick={() => handleToggleHighlighted(feature.id)}
-                            className={cn(
-                              "p-1.5 rounded transition-colors",
-                              feature.isHighlighted
-                                ? "text-yellow-500 hover:text-yellow-400 bg-yellow-500/10"
-                                : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                            )}
-                          >
-                            <Star
-                              className={cn(
-                                "h-4 w-4",
-                                feature.isHighlighted && "fill-current"
-                              )}
-                            />
-                          </button>
-                        </td>
-                        <td className="p-4">
-                          <Badge
-                            className={cn(
-                              feature.isActive
-                                ? "bg-green-500/10 text-green-600 dark:text-green-500"
-                                : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-500"
-                            )}
-                          >
-                            {feature.isActive ? "Aktif" : "Pasif"}
-                          </Badge>
-                        </td>
-                        <td className="p-4">
-                          <Switch
-                            checked={feature.isActive}
-                            onCheckedChange={() => handleToggleActive(feature.id)}
-                            className="data-[state=checked]:bg-primary"
-                          />
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
-                              onClick={() => handleEditFeature(feature)}
-                              title="Düzenle"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-                                >
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="end"
-                                className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
-                              >
-                                <DropdownMenuItem
-                                  className="cursor-pointer"
-                                  onClick={() => handleEditFeature(feature)}
-                                >
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Düzenle
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="cursor-pointer"
-                                  onClick={() => handleToggleHighlighted(feature.id)}
-                                >
-                                  <Star className="mr-2 h-4 w-4" />
-                                  {feature.isHighlighted ? "Öne Çıkarmayı Kaldır" : "Öne Çıkar"}
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-zinc-200 dark:bg-zinc-800" />
-                                <DropdownMenuItem
-                                  className="cursor-pointer"
-                                  onClick={() => handleToggleActive(feature.id)}
-                                >
-                                  {feature.isActive ? (
-                                    <>
-                                      <EyeOff className="mr-2 h-4 w-4" />
-                                      Pasif Yap
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Eye className="mr-2 h-4 w-4" />
-                                      Aktif Yap
-                                    </>
-                                  )}
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-zinc-200 dark:bg-zinc-800" />
-                                <DropdownMenuItem
-                                  className="cursor-pointer text-red-500 focus:text-red-500"
-                                  onClick={() => handleDeleteFeature(feature.id)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Sil
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {filteredFeatures.length === 0 && (
-              <div className="p-8 text-center">
-                <Tag className="h-12 w-12 text-zinc-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-zinc-900 dark:text-white mb-2">
-                  Özellik bulunamadı
-                </h3>
-                <p className="text-zinc-600 dark:text-zinc-400">
-                  Arama kriterlerinize uygun özellik bulunmuyor.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </BlurFade>
-
-      <Dialog
+      <CatalogDialog
         open={dialogOpen}
         onOpenChange={(open) => {
           setDialogOpen(open);
@@ -632,179 +510,105 @@ export function FeaturesContent({ features: initialFeatures }: FeaturesContentPr
             setEditingFeature(null);
           }
         }}
-      >
-        <DialogContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="text-zinc-900 dark:text-white">
-              {editingFeature?.id ? "Özellik Düzenle" : "Yeni Özellik"}
-            </DialogTitle>
-            <DialogDescription className="text-zinc-600 dark:text-zinc-400">
-              Özellik bilgilerini {editingFeature?.id ? "güncelleyin" : "girin"}.
-            </DialogDescription>
-          </DialogHeader>
-          {editingFeature && (
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="category" className="text-zinc-700 dark:text-zinc-300">
-                  Kategori
-                </Label>
-                <Select
-                  value={editingFeature.categoryId}
-                  onValueChange={(value) =>
-                    setEditingFeature({ ...editingFeature, categoryId: value as ProductCategorySlug })
-                  }
-                >
-                  <SelectTrigger className="bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white">
-                    <SelectValue placeholder="Kategori seçin" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-                    {categoryOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name" className="text-zinc-700 dark:text-zinc-300">
-                    Özellik Adı
-                  </Label>
-                  <Input
-                    id="name"
-                    value={editingFeature.name}
-                    onChange={(e) =>
-                      setEditingFeature({
-                        ...editingFeature,
-                        name: e.target.value,
-                      })
-                    }
-                    placeholder="Örn: Disk Alanı"
-                    className="bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="slug" className="text-zinc-700 dark:text-zinc-300">
-                    Slug
-                  </Label>
-                  <Input
-                    id="slug"
-                    value={editingFeature.slug}
-                    onChange={(e) =>
-                      setEditingFeature({
-                        ...editingFeature,
-                        slug: e.target.value,
-                      })
-                    }
-                    placeholder="Örn: disk-space"
-                    className="bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="unit" className="text-zinc-700 dark:text-zinc-300">
-                    Birim
-                  </Label>
-                  <Input
-                    id="unit"
-                    value={editingFeature.unit}
-                    onChange={(e) =>
-                      setEditingFeature({
-                        ...editingFeature,
-                        unit: e.target.value,
-                      })
-                    }
-                    placeholder="Örn: GB, Adet"
-                    className="bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="displayOrder" className="text-zinc-700 dark:text-zinc-300">
-                    Sıralama
-                  </Label>
-                  <Input
-                    id="displayOrder"
-                    type="number"
-                    value={editingFeature.displayOrder}
-                    onChange={(e) =>
-                      setEditingFeature({
-                        ...editingFeature,
-                        displayOrder: parseInt(e.target.value, 10) || 0,
-                      })
-                    }
-                    className="bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-                <div className="flex items-center gap-2">
-                  <Star
-                    className={cn(
-                      "h-4 w-4",
-                      editingFeature.isHighlighted
-                        ? "text-yellow-500 fill-current"
-                        : "text-zinc-500"
-                    )}
-                  />
-                  <Label htmlFor="isHighlighted" className="text-zinc-700 dark:text-zinc-300">
-                    Öne Çıkan Özellik
-                  </Label>
-                </div>
-                <Switch
-                  id="isHighlighted"
-                  checked={editingFeature.isHighlighted}
-                  onCheckedChange={(checked) =>
-                    setEditingFeature({
-                      ...editingFeature,
-                      isHighlighted: checked,
-                    })
-                  }
-                  className="data-[state=checked]:bg-yellow-500"
-                />
-              </div>
-              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-                <div className="flex items-center gap-2">
-                  <Eye className="h-4 w-4 text-zinc-500" />
-                  <Label htmlFor="isActive" className="text-zinc-700 dark:text-zinc-300">
-                    Aktif
-                  </Label>
-                </div>
-                <Switch
-                  id="isActive"
-                  checked={editingFeature.isActive}
-                  onCheckedChange={(checked) =>
-                    setEditingFeature({
-                      ...editingFeature,
-                      isActive: checked,
-                    })
-                  }
-                  className="data-[state=checked]:bg-primary"
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
+        title={editingFeature?.id ? "Özelliği düzenle" : "Yeni özellik"}
+        description={`Özellik bilgilerini ${editingFeature?.id ? "güncelleyin" : "girin"}.`}
+        footer={
+          <>
+            <button
+              type="button"
+              className={appButton({ variant: "outline" })}
               onClick={() => {
                 setDialogOpen(false);
                 setEditingFeature(null);
               }}
-              className="border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
               İptal
-            </Button>
-            <Button
-              onClick={handleSaveFeature}
-              className="bg-primary hover:bg-primary/90"
-            >
+            </button>
+            <button type="button" className={appButton()} onClick={handleSaveFeature}>
               {editingFeature?.id ? "Kaydet" : "Oluştur"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </button>
+          </>
+        }
+      >
+        {editingFeature ? (
+          <>
+            <FormField label="Kategori" htmlFor="category">
+              <Select
+                value={editingFeature.categoryId}
+                onValueChange={(value) =>
+                  setEditingFeature({ ...editingFeature, categoryId: value as ProductCategorySlug })
+                }
+              >
+                <SelectTrigger id="category">
+                  <SelectValue placeholder="Kategori seçin" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categoryOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <FormField label="Özellik adı" htmlFor="name" required>
+                <Input
+                  id="name"
+                  value={editingFeature.name}
+                  onChange={(e) => setEditingFeature({ ...editingFeature, name: e.target.value })}
+                  placeholder="Örn: Disk Alanı"
+                />
+              </FormField>
+              <FormField label="Slug" htmlFor="slug" required hint="Küçük harf, rakam ve tire.">
+                <Input
+                  id="slug"
+                  value={editingFeature.slug}
+                  onChange={(e) => setEditingFeature({ ...editingFeature, slug: e.target.value })}
+                  placeholder="Örn: disk-space"
+                  className="font-mono"
+                />
+              </FormField>
+            </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <FormField label="Birim" htmlFor="unit">
+                <Input
+                  id="unit"
+                  value={editingFeature.unit}
+                  onChange={(e) => setEditingFeature({ ...editingFeature, unit: e.target.value })}
+                  placeholder="Örn: GB, Adet"
+                />
+              </FormField>
+              <FormField label="Sıralama" htmlFor="displayOrder">
+                <Input
+                  id="displayOrder"
+                  type="number"
+                  inputMode="numeric"
+                  value={editingFeature.displayOrder}
+                  onChange={(e) =>
+                    setEditingFeature({ ...editingFeature, displayOrder: parseInt(e.target.value, 10) || 0 })
+                  }
+                />
+              </FormField>
+            </div>
+            <div className="space-y-3">
+              <SwitchField
+                id="isHighlighted"
+                label="Öne çıkan özellik"
+                description="Paket kartlarında vurgulanarak gösterilir."
+                checked={editingFeature.isHighlighted}
+                onCheckedChange={(checked) => setEditingFeature({ ...editingFeature, isHighlighted: checked })}
+              />
+              <SwitchField
+                id="isActive"
+                label="Aktif"
+                checked={editingFeature.isActive}
+                onCheckedChange={(checked) => setEditingFeature({ ...editingFeature, isActive: checked })}
+              />
+            </div>
+          </>
+        ) : null}
+      </CatalogDialog>
     </div>
   );
 }

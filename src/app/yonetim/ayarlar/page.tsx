@@ -1,33 +1,34 @@
-import {
-  Building2,
-  Mail,
-  Bell,
-  Shield,
-  Users,
-  Key,
-  CreditCard,
-  Save,
-  Upload,
-  ArrowUpRight,
-} from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { ArrowUpRight, CreditCard, Key, Landmark, Mail, Upload, UserPlus, Users } from "lucide-react";
+import { redirect } from "next/navigation";
+import {
+  EmptyState,
+  FormField,
+  FormSection,
+  IconTile,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+  UnavailableAction,
+  appButton,
+} from "@/components/app";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import { BlurFade } from "@/components/magicui/blur-fade";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AyarlarTabBar } from "@/components/admin-b/ayarlar/settings-tab-bar";
+import { FieldGrid, inputClass } from "@/components/admin-b/integrations/shared";
+import { formatDate } from "@/lib/format/date";
 import { getSettings, getAdminUsers, getApiKeys } from "@/lib/dal/settings";
 import { updateSettings } from "@/lib/actions/admin/settings";
 import { revokeApiKeyByAdmin } from "@/lib/actions/admin/api-keys";
 import { NotificationSwitches, SecuritySwitch } from "./settings-switches";
-import { redirect } from "next/navigation";
 import { SettingsFeedbackToast } from "./settings-feedback-toast";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Ayarlar" };
 
 const allowedTabs = [
   "general",
@@ -103,8 +104,8 @@ async function saveEmailSettings(formData: FormData) {
     tab: "email",
     status: result.success ? "success" : "error",
     message: result.success
-      ? "SMTP ayarlari kaydedildi."
-      : result.error ?? "SMTP ayarlari kaydedilemedi.",
+      ? "SMTP ayarları kaydedildi."
+      : result.error ?? "SMTP ayarları kaydedilemedi.",
   });
   redirect(`/yonetim/ayarlar?${params.toString()}`);
 }
@@ -131,8 +132,8 @@ async function saveNotificationSettings(formData: FormData) {
     tab: "notifications",
     status: result.success ? "success" : "error",
     message: result.success
-      ? "Bildirim ayarlari kaydedildi."
-      : result.error ?? "Bildirim ayarlari kaydedilemedi.",
+      ? "Bildirim ayarları kaydedildi."
+      : result.error ?? "Bildirim ayarları kaydedilemedi.",
   });
   redirect(`/yonetim/ayarlar?${params.toString()}`);
 }
@@ -148,8 +149,8 @@ async function saveSecuritySettings(formData: FormData) {
     tab: "security",
     status: result.success ? "success" : "error",
     message: result.success
-      ? "Guvenlik ayarlari kaydedildi."
-      : result.error ?? "Guvenlik ayarlari kaydedilemedi.",
+      ? "Güvenlik ayarları kaydedildi."
+      : result.error ?? "Güvenlik ayarları kaydedilemedi.",
   });
   redirect(`/yonetim/ayarlar?${params.toString()}`);
 }
@@ -219,464 +220,330 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const smsNotifications = getSettingValue(settings, "sms_notifications", "false") === "true";
   const autoInvoice = getSettingValue(settings, "auto_invoice", "true") === "true";
   const twoFactor = getSettingValue(settings, "two_factor", "true") === "true";
+  const paymentProvider = getSettingValue(settings, "payment_gateway_provider", "stripe");
+  const paymentProviderLabel =
+    ({ stripe: "Stripe", iyzico: "iyzico", paytr: "PayTR" } as Record<string, string>)[paymentProvider] ?? paymentProvider;
+  const emailTemplates = [
+    { name: "Hoş geldiniz", description: "Yeni kayıt sonrası gönderilir" },
+    { name: "Fatura bildirimi", description: "Yeni fatura oluşturulduğunda" },
+    { name: "Ödeme hatırlatma", description: "Vadesi yaklaşan faturalar için" },
+    { name: "Hizmet yenileme", description: "Süre bitimi yaklaşırken" },
+    { name: "Destek yanıtı", description: "Destek talebine yanıt verildiğinde" },
+  ];
+
+  const paymentMethods = [
+    {
+      name: "Kredi kartı",
+      provider: `Aktif sağlayıcı: ${paymentProviderLabel}`,
+      icon: <CreditCard />,
+    },
+    { name: "Banka havalesi", provider: "Manuel onay", icon: <Landmark /> },
+  ];
+
+  const tabPanel = "mt-6 space-y-8 focus-visible:ring-offset-0";
+
+  // AppShell already provides a TooltipProvider; this keeps UnavailableAction safe in any shell.
   return (
-    <div className="space-y-6">
-      <SettingsFeedbackToast
-        status={toastStatus}
-        message={toastMessage}
-        activeTab={defaultTab}
-      />
-      {/* Page Header */}
-      <BlurFade delay={0}>
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Ayarlar</h1>
-          <p className="text-zinc-600 dark:text-zinc-400">Sistem ayarlarını yapılandırın</p>
-        </div>
-      </BlurFade>
+    <TooltipProvider delayDuration={200}>
+      <SettingsFeedbackToast status={toastStatus} message={toastMessage} activeTab={defaultTab} />
 
-      <BlurFade delay={0.1}>
+      <PageHeader title="Ayarlar" description="Şirket bilgileri, e-posta, bildirim, güvenlik ve API ayarlarını yönetin." />
+
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex-wrap h-auto gap-1 p-1">
-          <TabsTrigger value="general" className="data-[state=active]:bg-zinc-200 dark:data-[state=active]:bg-zinc-700">
-            <Building2 className="mr-2 h-4 w-4" />
-            Genel
-          </TabsTrigger>
-          <TabsTrigger value="email" className="data-[state=active]:bg-zinc-200 dark:data-[state=active]:bg-zinc-700">
-            <Mail className="mr-2 h-4 w-4" />
-            E-posta
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="data-[state=active]:bg-zinc-200 dark:data-[state=active]:bg-zinc-700">
-            <Bell className="mr-2 h-4 w-4" />
-            Bildirimler
-          </TabsTrigger>
-          <TabsTrigger value="payment" className="data-[state=active]:bg-zinc-200 dark:data-[state=active]:bg-zinc-700">
-            <CreditCard className="mr-2 h-4 w-4" />
-            Ödeme
-          </TabsTrigger>
-          <TabsTrigger value="security" className="data-[state=active]:bg-zinc-200 dark:data-[state=active]:bg-zinc-700">
-            <Shield className="mr-2 h-4 w-4" />
-            Güvenlik
-          </TabsTrigger>
-          <TabsTrigger value="users" className="data-[state=active]:bg-zinc-200 dark:data-[state=active]:bg-zinc-700">
-            <Users className="mr-2 h-4 w-4" />
-            Kullanıcılar
-          </TabsTrigger>
-          <TabsTrigger value="api" className="data-[state=active]:bg-zinc-200 dark:data-[state=active]:bg-zinc-700">
-            <Key className="mr-2 h-4 w-4" />
-            API
-          </TabsTrigger>
-        </TabsList>
+        <AyarlarTabBar />
 
-        {/* General Settings */}
-        <TabsContent value="general" className="mt-6 space-y-6">
-          <form action={saveGeneralSettings} className="space-y-6">
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Şirket Bilgileri</CardTitle>
-                <CardDescription className="text-zinc-500">
-                  Şirketinizin temel bilgilerini güncelleyin
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-zinc-700 dark:text-zinc-300">Şirket Adı</Label>
-                    <Input
-                      name="company_name"
-                      defaultValue={companyName}
-                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-zinc-700 dark:text-zinc-300">Vergi Numarası</Label>
-                    <Input
-                      name="tax_number"
-                      defaultValue={taxNumber}
-                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300">Adres</Label>
-                  <Textarea
-                    name="address"
-                    defaultValue={address}
-                    className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white min-h-20"
+        {/* General */}
+        <TabsContent value="general" className={tabPanel}>
+          <form action={saveGeneralSettings} className="space-y-8">
+            <FormSection
+              title="Şirket bilgileri"
+              description="Faturalarda ve e-postalarda kullanılan temel şirket bilgileri."
+              footer={
+                <button type="submit" className={appButton()}>
+                  Değişiklikleri kaydet
+                </button>
+              }
+            >
+              <FieldGrid>
+                <FormField label="Şirket adı" htmlFor="company_name">
+                  <Input id="company_name" name="company_name" defaultValue={companyName} className={inputClass} />
+                </FormField>
+                <FormField label="Vergi numarası" htmlFor="tax_number">
+                  <Input id="tax_number" name="tax_number" defaultValue={taxNumber} inputMode="numeric" className={inputClass} />
+                </FormField>
+              </FieldGrid>
+              <FormField label="Adres" htmlFor="address">
+                <Textarea id="address" name="address" defaultValue={address} className="min-h-20 shadow-sm" />
+              </FormField>
+              <FieldGrid>
+                <FormField label="E-posta" htmlFor="company_email">
+                  <Input
+                    id="company_email"
+                    name="company_email"
+                    type="text"
+                    inputMode="email"
+                    defaultValue={companyEmail}
+                    className={inputClass}
                   />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-zinc-700 dark:text-zinc-300">E-posta</Label>
-                    <Input
-                      name="company_email"
-                      defaultValue={companyEmail}
-                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-zinc-700 dark:text-zinc-300">Telefon</Label>
-                    <Input
-                      name="company_phone"
-                      defaultValue={companyPhone}
-                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Logo</CardTitle>
-                <CardDescription className="text-zinc-500">
-                  Site logonuzu güncelleyin
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-4">
-                  <div className="h-16 w-32 bg-zinc-200 dark:bg-zinc-800 rounded-lg flex items-center justify-center">
-                    <span className="text-white font-bold">{companyName}</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-                  >
-                    <Upload className="mr-2 h-4 w-4" />
-                    Logo Yükle
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-end">
-              <Button type="submit" className="bg-primary hover:bg-primary/90">
-                <Save className="mr-2 h-4 w-4" />
-                Değişiklikleri Kaydet
-              </Button>
-            </div>
+                </FormField>
+                <FormField label="Telefon" htmlFor="company_phone">
+                  <Input
+                    id="company_phone"
+                    name="company_phone"
+                    type="text"
+                    inputMode="tel"
+                    defaultValue={companyPhone}
+                    className={inputClass}
+                  />
+                </FormField>
+              </FieldGrid>
+            </FormSection>
           </form>
+
+          <FormSection title="Logo" description="Site logonuzu güncelleyin.">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex h-16 w-32 items-center justify-center rounded-md border border-dashed bg-muted/30 px-2">
+                <span className="truncate text-sm font-semibold tracking-tight">{companyName}</span>
+              </div>
+              <UnavailableAction label="Logo yükle" icon={<Upload aria-hidden />} />
+            </div>
+          </FormSection>
         </TabsContent>
 
-        {/* Email Settings */}
-        <TabsContent value="email" className="mt-6 space-y-6">
-          <form action={saveEmailSettings} className="space-y-6">
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">SMTP Ayarları</CardTitle>
-                <CardDescription className="text-zinc-500">
-                  E-posta gönderimi için SMTP sunucunuzu yapılandırın
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-zinc-700 dark:text-zinc-300">SMTP Sunucu</Label>
-                    <Input
-                      name="smtp_server"
-                      defaultValue={smtpServer}
-                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-zinc-700 dark:text-zinc-300">Port</Label>
-                    <Input
-                      name="smtp_port"
-                      defaultValue={smtpPort}
-                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-zinc-700 dark:text-zinc-300">Kullanıcı Adı</Label>
-                    <Input
-                      name="smtp_username"
-                      defaultValue={smtpUsername}
-                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-zinc-700 dark:text-zinc-300">Şifre</Label>
-                    <Input
-                      name="smtp_password"
-                      type="password"
-                      defaultValue={smtpPassword}
-                      className="bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <Button type="submit" className="bg-primary hover:bg-primary/90">
-                <Save className="mr-2 h-4 w-4" />
-                SMTP Ayarlarını Kaydet
-              </Button>
-            </div>
+        {/* Email */}
+        <TabsContent value="email" className={tabPanel}>
+          <form action={saveEmailSettings}>
+            <FormSection
+              title="SMTP ayarları"
+              description="E-posta gönderimi için SMTP sunucunuzu yapılandırın. Kayıtlı şifre yıldızla gösterilir."
+              footer={
+                <button type="submit" className={appButton()}>
+                  SMTP ayarlarını kaydet
+                </button>
+              }
+            >
+              <FieldGrid>
+                <FormField label="SMTP sunucu" htmlFor="smtp_server">
+                  <Input id="smtp_server" name="smtp_server" defaultValue={smtpServer} className={inputClass} />
+                </FormField>
+                <FormField label="Port" htmlFor="smtp_port">
+                  <Input id="smtp_port" name="smtp_port" defaultValue={smtpPort} inputMode="numeric" className={inputClass} />
+                </FormField>
+                <FormField label="Kullanıcı adı" htmlFor="smtp_username">
+                  <Input
+                    id="smtp_username"
+                    name="smtp_username"
+                    defaultValue={smtpUsername}
+                    autoComplete="off"
+                    className={inputClass}
+                  />
+                </FormField>
+                <FormField label="Şifre" htmlFor="smtp_password">
+                  <Input
+                    id="smtp_password"
+                    name="smtp_password"
+                    type="password"
+                    defaultValue={smtpPassword}
+                    autoComplete="new-password"
+                    className={inputClass}
+                  />
+                </FormField>
+              </FieldGrid>
+            </FormSection>
           </form>
 
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">E-posta Şablonları</CardTitle>
-              <CardDescription className="text-zinc-500">
-                Otomatik e-posta şablonlarını düzenleyin
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {[
-                  { name: "Hoş Geldiniz", description: "Yeni kayıt sonrası gönderilir" },
-                  { name: "Fatura Bildirimi", description: "Yeni fatura oluşturulduğunda" },
-                  { name: "Ödeme Hatırlatma", description: "Vadesi yaklaşan faturalar için" },
-                  { name: "Hizmet Yenileme", description: "Süre bitimi yaklaşırken" },
-                  { name: "Destek Yanıtı", description: "Destek talebine yanıt verildiğinde" },
-                ].map((template) => (
-                  <div
-                    key={template.name}
-                    className="flex items-center justify-between p-3 rounded-lg bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800/50 hover:bg-zinc-200 dark:hover:bg-zinc-200 dark:bg-zinc-800 transition-colors"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-zinc-900 dark:text-white">{template.name}</p>
-                      <p className="text-xs text-zinc-500">{template.description}</p>
-                    </div>
-                    <Button type="button" variant="ghost" size="sm" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-                      Düzenle
-                    </Button>
+          <FormSection title="E-posta şablonları" description="Otomatik gönderilen e-postaların içerikleri.">
+            <ul className="-mx-4 -my-4 divide-y md:-mx-5 md:-my-5">
+              {emailTemplates.map((template) => (
+                <li key={template.name} className="flex items-center gap-3 px-4 py-3 md:px-5">
+                  <IconTile size="sm">
+                    <Mail />
+                  </IconTile>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{template.name}</p>
+                    <p className="text-xs text-muted-foreground">{template.description}</p>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <UnavailableAction label="Düzenle" variant="ghost" size="sm" />
+                </li>
+              ))}
+            </ul>
+          </FormSection>
         </TabsContent>
 
         {/* Notifications */}
-        <TabsContent value="notifications" className="mt-6 space-y-6">
+        <TabsContent value="notifications" className={tabPanel}>
           <form action={saveNotificationSettings}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Bildirim Tercihleri</CardTitle>
-                <CardDescription className="text-zinc-500">
-                  Hangi bildirimleri almak istediğinizi seçin
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <NotificationSwitches
-                  emailNotifications={emailNotifications}
-                  smsNotifications={smsNotifications}
-                  autoInvoice={autoInvoice}
-                />
-                <div className="flex justify-end">
-                  <Button type="submit" className="bg-primary hover:bg-primary/90">
-                    <Save className="mr-2 h-4 w-4" />
-                    Bildirim Ayarlarını Kaydet
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <FormSection
+              title="Bildirim tercihleri"
+              description="Hangi bildirimlerin gönderileceğini seçin."
+              footer={
+                <button type="submit" className={appButton()}>
+                  Bildirim ayarlarını kaydet
+                </button>
+              }
+            >
+              <NotificationSwitches
+                emailNotifications={emailNotifications}
+                smsNotifications={smsNotifications}
+                autoInvoice={autoInvoice}
+              />
+            </FormSection>
           </form>
         </TabsContent>
 
-        {/* Payment Settings */}
-        <TabsContent value="payment" className="mt-6 space-y-6">
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">Ödeme Yöntemleri</CardTitle>
-              <CardDescription className="text-zinc-500">
-                Kabul edilen ödeme yöntemlerini yapılandırın
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {[
-                { name: "Kredi Kartı", provider: "Stripe", status: "active" as const },
-                { name: "Banka Havalesi", provider: "Manuel Onay", status: "active" as const },
-              ].map((method) => (
-                <div
-                  key={method.name}
-                  className="flex items-center justify-between p-4 rounded-lg bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <CreditCard className="h-5 w-5 text-zinc-500" />
-                    <div>
-                      <p className="text-sm font-medium text-zinc-900 dark:text-white">{method.name}</p>
-                      <p className="text-xs text-zinc-500">{method.provider}</p>
-                    </div>
+        {/* Payment */}
+        <TabsContent value="payment" className={tabPanel}>
+          <FormSection
+            title="Ödeme yöntemleri"
+            description="Sağlayıcı anahtarları ve aktif ağ geçidi Entegrasyonlar sayfasından yönetilir."
+          >
+            <ul className="-mx-4 -my-4 divide-y md:-mx-5 md:-my-5">
+              {paymentMethods.map((method) => (
+                <li key={method.name} className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-5">
+                  <IconTile size="sm">{method.icon}</IconTile>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{method.name}</p>
+                    <p className="text-xs text-muted-foreground">{method.provider}</p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant={method.status === "active" ? "default" : "secondary"}>
-                      {method.status === "active" ? "Aktif" : "Pasif"}
-                    </Badge>
-                    <Button variant="ghost" size="sm" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white" asChild>
-                      <Link href="/yonetim/entegrasyonlar?tab=payment">
-                        Yapılandır
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
+                  <Link href="/yonetim/entegrasyonlar?tab=payment" className={appButton({ variant: "outline", size: "sm" })}>
+                    Yapılandır
+                  </Link>
+                </li>
               ))}
-            </CardContent>
-          </Card>
+            </ul>
+          </FormSection>
         </TabsContent>
 
         {/* Security */}
-        <TabsContent value="security" className="mt-6 space-y-6">
+        <TabsContent value="security" className={tabPanel}>
           <form action={saveSecuritySettings}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Güvenlik Ayarları</CardTitle>
-                <CardDescription className="text-zinc-500">
-                  Hesap güvenliğinizi yönetin
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <SecuritySwitch twoFactor={twoFactor} />
-                <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-white">Şifre Değiştir</p>
-                    <p className="text-xs text-zinc-500">Son değişiklik: 3 ay önce</p>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" className="border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-                    Değiştir
-                  </Button>
+            <FormSection
+              title="Güvenlik ayarları"
+              description="Yönetim hesapları için giriş güvenliği."
+              footer={
+                <button type="submit" className={appButton()}>
+                  Güvenlik ayarlarını kaydet
+                </button>
+              }
+            >
+              <SecuritySwitch twoFactor={twoFactor} />
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Şifre değiştir</p>
+                  <p className="text-xs text-muted-foreground">Yönetici hesabınızın giriş şifresi.</p>
                 </div>
-                <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-white">Aktif Oturumlar</p>
-                    <p className="text-xs text-zinc-500">2 aktif oturum</p>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" className="border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-                    Görüntüle
-                  </Button>
+                <UnavailableAction label="Değiştir" size="sm" />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Aktif oturumlar</p>
+                  <p className="text-xs text-muted-foreground">Hesabınızla açık olan oturumlar.</p>
                 </div>
-                <div className="flex justify-end">
-                  <Button type="submit" className="bg-primary hover:bg-primary/90">
-                    <Save className="mr-2 h-4 w-4" />
-                    Güvenlik Ayarlarını Kaydet
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                <UnavailableAction label="Görüntüle" size="sm" />
+              </div>
+            </FormSection>
           </form>
         </TabsContent>
 
         {/* Users */}
-        <TabsContent value="users" className="mt-6 space-y-6">
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-zinc-900 dark:text-white">Admin Kullanıcıları</CardTitle>
-                <CardDescription className="text-zinc-500">
-                  Yönetim paneline erişimi olan kullanıcılar
-                </CardDescription>
+        <TabsContent value="users" className={tabPanel}>
+          <SectionCard
+            title="Yönetici kullanıcıları"
+            description="Yönetim paneline erişimi olan kullanıcılar."
+            actions={<UnavailableAction label="Kullanıcı ekle" icon={<UserPlus aria-hidden />} size="sm" />}
+            flush
+          >
+            {adminUsers.length === 0 ? (
+              <div className="p-4 md:p-5">
+                <EmptyState compact icon={Users} title="Yönetici kullanıcı bulunamadı." />
               </div>
-              <Button className="bg-primary hover:bg-primary/90">
-                <Users className="mr-2 h-4 w-4" />
-                Kullanıcı Ekle
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
+            ) : (
+              <ul className="divide-y">
                 {adminUsers.map((user) => (
-                  <div
-                    key={user.id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white text-sm font-medium">
-                        {user.name.charAt(0)}{user.surname.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-zinc-900 dark:text-white">{user.name} {user.surname}</p>
-                        <p className="text-xs text-zinc-500">{user.email}</p>
-                      </div>
+                  <li key={user.id} className="flex flex-wrap items-center gap-3 px-4 py-3.5 md:px-5">
+                    <span
+                      aria-hidden
+                      className="flex size-9 shrink-0 items-center justify-center rounded-full border bg-muted text-xs font-semibold uppercase"
+                    >
+                      {user.name.charAt(0)}
+                      {user.surname.charAt(0)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">
+                        {user.name} {user.surname}
+                      </p>
+                      <p className="break-all text-xs text-muted-foreground">{user.email}</p>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                       <div className="text-right">
-                        <Badge variant="outline">Admin</Badge>
+                        <StatusBadge tone="neutral" label="Yönetici" />
                         {user.lastLoginAt && (
-                          <p className="text-xs text-zinc-500 mt-1">
-                            Son: {new Date(user.lastLoginAt).toLocaleDateString("tr-TR")}
+                          <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+                            Son giriş: {formatDate(user.lastLoginAt)}
                           </p>
                         )}
                       </div>
-                      <Button variant="ghost" size="sm" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-                        Düzenle
-                      </Button>
+                      <UnavailableAction label="Düzenle" variant="ghost" size="sm" />
                     </div>
-                  </div>
+                  </li>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
+              </ul>
+            )}
+          </SectionCard>
         </TabsContent>
 
         {/* API */}
-        <TabsContent value="api" className="mt-6 space-y-6">
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-zinc-900 dark:text-white">API Anahtarları</CardTitle>
-                <CardDescription className="text-zinc-500">
-                  Entegrasyonlar için API anahtarlarınızı yönetin
-                </CardDescription>
+        <TabsContent value="api" className={tabPanel}>
+          <SectionCard
+            title="API anahtarları"
+            description="Entegrasyonlar için oluşturulan API anahtarları."
+            actions={<UnavailableAction label="Yeni anahtar" icon={<Key aria-hidden />} size="sm" />}
+            flush
+          >
+            {apiKeys.length === 0 ? (
+              <div className="p-4 md:p-5">
+                <EmptyState compact icon={Key} title="Henüz API anahtarı yok." />
               </div>
-              <Button className="bg-primary hover:bg-primary/90">
-                <Key className="mr-2 h-4 w-4" />
-                Yeni Anahtar
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
+            ) : (
+              <ul className="divide-y">
                 {apiKeys.map((apiKey) => (
-                  <div
-                    key={apiKey.id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-zinc-100 dark:bg-zinc-200 dark:bg-zinc-800/50"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-zinc-900 dark:text-white">{apiKey.name}</p>
-                      <p className="text-xs font-mono text-zinc-500">{maskApiKey(apiKey.keyPrefix)}</p>
+                  <li key={apiKey.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 md:px-5">
+                    <div className="min-w-0 basis-full sm:flex-1 sm:basis-0">
+                      <p className="text-sm font-medium">{apiKey.name}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{maskApiKey(apiKey.keyPrefix)}</p>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right text-xs text-zinc-500">
-                        <p>Oluşturulma: {new Date(apiKey.createdAt).toLocaleDateString("tr-TR")}</p>
-                        {apiKey.lastUsedAt && (
-                          <p>Son kullanım: {new Date(apiKey.lastUsedAt).toLocaleDateString("tr-TR")}</p>
-                        )}
-                      </div>
-                      <form action={revokeAdminApiKey}>
-                        <input type="hidden" name="id" value={apiKey.id} />
-                        <Button type="submit" variant="destructive" size="sm">
-                          İptal Et
-                        </Button>
-                      </form>
+                    <div className="flex-1 text-xs tabular-nums text-muted-foreground sm:flex-none sm:text-right">
+                      <p>Oluşturulma: {formatDate(apiKey.createdAt)}</p>
+                      {apiKey.lastUsedAt && <p>Son kullanım: {formatDate(apiKey.lastUsedAt)}</p>}
                     </div>
-                  </div>
+                    <form action={revokeAdminApiKey}>
+                      <input type="hidden" name="id" value={apiKey.id} />
+                      <button
+                        type="submit"
+                        className={appButton({ variant: "destructive", size: "sm" })}
+                        aria-label={`${apiKey.name} anahtarını iptal et`}
+                      >
+                        İptal et
+                      </button>
+                    </form>
+                  </li>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
+              </ul>
+            )}
+          </SectionCard>
 
-          <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-white">Entegrasyonlar</CardTitle>
-              <CardDescription className="text-zinc-500">
-                Registrar, ödeme, webhook ve diğer modüller Entegrasyonlar sayfasına taşındı
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild variant="outline">
-                <Link href="/yonetim/entegrasyonlar">
-                  Entegrasyonları Yönet
-                  <ArrowUpRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
+          <SectionCard
+            title="Entegrasyonlar"
+            description="Registrar, ödeme, webhook ve diğer modüller Entegrasyonlar sayfasında yönetilir."
+            actions={
+              <Link href="/yonetim/entegrasyonlar" className={appButton({ variant: "outline", size: "sm" })}>
+                Entegrasyonları yönet
+                <ArrowUpRight aria-hidden />
+              </Link>
+            }
+          />
         </TabsContent>
       </Tabs>
-      </BlurFade>
-    </div>
+    </TooltipProvider>
   );
 }

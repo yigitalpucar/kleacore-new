@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
+import { ToggleRow } from "@/components/admin-b/integrations/shared";
 
 interface SettingsSwitchesProps {
   emailNotifications: boolean;
@@ -14,66 +12,33 @@ interface SettingsSwitchesProps {
 }
 
 export function NotificationSwitches({
-  emailNotifications: initialEmail,
-  smsNotifications: initialSms,
-  autoInvoice: initialAutoInvoice,
+  emailNotifications,
+  smsNotifications,
+  autoInvoice,
   emailFieldName = "email_notifications",
   smsFieldName = "sms_notifications",
   autoInvoiceFieldName = "auto_invoice",
 }: SettingsSwitchesProps) {
-  const [emailNotifications, setEmailNotifications] = useState(initialEmail);
-  const [smsNotifications, setSmsNotifications] = useState(initialSms);
-  const [autoInvoice, setAutoInvoice] = useState(initialAutoInvoice);
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-zinc-900 dark:text-white">E-posta Bildirimleri</p>
-          <p className="text-xs text-zinc-500">Önemli güncellemeler için e-posta alın</p>
-        </div>
-        <Switch
-          checked={emailNotifications}
-          onCheckedChange={setEmailNotifications}
-        />
-        <input
-          type="hidden"
-          name={emailFieldName}
-          value={emailNotifications ? "true" : "false"}
-        />
-      </div>
-      <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-zinc-900 dark:text-white">SMS Bildirimleri</p>
-          <p className="text-xs text-zinc-500">Kritik durumlar için SMS alın</p>
-        </div>
-        <Switch
-          checked={smsNotifications}
-          onCheckedChange={setSmsNotifications}
-        />
-        <input
-          type="hidden"
-          name={smsFieldName}
-          value={smsNotifications ? "true" : "false"}
-        />
-      </div>
-      <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-zinc-900 dark:text-white">Otomatik Faturalama</p>
-          <p className="text-xs text-zinc-500">Faturaları otomatik oluştur ve gönder</p>
-        </div>
-        <Switch
-          checked={autoInvoice}
-          onCheckedChange={setAutoInvoice}
-        />
-        <input
-          type="hidden"
-          name={autoInvoiceFieldName}
-          value={autoInvoice ? "true" : "false"}
-        />
-      </div>
+    <div className="space-y-3">
+      <ToggleRow
+        title="E-posta bildirimleri"
+        description="Önemli güncellemeler için e-posta alın."
+        fieldName={emailFieldName}
+        defaultChecked={emailNotifications}
+      />
+      <ToggleRow
+        title="SMS bildirimleri"
+        description="Kritik durumlar için SMS alın."
+        fieldName={smsFieldName}
+        defaultChecked={smsNotifications}
+      />
+      <ToggleRow
+        title="Otomatik faturalama"
+        description="Faturaları otomatik oluştur ve gönder."
+        fieldName={autoInvoiceFieldName}
+        defaultChecked={autoInvoice}
+      />
     </div>
   );
 }
@@ -83,27 +48,13 @@ interface SecuritySwitchProps {
   twoFactorFieldName?: string;
 }
 
-export function SecuritySwitch({
-  twoFactor: initialTwoFactor,
-  twoFactorFieldName = "two_factor",
-}: SecuritySwitchProps) {
-  const [twoFactor, setTwoFactor] = useState(initialTwoFactor);
-
+export function SecuritySwitch({ twoFactor, twoFactorFieldName = "two_factor" }: SecuritySwitchProps) {
   return (
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-medium text-zinc-900 dark:text-white">İki Faktörlü Doğrulama</p>
-        <p className="text-xs text-zinc-500">Giriş için ek güvenlik katmanı</p>
-      </div>
-      <Switch
-        checked={twoFactor}
-        onCheckedChange={setTwoFactor}
-      />
-      <input
-        type="hidden"
-        name={twoFactorFieldName}
-        value={twoFactor ? "true" : "false"}
-      />
-    </div>
+    <ToggleRow
+      title="İki faktörlü doğrulama"
+      description="Giriş için ek güvenlik katmanı."
+      fieldName={twoFactorFieldName}
+      defaultChecked={twoFactor}
+    />
   );
 }

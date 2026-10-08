@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { ChevronDown, Download, FileText } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { appButton } from "@/components/app";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,31 +72,28 @@ export function ReportExportButton({ period }: ReportExportButtonProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          className="bg-primary hover:bg-primary/90"
-          disabled={isPending}
-        >
-          <Download className="h-4 w-4 mr-2" />
-          {isPending ? "Hazırlanıyor..." : "Rapor İndir"}
-          <ChevronDown className="h-4 w-4 ml-2" />
-        </Button>
+        <button type="button" className={appButton({ variant: "outline" })} disabled={isPending}>
+          <Download aria-hidden />
+          {isPending ? "Hazırlanıyor…" : "Rapor indir"}
+          <ChevronDown aria-hidden className="text-muted-foreground" />
+        </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuItem
           disabled={isPending}
           onSelect={() => handleExport("csv")}
           className="cursor-pointer"
         >
-          <Download className="h-4 w-4 mr-2" />
-          CSV İndir
+          <Download aria-hidden className="mr-2 size-4" />
+          CSV olarak indir
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={isPending}
           onSelect={() => handleExport("pdf")}
           className="cursor-pointer"
         >
-          <FileText className="h-4 w-4 mr-2" />
-          PDF İndir
+          <FileText aria-hidden className="mr-2 size-4" />
+          PDF olarak indir
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

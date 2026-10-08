@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { getAdminResellers } from "@/lib/actions/admin/resellers";
 import { db } from "@/lib/db";
 import { BayilerContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Bayiler" };
 
 export default async function BayilerPage() {
   const [resellers, customers] = await Promise.all([

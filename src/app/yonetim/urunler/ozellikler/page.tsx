@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { getAllProductFeatures } from "@/lib/dal/product-features";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { FeaturesContent } from "./content";
@@ -18,6 +19,8 @@ interface ProductFeatureData {
   createdAt: string;
   updatedAt: string;
 }
+
+export const metadata: Metadata = { title: "Özellikler" };
 
 export default async function FeaturesPage() {
   await requireAdmin();

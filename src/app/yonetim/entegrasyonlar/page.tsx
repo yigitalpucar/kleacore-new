@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import {
   getCronJobDefinitions,
@@ -7,6 +8,8 @@ import { getSettings, getApiKeys } from "@/lib/dal/settings";
 import { EntegrasyonlarContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Entegrasyonlar" };
 
 const allowedTabs = [
   "overview",
