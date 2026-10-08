@@ -1,62 +1,43 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Banknote, CheckCircle, Download, Mail, Printer, XCircle } from "lucide-react";
 import {
-  ArrowLeft,
-  Download,
-  Mail,
-  CheckCircle,
-  Printer,
-  CreditCard,
-  Clock,
-  AlertTriangle,
-  XCircle,
-  FileText,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
-import { BlurFade } from "@/components/magicui/blur-fade";
+  AppBreadcrumbLabel,
+  DetailList,
+  EmptyState,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+  appButton,
+  enumLabel,
+} from "@/components/app";
 import {
-  markPaid,
   approveBankTransfer,
   cancelInvoice,
-  sendInvoiceReminder,
+  markPaid,
   sendInvoiceReceipt,
+  sendInvoiceReminder,
 } from "@/lib/actions/admin/invoices";
+import { formatDate, formatDateTime } from "@/lib/format/date";
+import { formatTRY } from "@/lib/format/price";
 import { toast } from "@/lib/toast";
 
-interface InvoiceItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-}
-
-interface Payment {
-  id: string;
-  amount: number;
-  method: string;
-  status: string;
-  paidAt: Date | null;
-  createdAt: Date;
-  notes: string | null;
-}
-
-interface Invoice {
+export interface AdminInvoiceDetail {
   id: string;
   invoiceNumber: string;
+  status: string;
   subtotal: number;
   taxRate: number;
   taxAmount: number;
   totalAmount: number;
   paidAmount: number;
-  status: string;
-  createdAt: Date;
-  dueDate: Date;
-  paidAt: Date | null;
+  createdAt: string;
+  issuedAt: string;
+  dueDate: string;
+  paidAt: string | null;
   notes: string | null;
   customer: {
     id: string;
@@ -72,383 +53,342 @@ interface Invoice {
     country: string | null;
   };
   order: { id: string; orderNumber: string } | null;
-  items: InvoiceItem[];
-  payments: Payment[];
+  items: { id: string; description: string; quantity: number; unitPrice: number; totalPrice: number }[];
+  payments: {
+    id: string;
+    amount: number;
+    method: string;
+    status: string;
+    transactionId: string | null;
+    notes: string | null;
+    paidAt: string | null;
+    createdAt: string;
+  }[];
+  eInvoice: {
+    status: string;
+    type: string;
+    documentNumber: string | null;
+    sentAt: string | null;
+    errorMessage: string | null;
+  } | null;
 }
 
-interface InvoiceDetailContentProps {
-  invoice: Invoice;
-}
+const money = (n: number) => formatTRY(n, { keepDecimals: true });
 
-const statusConfig: Record<string, { label: string; color: string; icon: typeof CheckCircle }> = {
-  PAID: { label: "Ödendi", color: "bg-green-500/10 text-green-600 dark:text-green-500", icon: CheckCircle },
-  PENDING: { label: "Bekliyor", color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-500", icon: Clock },
-  OVERDUE: { label: "Gecikmiş", color: "bg-red-500/10 text-red-600 dark:text-red-500", icon: AlertTriangle },
-  CANCELLED: { label: "İptal", color: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-500", icon: XCircle },
-  DRAFT: { label: "Taslak", color: "bg-blue-500/10 text-blue-600 dark:text-blue-500", icon: FileText },
-};
-
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-  }).format(price);
-};
-
-const paymentMethodLabels: Record<string, string> = {
-  CREDIT_CARD: "Kredi Kartı",
-  BANK_TRANSFER: "Banka Havalesi",
-  BALANCE: "Bakiye",
-};
-
-export function InvoiceDetailContent({ invoice }: InvoiceDetailContentProps) {
-  const config = statusConfig[invoice.status] || statusConfig.DRAFT;
-  const StatusIcon = config.icon;
-  const fullName = `${invoice.customer.name} ${invoice.customer.surname}`;
-  const initials = `${invoice.customer.name[0] || ""}${invoice.customer.surname[0] || ""}`;
+export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const isOpen = invoice.status === "PENDING" || invoice.status === "OVERDUE";
+  const isPaid = invoice.status === "PAID";
+  const customerName = `${invoice.customer.name} ${invoice.customer.surname}`.trim();
+  const outstanding = Math.max(0, invoice.totalAmount - invoice.paidAmount);
   const hasPendingBankTransfer = invoice.payments.some(
     (payment) => payment.method === "BANK_TRANSFER" && payment.status === "PENDING"
   );
 
-  const handleApproveBankTransfer = async () => {
-    const result = await approveBankTransfer(invoice.id);
+  const run = async (
+    key: string,
+    action: () => Promise<{ success: boolean; error?: string; message?: string }>,
+    messages: { ok: string; fail: string },
+    refresh = true
+  ) => {
+    setBusy(key);
+    const result = await action();
+    setBusy(null);
     if (!result.success) {
-      toast.error(result.error ?? "Banka transferi onaylanamadı");
+      toast.error(result.error ?? messages.fail);
       return;
     }
-    toast.success("Banka transferi onaylandı ve sipariş işleme alındı");
+    toast.success(result.message ?? messages.ok);
+    if (refresh) router.refresh();
   };
 
-  const handleMarkPaid = async () => {
-    const result = await markPaid(invoice.id);
-    if (!result.success) {
-      toast.error(result.error ?? "Fatura durumu güncellenemedi");
-      return;
-    }
-    toast.success("Fatura ödendi olarak işaretlendi");
+  const handleApproveBankTransfer = () =>
+    run("approve", () => approveBankTransfer(invoice.id), {
+      ok: "Banka transferi onaylandı ve sipariş işleme alındı",
+      fail: "Banka transferi onaylanamadı",
+    });
+
+  const handleMarkPaid = () =>
+    run("paid", () => markPaid(invoice.id), {
+      ok: "Fatura ödendi olarak işaretlendi",
+      fail: "Fatura durumu güncellenemedi",
+    });
+
+  const handleCancelInvoice = () => {
+    if (!window.confirm(`${invoice.invoiceNumber} numaralı fatura iptal edilsin mi?`)) return;
+    void run("cancel", () => cancelInvoice(invoice.id), { ok: "Fatura iptal edildi", fail: "Fatura iptal edilemedi" });
   };
 
-  const handleCancelInvoice = async () => {
-    const result = await cancelInvoice(invoice.id);
-    if (!result.success) {
-      toast.error(result.error ?? "Fatura iptal edilemedi");
-      return;
-    }
-    toast.success("Fatura iptal edildi");
-  };
-
-  const handleSendMail = async () => {
-    const action =
-      invoice.status === "PAID" ? sendInvoiceReceipt : sendInvoiceReminder;
-    const result = await action(invoice.id);
-    if (!result.success) {
-      toast.error(result.error ?? "E-posta gönderilemedi");
-      return;
-    }
-    toast.success(
-      result.message ??
-        (invoice.status === "PAID" ? "Makbuz gönderildi" : "Hatırlatma gönderildi")
+  const handleSendMail = () =>
+    run(
+      "mail",
+      () => (isPaid ? sendInvoiceReceipt(invoice.id) : sendInvoiceReminder(invoice.id)),
+      {
+        ok: isPaid ? "Makbuz gönderildi" : "Hatırlatma gönderildi",
+        fail: "E-posta gönderilemedi",
+      },
+      false
     );
-  };
+
+  const mailLabel = isPaid ? "Makbuz gönder" : "Hatırlatma gönder";
+  const canMail = isPaid || isOpen;
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/yonetim/faturalar"
-        className="inline-flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Faturalara Dön
-      </Link>
+    <>
+      <AppBreadcrumbLabel segment={invoice.id} label={invoice.invoiceNumber} />
 
-      <BlurFade delay={0}>
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Fatura {invoice.invoiceNumber}</h1>
-              <span className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
-                config.color
-              )}>
-                <StatusIcon className="h-3.5 w-3.5" />
-                {config.label}
-              </span>
-            </div>
-            <p className="text-zinc-600 dark:text-zinc-400">
-              Oluşturulma: {new Date(invoice.createdAt).toLocaleDateString("tr-TR")}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              className="bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-              onClick={() => window.print()}
-            >
-              <Printer className="mr-2 h-4 w-4" />
+      <PageHeader
+        back={{ href: "/yonetim/faturalar", label: "Faturalar" }}
+        eyebrow="Fatura"
+        title={<span className="font-mono">{invoice.invoiceNumber}</span>}
+        meta={
+          <>
+            <StatusBadge kind="invoice" status={invoice.status} size="md" />
+            <span>Oluşturma {formatDate(invoice.createdAt)}</span>
+            <span>Son ödeme {formatDate(invoice.dueDate)}</span>
+          </>
+        }
+        actions={
+          <>
+            <button type="button" className={appButton({ variant: "outline" })} onClick={() => window.print()}>
+              <Printer aria-hidden />
               Yazdır
-            </Button>
-            <Button
-              variant="outline"
-              className="bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-              onClick={() => window.open(`/api/faturalar/${invoice.id}/pdf`, "_blank")}
+            </button>
+            <button
+              type="button"
+              className={appButton({ variant: "outline" })}
+              onClick={() => window.open(`/api/faturalar/${invoice.id}/pdf`, "_blank", "noopener,noreferrer")}
             >
-              <Download className="mr-2 h-4 w-4" />
-              PDF İndir
-            </Button>
-            <Button
-              variant="outline"
-              className="bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-              onClick={handleSendMail}
-            >
-              <Mail className="mr-2 h-4 w-4" />
-              E-posta Gönder
-            </Button>
-            {(invoice.status === "PENDING" || invoice.status === "OVERDUE") && (
-              <>
-                {hasPendingBankTransfer ? (
-                  <Button
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                    onClick={handleApproveBankTransfer}
-                  >
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Ödemeyi Onayla
-                  </Button>
-                ) : (
-                  <Button
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                    onClick={handleMarkPaid}
-                  >
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Ödendi İşaretle
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-500 dark:hover:bg-red-950"
-                  onClick={handleCancelInvoice}
+              <Download aria-hidden />
+              PDF indir
+            </button>
+            {canMail ? (
+              <button
+                type="button"
+                className={appButton({ variant: "outline" })}
+                onClick={() => void handleSendMail()}
+                disabled={busy !== null}
+              >
+                <Mail aria-hidden />
+                {busy === "mail" ? "Gönderiliyor…" : mailLabel}
+              </button>
+            ) : null}
+            {isOpen ? (
+              hasPendingBankTransfer ? (
+                <button
+                  type="button"
+                  className={appButton()}
+                  onClick={() => void handleApproveBankTransfer()}
+                  disabled={busy !== null}
                 >
-                  <XCircle className="mr-2 h-4 w-4" />
-                  İptal Et
-                </Button>
-              </>
+                  <Banknote aria-hidden />
+                  {busy === "approve" ? "Onaylanıyor…" : "Havaleyi onayla"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={appButton()}
+                  onClick={() => void handleMarkPaid()}
+                  disabled={busy !== null}
+                >
+                  <CheckCircle aria-hidden />
+                  {busy === "paid" ? "İşaretleniyor…" : "Ödendi olarak işaretle"}
+                </button>
+              )
+            ) : null}
+          </>
+        }
+      />
+
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
+          <SectionCard title="Fatura kalemleri" flush>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <caption className="sr-only">Fatura kalemleri</caption>
+                <thead>
+                  <tr className="border-b bg-muted/30 text-left font-mono text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
+                    <th scope="col" className="h-10 px-4 font-medium md:px-5">Açıklama</th>
+                    <th scope="col" className="hidden h-10 px-4 text-right font-medium sm:table-cell">Adet</th>
+                    <th scope="col" className="hidden h-10 px-4 text-right font-medium sm:table-cell">Birim fiyat</th>
+                    <th scope="col" className="h-10 px-4 text-right font-medium md:px-5">Tutar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.items.map((item) => (
+                    <tr key={item.id} className="border-b border-dashed last:border-0">
+                      <td className="px-4 py-3 md:px-5">
+                        <p className="font-medium">{item.description}</p>
+                        <p className="text-xs text-muted-foreground sm:hidden">
+                          {item.quantity} × {money(item.unitPrice)}
+                        </p>
+                      </td>
+                      <td className="hidden px-4 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">{item.quantity}</td>
+                      <td className="hidden px-4 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">
+                        {money(item.unitPrice)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-medium tabular-nums md:px-5">{money(item.totalPrice)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t px-4 py-4 md:px-5">
+              <dl className="ml-auto max-w-xs space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Ara toplam</dt>
+                  <dd className="tabular-nums">{money(invoice.subtotal)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">KDV (%{invoice.taxRate})</dt>
+                  <dd className="tabular-nums">{money(invoice.taxAmount)}</dd>
+                </div>
+                <div className="flex justify-between gap-4 border-t border-dashed pt-2 text-base font-semibold">
+                  <dt>Toplam</dt>
+                  <dd className="tabular-nums">{money(invoice.totalAmount)}</dd>
+                </div>
+                {invoice.paidAmount > 0 && !isPaid ? (
+                  <div className="flex justify-between gap-4 text-muted-foreground">
+                    <dt>Kalan</dt>
+                    <dd className="tabular-nums">{money(outstanding)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Ödeme geçmişi"
+            description={invoice.payments.length ? `${invoice.payments.length} kayıt` : undefined}
+            flush
+          >
+            {invoice.payments.length ? (
+              <ul className="divide-y divide-dashed">
+                {invoice.payments.map((payment) => (
+                  <li key={payment.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3.5 md:px-5">
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-sm font-medium">{enumLabel("paymentMethod", payment.method)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDateTime(payment.paidAt ?? payment.createdAt)}
+                        {payment.transactionId ? (
+                          <>
+                            {" · "}
+                            <span className="font-mono">{payment.transactionId}</span>
+                          </>
+                        ) : null}
+                      </p>
+                      {payment.notes ? <p className="text-xs text-muted-foreground">{payment.notes}</p> : null}
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span className="font-medium tabular-nums">{money(payment.amount)}</span>
+                      <StatusBadge kind="payment" status={payment.status} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="p-4 md:p-5">
+                <EmptyState compact title="Ödeme kaydı yok" description="Bu faturaya henüz bir ödeme bağlanmadı." />
+              </div>
             )}
-          </div>
-        </div>
-      </BlurFade>
+          </SectionCard>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <BlurFade delay={0.1}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-6">
-                <div className="flex justify-between mb-8">
-                  <div>
-                    <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-1">KLEACORE</h2>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">30 N Gould St Ste R</p>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">Sheridan, WY 82801, USA</p>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">EIN: 36-5157418</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-3xl font-bold text-zinc-900 dark:text-white mb-2">FATURA</p>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">No: {invoice.invoiceNumber}</p>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                      Tarih: {new Date(invoice.createdAt).toLocaleDateString("tr-TR")}
-                    </p>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                      Son Ödeme: {new Date(invoice.dueDate).toLocaleDateString("tr-TR")}
-                    </p>
-                  </div>
-                </div>
+          {invoice.eInvoice ? (
+            <SectionCard
+              title={invoice.eInvoice.type === "e-arsiv" ? "e-Arşiv fatura" : "e-Fatura"}
+              actions={<StatusBadge kind="eInvoice" status={invoice.eInvoice.status} />}
+              footer={
+                <Link href="/yonetim/efatura" className={appButton({ variant: "outline", size: "sm" })}>
+                  E-Fatura sayfasına git
+                </Link>
+              }
+            >
+              <DetailList
+                layout="grid"
+                items={[
+                  { label: "Belge no", value: invoice.eInvoice.documentNumber, mono: true, copy: invoice.eInvoice.documentNumber ?? undefined },
+                  { label: "Gönderim", value: invoice.eInvoice.sentAt ? formatDateTime(invoice.eInvoice.sentAt) : null },
+                  { label: "Hata", value: invoice.eInvoice.errorMessage },
+                ]}
+              />
+            </SectionCard>
+          ) : null}
 
-                <div className="mb-8 p-4 rounded-lg bg-zinc-100 dark:bg-zinc-800/50">
-                  <p className="text-sm text-zinc-500 mb-2">Fatura Adresi</p>
-                  <p className="text-zinc-900 dark:text-white font-medium">{fullName}</p>
-                  {invoice.customer.companyName && (
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">{invoice.customer.companyName}</p>
-                  )}
-                  {invoice.customer.address && (
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                      {invoice.customer.address}{invoice.customer.city ? `, ${invoice.customer.city}` : ""}
-                    </p>
-                  )}
-                  {invoice.customer.taxNumber && (
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">Vergi No: {invoice.customer.taxNumber}</p>
-                  )}
-                </div>
-
-                <div className="mb-8">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                        <th className="text-left py-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Açıklama</th>
-                        <th className="text-center py-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Adet</th>
-                        <th className="text-right py-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Birim Fiyat</th>
-                        <th className="text-right py-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Toplam</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {invoice.items.map((item) => (
-                        <tr key={item.id} className="border-b border-zinc-200 dark:border-zinc-800">
-                          <td className="py-4">
-                            <p className="text-sm text-zinc-900 dark:text-white">{item.description}</p>
-                          </td>
-                          <td className="py-4 text-center text-sm text-zinc-700 dark:text-zinc-300">{item.quantity}</td>
-                          <td className="py-4 text-right text-sm text-zinc-700 dark:text-zinc-300">
-                            {formatPrice(item.unitPrice)}
-                          </td>
-                          <td className="py-4 text-right text-sm font-medium text-zinc-900 dark:text-white">
-                            {formatPrice(item.totalPrice)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex justify-end">
-                  <div className="w-64 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-zinc-600 dark:text-zinc-400">Ara Toplam</span>
-                      <span className="text-zinc-700 dark:text-zinc-300">{formatPrice(invoice.subtotal)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-zinc-600 dark:text-zinc-400">KDV (%{invoice.taxRate})</span>
-                      <span className="text-zinc-700 dark:text-zinc-300">{formatPrice(invoice.taxAmount)}</span>
-                    </div>
-                    <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-                    <div className="flex justify-between">
-                      <span className="font-medium text-zinc-900 dark:text-white">Toplam</span>
-                      <span className="text-xl font-bold text-zinc-900 dark:text-white">{formatPrice(invoice.totalAmount)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {invoice.notes && (
-                  <div className="mt-8 p-4 rounded-lg bg-zinc-100 dark:bg-zinc-800/50">
-                    <p className="text-sm text-zinc-500 mb-1">Not</p>
-                    <p className="text-sm text-zinc-700 dark:text-zinc-300">{invoice.notes}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </BlurFade>
+          {invoice.notes ? (
+            <SectionCard title="Not">
+              <p className="whitespace-pre-wrap text-sm text-muted-foreground">{invoice.notes}</p>
+            </SectionCard>
+          ) : null}
         </div>
 
         <div className="space-y-6">
-          <BlurFade delay={0.15}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white text-base">Fatura Bilgileri</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-500">Durum</span>
-                  <span className={cn(
-                    "inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium",
-                    config.color
-                  )}>
-                    <StatusIcon className="h-3 w-3" />
-                    {config.label}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-500">Oluşturulma</span>
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                    {new Date(invoice.createdAt).toLocaleDateString("tr-TR")}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-500">Son Ödeme</span>
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                    {new Date(invoice.dueDate).toLocaleDateString("tr-TR")}
-                  </span>
-                </div>
-                {invoice.paidAt && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-600 dark:text-zinc-500">Ödeme Tarihi</span>
-                    <span className="text-sm text-green-600 dark:text-green-500">
-                      {new Date(invoice.paidAt).toLocaleDateString("tr-TR")}
-                    </span>
-                  </div>
-                )}
-                {invoice.order && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-600 dark:text-zinc-500">Sipariş</span>
-                    <Link href={`/yonetim/siparisler/${invoice.order.id}`} className="text-sm text-primary hover:underline">
+          <SectionCard title="Özet">
+            <DetailList
+              items={[
+                { label: "Fatura no", value: invoice.invoiceNumber, mono: true, copy: invoice.invoiceNumber },
+                { label: "Durum", value: <StatusBadge kind="invoice" status={invoice.status} /> },
+                { label: "Toplam", value: money(invoice.totalAmount) },
+                { label: "Ödenen", value: money(invoice.paidAmount) },
+                { label: "Düzenleme", value: formatDate(invoice.issuedAt) },
+                { label: "Son ödeme", value: formatDate(invoice.dueDate) },
+                { label: "Ödeme tarihi", value: invoice.paidAt ? formatDate(invoice.paidAt) : null },
+                {
+                  label: "Sipariş",
+                  value: invoice.order ? (
+                    <Link href={`/yonetim/siparisler/${invoice.order.id}`} className="font-mono underline-offset-4 hover:underline">
                       {invoice.order.orderNumber}
                     </Link>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </BlurFade>
+                  ) : null,
+                },
+              ]}
+            />
+          </SectionCard>
 
-          <BlurFade delay={0.2}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white text-base">Müşteri</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Link
-                  href={`/yonetim/musteriler/${invoice.customer.id}`}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800/50 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white text-sm font-medium">
-                    {initials}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-white">{fullName}</p>
-                    <p className="text-xs text-zinc-500">{invoice.customer.email}</p>
-                  </div>
-                </Link>
-              </CardContent>
-            </Card>
-          </BlurFade>
+          <SectionCard
+            title="Müşteri"
+            footer={
+              <Link href={`/yonetim/musteriler/${invoice.customer.id}`} className={appButton({ variant: "outline", size: "sm" })}>
+                Müşteri kartını aç
+              </Link>
+            }
+          >
+            <DetailList
+              items={[
+                { label: "Ad soyad", value: customerName },
+                { label: "Firma", value: invoice.customer.companyName },
+                { label: "E-posta", value: invoice.customer.email, copy: invoice.customer.email },
+                { label: "Telefon", value: invoice.customer.phone },
+                {
+                  label: "Vergi",
+                  value: invoice.customer.taxNumber
+                    ? `${invoice.customer.taxNumber}${invoice.customer.taxOffice ? ` · ${invoice.customer.taxOffice}` : ""}`
+                    : null,
+                },
+                {
+                  label: "Adres",
+                  value: [invoice.customer.address, invoice.customer.city, invoice.customer.country].filter(Boolean).join(", ") || null,
+                },
+              ]}
+            />
+          </SectionCard>
 
-          <BlurFade delay={0.25}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white text-base">Ödeme Geçmişi</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {invoice.payments.length > 0 ? (
-                  <div className="space-y-4">
-                    {invoice.payments.map((payment) => (
-                      <div key={payment.id} className="flex items-start gap-3 p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800/50">
-                        <CreditCard className="h-5 w-5 text-green-500 mt-0.5" />
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                              {formatPrice(payment.amount)}
-                            </span>
-                            <span className={cn(
-                              "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-                              payment.status === "COMPLETED"
-                                ? "bg-green-500/10 text-green-600 dark:text-green-500"
-                                : "bg-yellow-500/10 text-yellow-600 dark:text-yellow-500"
-                            )}>
-                              {payment.status === "COMPLETED" ? "Başarılı" : "Bekliyor"}
-                            </span>
-                          </div>
-                          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-                            {paymentMethodLabels[payment.method] ?? payment.method}
-                          </p>
-                          <p className="text-xs text-zinc-500">
-                            {new Date(payment.createdAt).toLocaleDateString("tr-TR")}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-zinc-500 text-center py-4">Henüz ödeme yapılmadı</p>
-                )}
-              </CardContent>
-            </Card>
-          </BlurFade>
+          {isOpen ? (
+            <SectionCard title="Tehlikeli işlemler">
+              <p className="mb-3 text-sm text-muted-foreground">İptal edilen fatura tahsil edilemez ve müşteriye hatırlatma gönderilmez.</p>
+              <button
+                type="button"
+                className={appButton({ variant: "destructive", className: "w-full" })}
+                onClick={handleCancelInvoice}
+                disabled={busy !== null}
+              >
+                <XCircle aria-hidden />
+                {busy === "cancel" ? "İptal ediliyor…" : "Faturayı iptal et"}
+              </button>
+            </SectionCard>
+          ) : null}
         </div>
       </div>
-    </div>
+    </>
   );
 }

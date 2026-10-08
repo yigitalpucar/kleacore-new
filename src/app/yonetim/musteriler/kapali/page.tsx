@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
 import { getCustomers } from "@/lib/dal/customers";
 import { parsePagination } from "@/lib/utils/pagination";
-import { ClosedCustomersContent } from "./content";
+import { listPerPage, toCustomerRow } from "../_components/customer-row";
+import { CustomerSegmentPage } from "../_components/segment-page";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Kapalı hesaplar" };
 
 export default async function ClosedCustomersPage({
   searchParams,
@@ -10,13 +14,22 @@ export default async function ClosedCustomersPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const paginationParams = parsePagination(sp);
+  const params = parsePagination(sp);
+  const result = await getCustomers({ ...params, status: "CLOSED", perPage: listPerPage(sp, params.perPage) });
 
-  const result = await getCustomers({
-    ...paginationParams,
-    status: "CLOSED",
-    perPage: 50,
-  });
-
-  return <ClosedCustomersContent data={result.data} total={result.total} />;
+  return (
+    <CustomerSegmentPage
+      title="Kapalı hesaplar"
+      description="Kapatılmış müşteri hesapları. Gerekirse yeniden etkinleştirebilirsiniz."
+      rows={result.data.map(toCustomerRow)}
+      total={result.total}
+      page={result.page}
+      totalPages={result.totalPages}
+      breakdown={false}
+      statusFilter={false}
+      typeFilter={true}
+      emptyTitle="Kapalı hesap yok"
+      emptyDescription="Kapatılan hesaplar burada listelenir."
+    />
+  );
 }

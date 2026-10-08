@@ -1,86 +1,39 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Search,
-  Pause,
-  Play,
-  XCircle,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { BlurFade } from "@/components/magicui/blur-fade";
+import { useRouter } from "next/navigation";
+import { Package, Play, XCircle } from "lucide-react";
+import { PageHeader, StatusBadge, appButton, type ColumnDef } from "@/components/app";
+import { ServerPager } from "@/components/admin/server-pager";
 import {
   activateSuspendedOrder,
   cancelSuspendedOrder,
 } from "@/lib/actions/admin/suspended-orders";
 import { toast } from "@/lib/toast";
-
-interface OrderItem {
-  id: string;
-  serviceId: string | null;
-  orderNumber: string;
-  status: string;
-  totalAmount: number;
-  createdAt: string | Date;
-  suspendReason?: string | null;
-  customer: {
-    id: string;
-    name: string;
-    surname: string;
-    email: string;
-  };
-  product: {
-    id: string;
-    name: string;
-    sku: string;
-    category: { name: string } | null;
-  };
-}
+import { formatDate } from "@/lib/format/date";
+import {
+  OrderMobileCard,
+  OrderTable,
+  amountColumn,
+  baseOrderActions,
+  createdColumn,
+  customerColumn,
+  orderNumberColumn,
+  productColumn,
+  type OrderRow,
+} from "../_components/order-list";
 
 interface SuspendedOrdersContentProps {
-  orders: OrderItem[];
+  orders: OrderRow[];
   total: number;
   page: number;
-  perPage: number;
   totalPages: number;
 }
 
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-  }).format(price);
-};
-
-export function SuspendedOrdersContent({
-  orders,
-  total,
-  page,
-  perPage,
-  totalPages,
-}: SuspendedOrdersContentProps) {
+export function SuspendedOrdersContent({ orders, total, page, totalPages }: SuspendedOrdersContentProps) {
   const router = useRouter();
-  const searchParamsHook = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
-
-  const currentSearch = searchParamsHook.get("search") ?? "";
-
-  const updateParams = (key: string, value: string) => {
-    const params = new URLSearchParams(searchParamsHook.toString());
-    if (value) {
-      params.set(key, value);
-    } else {
-      params.delete(key);
-    }
-    params.set("page", "1");
-    router.push(`?${params.toString()}`);
-  };
 
   const handleActivate = (orderId: string) => {
     setProcessingOrderId(orderId);
@@ -91,7 +44,6 @@ export function SuspendedOrdersContent({
           toast.error(result.error || "Sipariş aktifleştirilemedi");
           return;
         }
-
         toast.success("Askıdaki hizmet aktifleştirildi");
         router.refresh();
       } finally {
@@ -103,7 +55,6 @@ export function SuspendedOrdersContent({
   const handleCancel = (orderId: string) => {
     const reason = prompt("İptal nedeni (opsiyonel):");
     if (reason === null) return;
-
     setProcessingOrderId(orderId);
     startTransition(async () => {
       try {
@@ -112,7 +63,6 @@ export function SuspendedOrdersContent({
           toast.error(result.error || "Sipariş iptal edilemedi");
           return;
         }
-
         toast.success("Askıdaki hizmet iptal edildi");
         router.refresh();
       } finally {
@@ -121,177 +71,95 @@ export function SuspendedOrdersContent({
     });
   };
 
+  const columns: ColumnDef<OrderRow>[] = [
+    orderNumberColumn,
+    customerColumn,
+    productColumn,
+    {
+      id: "reason",
+      accessorFn: (r) => r.suspendReason ?? "",
+      header: "Askı nedeni",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <p className="line-clamp-2 max-w-[240px] text-muted-foreground">{row.original.suspendReason || "—"}</p>
+      ),
+    },
+    createdColumn,
+    amountColumn,
+    {
+      id: "decide",
+      header: () => <span className="sr-only">İşlemler</span>,
+      enableSorting: false,
+      meta: { align: "right", className: "w-px" },
+      cell: ({ row }) => {
+        const busy = isPending && processingOrderId === row.original.id;
+        return (
+          <div className="flex justify-end gap-1.5">
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => handleActivate(row.original.id)}
+              className={appButton({ variant: "outline", size: "sm" })}
+            >
+              <Play aria-hidden />
+              {busy ? "İşleniyor…" : "Aktifleştir"}
+            </button>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => handleCancel(row.original.id)}
+              aria-label={`${row.original.orderNumber} siparişini iptal et`}
+              className={appButton({ variant: "ghost", size: "icon-sm" })}
+            >
+              <XCircle aria-hidden />
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <BlurFade delay={0}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Askıdaki Siparişler</h1>
-            <p className="text-zinc-600 dark:text-zinc-400">Askıya alınan siparişler</p>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-500/10">
-            <Pause className="h-5 w-5 text-orange-500" />
-            <span className="text-sm font-medium text-orange-500">{total} Askıda</span>
-          </div>
-        </div>
-      </BlurFade>
+    <>
+      <PageHeader
+        title="Askıdaki siparişler"
+        description="Hizmeti askıya alınmış siparişler. Ödeme veya sorun çözüldüğünde hizmeti yeniden aktifleştirin."
+        meta={
+          <StatusBadge
+            tone={total ? "warning" : "muted"}
+            label={total ? `${total.toLocaleString("tr-TR")} sipariş askıda` : "Askıda sipariş yok"}
+          />
+        }
+      />
 
-      {/* Filters */}
-      <BlurFade delay={0.1}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                <Input
-                  type="search"
-                  placeholder="Sipariş no, müşteri veya e-posta ara..."
-                  defaultValue={currentSearch}
-                  onChange={(e) => {
-                    const timeout = setTimeout(() => {
-                      updateParams("search", e.target.value);
-                    }, 500);
-                    return () => clearTimeout(timeout);
-                  }}
-                  className="pl-10 bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-500"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
+      <OrderTable
+        rows={orders}
+        columns={columns}
+        rowActions={(o) => [
+          { label: "Aktifleştir", icon: <Play aria-hidden />, onSelect: () => handleActivate(o.id) },
+          { label: "İptal et", icon: <XCircle aria-hidden />, onSelect: () => handleCancel(o.id), destructive: true },
+          ...baseOrderActions(o).map((a, i) => (i === 0 ? { ...a, separator: true } : a)),
+          ...(o.serviceId
+            ? [{ label: "Hizmeti görüntüle", href: `/yonetim/hizmetler/${o.serviceId}`, icon: <Package aria-hidden /> }]
+            : []),
+        ]}
+        mobileCard={(o) => (
+          <OrderMobileCard
+            o={o}
+            meta={
+              <>
+                <StatusBadge kind="service" status="SUSPENDED" />
+                <span>{formatDate(o.createdAt)}</span>
+                {o.suspendReason ? <span className="w-full truncate">{o.suspendReason}</span> : null}
+              </>
+            }
+          />
+        )}
+        emptyTitle="Askıda sipariş yok"
+        emptyDescription="Hizmeti askıya alınan siparişler burada listelenir."
+      />
 
-      {/* Table */}
-      <BlurFade delay={0.2}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Sipariş No</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Müşteri</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Ürün/Hizmet</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tutar</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Askı Nedeni</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tarih</th>
-                    <th className="text-right p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">İşlemler</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((order) => {
-                    const isRowPending = isPending && processingOrderId === order.id;
-
-                    return (
-                      <tr
-                        key={order.id}
-                        className="border-b border-zinc-200 dark:border-zinc-800 last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors"
-                      >
-                        <td className="p-4">
-                          <span className="text-sm font-mono text-zinc-900 dark:text-white">{order.orderNumber}</span>
-                        </td>
-                        <td className="p-4">
-                          <Link
-                            href={`/yonetim/musteriler/${order.customer.id}`}
-                            className="text-sm font-medium text-zinc-900 dark:text-white hover:text-primary"
-                          >
-                            {order.customer.name} {order.customer.surname}
-                          </Link>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-sm text-zinc-900 dark:text-white">{order.product.name}</span>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                            {formatPrice(Number(order.totalAmount))}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-sm text-orange-600 dark:text-orange-500">
-                            {order.suspendReason ?? "-"}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                            {new Date(order.createdAt).toLocaleDateString("tr-TR")}
-                          </span>
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={isRowPending}
-                              className="h-8 w-8 p-0 text-green-500 hover:text-green-600 hover:bg-green-500/10"
-                              title="Aktif Et"
-                              onClick={() => handleActivate(order.id)}
-                            >
-                              <Play className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={isRowPending}
-                              className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                              title="İptal Et"
-                              onClick={() => handleCancel(order.id)}
-                            >
-                              <XCircle className="h-4 w-4" />
-                            </Button>
-                            <Link
-                              href={`/yonetim/siparisler/${order.id}`}
-                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                            >
-                              <Search className="h-4 w-4" />
-                            </Link>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {orders.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-sm text-zinc-500">
-                        Askıda sipariş bulunamadı
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between p-4 border-t border-zinc-200 dark:border-zinc-800">
-                <p className="text-sm text-zinc-500">
-                  Toplam {total} sipariş, sayfa {page}/{totalPages}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => updateParams("page", String(page - 1))}
-                    className="border-zinc-300 dark:border-zinc-700"
-                  >
-                    Önceki
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => updateParams("page", String(page + 1))}
-                    className="border-zinc-300 dark:border-zinc-700"
-                  >
-                    Sonraki
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+      <ServerPager page={page} totalPages={totalPages} total={total} noun="sipariş" />
+    </>
   );
 }

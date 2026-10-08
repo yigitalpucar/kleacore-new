@@ -2,21 +2,27 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Check, Eye, MessageSquareX, Package, UserRound, X } from "lucide-react";
 import {
-  Search,
-  CheckCircle,
-  XCircle,
-  Building2,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { BlurFade } from "@/components/magicui/blur-fade";
+  DataTable,
+  EmptyState,
+  ListRow,
+  PageHeader,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  appButton,
+  getStatusOptions,
+  type ColumnDef,
+  type RowAction,
+} from "@/components/app";
 import {
   approveCancellationRequest,
   rejectCancellationRequest,
 } from "@/lib/actions/admin/cancellation-requests";
 import { toast } from "@/lib/toast";
+import { formatDate } from "@/lib/format/date";
+import { money } from "../_components/order-list";
 
 interface CancellationRequest {
   id: string;
@@ -38,179 +44,205 @@ interface IptalTalepleriContentProps {
   requests: CancellationRequest[];
 }
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  pending: { label: "Beklemede", color: "bg-yellow-500/10 text-yellow-500" },
-  approved: { label: "Onaylandı", color: "bg-green-500/10 text-green-500" },
-  rejected: { label: "Reddedildi", color: "bg-red-500/10 text-red-500" },
-};
-
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-  }).format(price);
-};
+/** DAL returns lower-case statuses; the status map uses the Prisma enum. */
+const enumStatus = (s: string) => s.toUpperCase();
+const tr = (s: string | null | undefined) => (s ?? "").toLocaleLowerCase("tr-TR");
 
 export function IptalTalepleriContent({ requests: initialRequests }: IptalTalepleriContentProps) {
   const [requests, setRequests] = useState(initialRequests);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const handleApprove = async (requestId: string) => {
-    const result = await approveCancellationRequest(requestId);
-    if (!result.success) {
-      toast.error(result.error || "Talep onaylanamadı");
-      return;
+    setBusyId(requestId);
+    try {
+      const result = await approveCancellationRequest(requestId);
+      if (!result.success) {
+        toast.error(result.error || "Talep onaylanamadı");
+        return;
+      }
+      setRequests((prev) => prev.map((req) => (req.id === requestId ? { ...req, status: "approved" } : req)));
+      toast.success("İptal talebi onaylandı");
+    } finally {
+      setBusyId(null);
     }
-
-    setRequests((prev) =>
-      prev.map((req) =>
-        req.id === requestId ? { ...req, status: "approved" } : req
-      )
-    );
-    toast.success("İptal talebi onaylandı");
   };
 
   const handleReject = async (requestId: string) => {
     const reason = prompt("Red nedeni (opsiyonel):") ?? "";
-    const result = await rejectCancellationRequest(requestId, reason);
-
-    if (!result.success) {
-      toast.error(result.error || "Talep reddedilemedi");
-      return;
+    setBusyId(requestId);
+    try {
+      const result = await rejectCancellationRequest(requestId, reason);
+      if (!result.success) {
+        toast.error(result.error || "Talep reddedilemedi");
+        return;
+      }
+      setRequests((prev) => prev.map((req) => (req.id === requestId ? { ...req, status: "rejected" } : req)));
+      toast.success("İptal talebi reddedildi");
+    } finally {
+      setBusyId(null);
     }
-
-    setRequests((prev) =>
-      prev.map((req) =>
-        req.id === requestId ? { ...req, status: "rejected" } : req
-      )
-    );
-    toast.success("İptal talebi reddedildi");
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <BlurFade delay={0}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">İptal Talepleri</h1>
-            <p className="text-zinc-600 dark:text-zinc-400">Müşterilerden gelen iptal talepleri</p>
-          </div>
-        </div>
-      </BlurFade>
+  const pending = requests.filter((r) => r.status === "pending").length;
+  const approved = requests.filter((r) => r.status === "approved").length;
+  const rejected = requests.filter((r) => r.status === "rejected").length;
 
-      {/* Table */}
-      <BlurFade delay={0.1}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Müşteri</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Ürün/Hizmet</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">İptal Nedeni</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">İade Tutarı</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Durum</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tarih</th>
-                    <th className="text-right p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">İşlemler</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {requests.map((req) => (
-                    <tr
-                      key={req.id}
-                      className="border-b border-zinc-200 dark:border-zinc-800 last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors"
-                    >
-                      <td className="p-4">
-                        <div>
-                          <Link
-                            href={`/yonetim/musteriler/${req.customerId}`}
-                            className="text-sm font-medium text-zinc-900 dark:text-white hover:text-primary"
-                          >
-                            {req.customer}
-                          </Link>
-                          {req.companyName && (
-                            <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
-                              <Building2 className="h-3 w-3" />
-                              {req.companyName}
-                            </p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <span className="text-sm text-zinc-900 dark:text-white">{req.product}</span>
-                      </td>
-                      <td className="p-4">
-                        <span className="text-sm text-zinc-600 dark:text-zinc-400">{req.reason}</span>
-                      </td>
-                      <td className="p-4">
-                        <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                          {req.refundAmount > 0 ? formatPrice(req.refundAmount) : "-"}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className={cn(
-                          "inline-flex px-2 py-0.5 rounded text-xs font-medium",
-                          statusConfig[req.status]?.color ?? "bg-zinc-500/10 text-zinc-500"
-                        )}>
-                          {statusConfig[req.status]?.label ?? req.status}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                          {new Date(req.requestedAt).toLocaleDateString("tr-TR")}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {req.status === "pending" && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0 text-green-500 hover:text-green-600 hover:bg-green-500/10"
-                                title="Onayla"
-                                onClick={() => handleApprove(req.id)}
-                              >
-                                <CheckCircle className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                                title="Reddet"
-                                onClick={() => handleReject(req.id)}
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                          {req.orderId && (
-                            <Link
-                              href={`/yonetim/siparisler/${req.orderId}`}
-                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                            >
-                              <Search className="h-4 w-4" />
-                            </Link>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {requests.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-sm text-zinc-500">
-                        İptal talebi bulunamadı
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+  const columns: ColumnDef<CancellationRequest>[] = [
+    {
+      accessorKey: "customer",
+      header: "Müşteri",
+      cell: ({ row }) => (
+        <div className="min-w-0 max-w-[220px]">
+          <Link href={`/yonetim/musteriler/${row.original.customerId}`} className="block truncate font-medium hover:underline">
+            {row.original.customer}
+          </Link>
+          {row.original.companyName ? (
+            <p className="truncate text-xs text-muted-foreground">{row.original.companyName}</p>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "product",
+      header: "Ürün",
+      cell: ({ row }) => <span className="block max-w-[200px] truncate">{row.original.product}</span>,
+    },
+    {
+      accessorKey: "reason",
+      header: "Neden",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <p className="line-clamp-2 max-w-[280px] text-muted-foreground" title={row.original.reason}>
+          {row.original.reason}
+        </p>
+      ),
+    },
+    {
+      accessorKey: "requestedAt",
+      header: "Talep tarihi",
+      cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{formatDate(row.original.requestedAt)}</span>,
+    },
+    {
+      accessorKey: "refundAmount",
+      header: "İade",
+      meta: { align: "right" },
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap tabular-nums">
+          {row.original.refundAmount > 0 ? money(row.original.refundAmount) : "—"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: "Durum",
+      enableSorting: false,
+      cell: ({ row }) => <StatusBadge kind="cancellation" status={enumStatus(row.original.status)} />,
+    },
+    {
+      id: "decide",
+      header: () => <span className="sr-only">Karar</span>,
+      enableSorting: false,
+      meta: { align: "right", className: "w-px" },
+      cell: ({ row }) =>
+        row.original.status === "pending" ? (
+          <div className="flex justify-end gap-1.5">
+            <button
+              type="button"
+              disabled={busyId !== null}
+              onClick={() => void handleApprove(row.original.id)}
+              className={appButton({ variant: "outline", size: "sm" })}
+            >
+              <Check aria-hidden />
+              {busyId === row.original.id ? "İşleniyor…" : "Onayla"}
+            </button>
+            <button
+              type="button"
+              disabled={busyId !== null}
+              onClick={() => void handleReject(row.original.id)}
+              aria-label={`${row.original.customer} talebini reddet`}
+              className={appButton({ variant: "ghost", size: "icon-sm" })}
+            >
+              <X aria-hidden />
+            </button>
+          </div>
+        ) : null,
+    },
+  ];
+
+  const rowActions = (r: CancellationRequest): RowAction[] => [
+    ...(r.status === "pending"
+      ? [
+          { label: "Onayla", icon: <Check aria-hidden />, onSelect: () => void handleApprove(r.id) },
+          { label: "Reddet", icon: <X aria-hidden />, onSelect: () => void handleReject(r.id), destructive: true },
+        ]
+      : []),
+    ...(r.orderId
+      ? [{ label: "Siparişi görüntüle", href: `/yonetim/siparisler/${r.orderId}`, icon: <Eye aria-hidden />, separator: r.status === "pending" }]
+      : []),
+    ...(r.serviceId
+      ? [{ label: "Hizmeti görüntüle", href: `/yonetim/hizmetler/${r.serviceId}`, icon: <Package aria-hidden /> }]
+      : []),
+    { label: "Müşteriyi görüntüle", href: `/yonetim/musteriler/${r.customerId}`, icon: <UserRound aria-hidden /> },
+  ];
+
+  return (
+    <>
+      <PageHeader
+        title="İptal talepleri"
+        description="Müşterilerin hizmet ve sipariş iptal talepleri. Onaylanan talepler ilgili hizmeti iptal eder."
+      />
+
+      <StatGrid columns={3} className="grid-cols-1 sm:grid-cols-3">
+        <StatCard
+          label="Bekleyen"
+          value={pending.toLocaleString("tr-TR")}
+          hint={pending ? "Yanıt bekliyor" : "Bekleyen talep yok"}
+          tone={pending ? "warning" : undefined}
+        />
+        <StatCard label="Onaylanan" value={approved.toLocaleString("tr-TR")} hint="Tüm zamanlar" />
+        <StatCard label="Reddedilen" value={rejected.toLocaleString("tr-TR")} hint="Tüm zamanlar" />
+      </StatGrid>
+
+      <DataTable
+        caption="İptal talepleri"
+        columns={columns}
+        data={requests}
+        initialSort={[{ id: "requestedAt", desc: true }]}
+        searchFn={(r, q) => tr(r.customer).includes(q) || tr(r.companyName).includes(q) || tr(r.product).includes(q) || tr(r.reason).includes(q)}
+        searchPlaceholder="Müşteri, ürün veya neden ara…"
+        filters={[
+          {
+            id: "status",
+            label: "Durum",
+            options: getStatusOptions("cancellation").map((o) => ({ ...o, value: o.value.toLowerCase() })),
+            getValue: (r) => r.status,
+          },
+        ]}
+        rowHref={(r) => (r.orderId ? `/yonetim/siparisler/${r.orderId}` : `/yonetim/musteriler/${r.customerId}`)}
+        rowActions={rowActions}
+        mobileCard={(r) => (
+          <ListRow
+            title={r.customer}
+            subtitle={r.product}
+            trailing={r.refundAmount > 0 ? money(r.refundAmount) : undefined}
+            meta={
+              <>
+                <StatusBadge kind="cancellation" status={enumStatus(r.status)} />
+                <span>{formatDate(r.requestedAt)}</span>
+                <span className="w-full line-clamp-2">{r.reason}</span>
+              </>
+            }
+          />
+        )}
+        emptyState={
+          <EmptyState
+            icon={MessageSquareX}
+            title="İptal talebi yok"
+            description="Müşteriler panelden iptal talebi gönderdiğinde burada listelenir."
+          />
+        }
+        noResultsText="Aramanızla eşleşen talep bulunamadı."
+      />
+    </>
   );
 }

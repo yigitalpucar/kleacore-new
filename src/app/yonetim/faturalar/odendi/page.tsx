@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
+import { PageHeader, StatCard, StatGrid } from "@/components/app";
+import { ServerPager } from "@/components/admin/server-pager";
 import { getInvoices } from "@/lib/dal/invoices";
+import { formatTRY } from "@/lib/format/price";
 import { parsePagination } from "@/lib/utils/pagination";
-import { PaidInvoicesContent } from "./content";
+import { InvoiceTable } from "../_components/invoice-table";
+import { toAdminInvoiceRow, withListPageSize } from "../_components/invoice-rows";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Ödenen faturalar" };
 
 export default async function PaidInvoicesPage({
   searchParams,
@@ -11,6 +18,20 @@ export default async function PaidInvoicesPage({
 }) {
   const sp = await searchParams;
   const params = parsePagination(sp);
-  const result = await getInvoices({ ...params, status: "PAID" });
-  return <PaidInvoicesContent data={result.data} total={result.total} />;
+  const result = await getInvoices({ ...params, perPage: withListPageSize(sp, params), status: "PAID" });
+  const now = new Date();
+  const rows = result.data.map((inv) => toAdminInvoiceRow(inv, now));
+  const sum = rows.reduce((s, r) => s + r.totalAmount, 0);
+
+  return (
+    <>
+      <PageHeader title="Ödenen faturalar" description="Ödemesi tamamlanmış faturalar." />
+      <StatGrid columns={2}>
+        <StatCard label="Ödenen fatura" value={result.total.toLocaleString("tr-TR")} />
+        <StatCard label="Tahsil edilen" value={formatTRY(sum, { keepDecimals: true })} hint={result.totalPages > 1 ? "Bu sayfadaki faturalar" : undefined} />
+      </StatGrid>
+      <InvoiceTable variant="paid" rows={rows} pageSize={25} caption="Ödenen faturalar" />
+      <ServerPager page={result.page} totalPages={result.totalPages} total={result.total} noun="fatura" />
+    </>
+  );
 }

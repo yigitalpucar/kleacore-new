@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import {
   getActivityLogFilterOptions,
   getActivityLogs,
@@ -8,6 +9,8 @@ import { parsePagination } from "@/lib/utils/pagination";
 import { AktiviteContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Aktivite kayıtları" };
 
 function readSearchParam(
   searchParams: Record<string, string | string[] | undefined>,
@@ -23,7 +26,9 @@ export default async function AktivitePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const pagination = parsePagination(sp);
+  const parsed = parsePagination(sp);
+  // 50 rows per server page unless ?perPage= is given.
+  const pagination = { ...parsed, perPage: sp.perPage ? parsed.perPage : 50 };
 
   const [result, stats, filterOptions, activityUsers] = await Promise.all([
     getActivityLogs({
@@ -41,7 +46,16 @@ export default async function AktivitePage({
 
   return (
     <AktiviteContent
-      data={result.data}
+      data={result.data.map((log) => ({
+        id: log.id,
+        action: log.action,
+        entity: log.entity,
+        entityId: log.entityId,
+        details: log.details,
+        ipAddress: log.ipAddress,
+        createdAt: log.createdAt.toISOString(),
+        user: log.user,
+      }))}
       total={result.total}
       page={result.page}
       perPage={result.perPage}

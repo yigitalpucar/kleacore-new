@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
 import { getCustomers } from "@/lib/dal/customers";
 import { parsePagination } from "@/lib/utils/pagination";
-import { SuspendedCustomersContent } from "./content";
+import { listPerPage, toCustomerRow } from "../_components/customer-row";
+import { CustomerSegmentPage } from "../_components/segment-page";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Askıdaki müşteriler" };
 
 export default async function SuspendedCustomersPage({
   searchParams,
@@ -10,13 +14,22 @@ export default async function SuspendedCustomersPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const paginationParams = parsePagination(sp);
+  const params = parsePagination(sp);
+  const result = await getCustomers({ ...params, status: "SUSPENDED", perPage: listPerPage(sp, params.perPage) });
 
-  const result = await getCustomers({
-    ...paginationParams,
-    status: "SUSPENDED",
-    perPage: 50,
-  });
-
-  return <SuspendedCustomersContent data={result.data} total={result.total} />;
+  return (
+    <CustomerSegmentPage
+      title="Askıdaki müşteriler"
+      description="Hesabı askıya alınmış müşteriler. Satır menüsünden yeniden etkinleştirebilirsiniz."
+      rows={result.data.map(toCustomerRow)}
+      total={result.total}
+      page={result.page}
+      totalPages={result.totalPages}
+      breakdown={false}
+      statusFilter={false}
+      typeFilter={true}
+      emptyTitle="Askıda müşteri yok"
+      emptyDescription="Askıya alınan hesaplar burada listelenir."
+    />
+  );
 }

@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { CreateInvoiceContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Fatura oluştur" };
 
 export default async function CreateInvoicePage() {
   await requireAdmin();

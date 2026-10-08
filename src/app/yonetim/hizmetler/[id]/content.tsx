@@ -1,43 +1,45 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
-  Server,
-  HardDrive,
-  Cloud,
-  Globe,
-  Shield,
-  Mail,
-  User,
-  Building2,
-  CreditCard,
-  RefreshCcw,
-  FileText,
-  Edit,
-  Pause,
-  XCircle,
-  CheckCircle,
   ArrowUpDown,
+  CheckCircle,
   ExternalLink,
-  Copy,
-  Check,
+  FileText,
+  HardDrive,
+  Pause,
+  Pencil,
+  RefreshCcw,
+  User,
+  XCircle,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
-import { BlurFade } from "@/components/magicui/blur-fade";
+import {
+  AppBreadcrumbLabel,
+  DataTable,
+  DetailList,
+  EmptyState,
+  ListRow,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+  UnavailableAction,
+  UsageMeter,
+  appButton,
+  enumLabel,
+  type ColumnDef,
+} from "@/components/app";
 import {
   activateService,
   cancelService,
   suspendService,
 } from "@/lib/actions/admin/services";
+import { monthlyEquivalent, periodTotal } from "@/lib/billing/period-price";
+import { formatTRY } from "@/lib/format/price";
+import { billingPeriodLabel, billingPeriodUnit, formatDate, formatDateTime } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
+
+type DateLike = Date | string;
 
 interface ServiceDetailData {
   id: string;
@@ -49,16 +51,16 @@ interface ServiceDetailData {
   status: string;
   billingPeriod: string;
   amount: number;
-  nextDueDate: Date | null;
-  expiresAt: Date | null;
-  suspendedAt: Date | null;
-  cancelledAt: Date | null;
+  nextDueDate: DateLike | null;
+  expiresAt: DateLike | null;
+  suspendedAt: DateLike | null;
+  cancelledAt: DateLike | null;
   suspendReason: string | null;
   diskUsed: number | null;
   diskLimit: number | null;
   bandwidthUsed: number | null;
   bandwidthLimit: number | null;
-  createdAt: Date;
+  createdAt: DateLike;
   customer: {
     id: string;
     name: string;
@@ -82,7 +84,7 @@ interface ServiceDetailData {
     type: string;
     status: string;
     size: number | null;
-    createdAt: Date;
+    createdAt: DateLike;
   }>;
 }
 
@@ -90,57 +92,48 @@ interface ServiceDetailContentProps {
   service: ServiceDetailData;
 }
 
-const categoryConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
-  hosting: { label: "Web Hosting", icon: Server, color: "text-blue-500 bg-blue-500/10" },
-  vds: { label: "VDS Sunucu", icon: HardDrive, color: "text-purple-500 bg-purple-500/10" },
-  vps: { label: "VPS Sunucu", icon: Cloud, color: "text-cyan-500 bg-cyan-500/10" },
-  server: { label: "Fiziksel Sunucu", icon: Server, color: "text-orange-500 bg-orange-500/10" },
-  domain: { label: "Domain", icon: Globe, color: "text-green-500 bg-green-500/10" },
-  ssl: { label: "SSL Sertifikası", icon: Shield, color: "text-yellow-500 bg-yellow-500/10" },
-  email: { label: "Kurumsal E-posta", icon: Mail, color: "text-pink-500 bg-pink-500/10" },
-};
+type BackupRow = ServiceDetailData["backups"][number];
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  ACTIVE: { label: "Aktif", color: "bg-green-500/10 text-green-500 border-green-500/30" },
-  SUSPENDED: { label: "Askıda", color: "bg-orange-500/10 text-orange-500 border-orange-500/30" },
-  CANCELLED: { label: "İptal", color: "bg-red-500/10 text-red-500 border-red-500/30" },
-  EXPIRED: { label: "Süresi Dolmuş", color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/30" },
-};
+const money = (n: number) => formatTRY(n, { keepDecimals: true });
 
-const billingPeriodLabels: Record<string, string> = {
-  monthly: "Aylık",
-  quarterly: "3 Aylık",
-  semiannual: "6 Aylık",
-  yearly: "Yıllık",
-  biennial: "2 Yıllık",
-  triennial: "3 Yıllık",
-};
+/** Backup size is stored in MB. */
+function formatBackupSize(mb: number | null) {
+  if (mb === null || mb === undefined) return "—";
+  if (mb >= 1024) return `${(mb / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 2 })} GB`;
+  return `${mb.toLocaleString("tr-TR", { maximumFractionDigits: 0 })} MB`;
+}
 
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-  }).format(price);
-};
+const backupColumns: ColumnDef<BackupRow>[] = [
+  {
+    accessorKey: "type",
+    header: "Tür",
+    cell: ({ row }) => enumLabel("backupType", row.original.type),
+  },
+  {
+    accessorKey: "size",
+    header: "Boyut",
+    meta: { align: "right" },
+    cell: ({ row }) => <span className="tabular-nums">{formatBackupSize(row.original.size)}</span>,
+  },
+  {
+    accessorKey: "status",
+    header: "Durum",
+    enableSorting: false,
+    cell: ({ row }) => <StatusBadge kind="backup" status={row.original.status} />,
+  },
+  {
+    id: "createdAt",
+    accessorFn: (r) => new Date(r.createdAt).toISOString(),
+    header: "Tarih",
+    cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{formatDateTime(row.original.createdAt)}</span>,
+  },
+];
 
 export function ServiceDetailContent({ service }: ServiceDetailContentProps) {
-  const [copiedField, setCopiedField] = useState<string | null>(null);
   const router = useRouter();
 
-  const slug = service.product.category?.slug || "hosting";
-  const CategoryIcon = categoryConfig[slug]?.icon || Server;
-
-  const copyToClipboard = (text: string, field: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
-  };
-
   const handleSuspendService = async () => {
-    const reason =
-      prompt("Askıya alma nedeni:", "Yonetim tarafindan askiya alindi")?.trim() ??
-      "";
+    const reason = prompt("Askıya alma nedeni:", "Yonetim tarafindan askiya alindi")?.trim() ?? "";
     if (!reason) return;
 
     const result = await suspendService(service.id, reason);
@@ -165,9 +158,7 @@ export function ServiceDetailContent({ service }: ServiceDetailContentProps) {
   };
 
   const handleCancelService = async () => {
-    const confirmed = window.confirm(
-      "Bu hizmeti iptal etmek istediğinize emin misiniz?"
-    );
+    const confirmed = window.confirm("Bu hizmeti iptal etmek istediğinize emin misiniz?");
     if (!confirmed) return;
 
     const result = await cancelService(service.id);
@@ -180,370 +171,235 @@ export function ServiceDetailContent({ service }: ServiceDetailContentProps) {
     router.refresh();
   };
 
-  const yearlyPrice = Number(service.amount) * 12;
+  const title = service.domain || service.label || service.product.name;
+  const slug = service.product.category?.slug;
+  const categoryName = slug ? enumLabel("productCategory", slug) : service.product.category?.name ?? "—";
+  const customerName = `${service.customer.name} ${service.customer.surname}`.trim();
+
+  // service.amount is the charge for ONE billing period (a yearly service
+  // stores the yearly total). Never multiply it by 12 for display.
+  const amount = Number(service.amount);
+  const isMonthly = service.billingPeriod === "monthly";
+  const equivalent = isMonthly
+    ? { label: "Yıllık karşılığı", value: `${money(periodTotal(amount, "yearly", "monthly-equivalent"))} / yıl` }
+    : { label: "Aylık karşılığı", value: `${money(monthlyEquivalent(amount, service.billingPeriod))} / ay` };
+
+  const hasUsage =
+    (service.diskLimit ?? 0) > 0 || (service.bandwidthLimit ?? 0) > 0;
+
+  const isCancelled = service.status === "CANCELLED";
 
   return (
-    <div className="space-y-6">
-      {/* Back Button */}
-      <BlurFade delay={0}>
-        <Link
-          href="/yonetim/hizmetler"
-          className="inline-flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Hizmetlere Dön
-        </Link>
-      </BlurFade>
+    <>
+      <AppBreadcrumbLabel segment={service.id} label={title} />
 
-      {/* Page Header */}
-      <BlurFade delay={0.05}>
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className={cn("p-3 rounded-lg", categoryConfig[slug]?.color.split(" ")[1])}>
-              <CategoryIcon className={cn("h-8 w-8", categoryConfig[slug]?.color.split(" ")[0])} />
-            </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">{service.domain || service.label || service.product.name}</h1>
-                <Badge className={cn("border", statusConfig[service.status]?.color)}>
-                  {statusConfig[service.status]?.label || service.status}
-                </Badge>
-              </div>
-              <p className="text-zinc-600 dark:text-zinc-400">
-                {categoryConfig[slug]?.label} - {service.product.name}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-              <Edit className="mr-2 h-4 w-4" />
-              Düzenle
-            </Button>
-            <Button variant="outline" className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-              <ArrowUpDown className="mr-2 h-4 w-4" />
-              Yükselt/Düşür
-            </Button>
-            <Button variant="outline" className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-              <FileText className="mr-2 h-4 w-4" />
-              Fatura Oluştur
-            </Button>
-            {service.status === "ACTIVE" && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  void handleSuspendService();
-                }}
-                className="border-orange-500/30 text-orange-500 hover:bg-orange-500/10"
+      <PageHeader
+        back={{ href: "/yonetim/hizmetler", label: "Hizmetler" }}
+        eyebrow={`${categoryName} · ${service.product.name}`}
+        title={title}
+        meta={
+          <>
+            <StatusBadge kind="service" status={service.status} size="md" />
+            <span>Oluşturuldu {formatDate(service.createdAt)}</span>
+            <span>Yenileme {formatDate(service.nextDueDate)}</span>
+          </>
+        }
+        actions={
+          <>
+            <UnavailableAction label="Düzenle" icon={<Pencil aria-hidden />} reason="Yakında" size="sm" />
+            <UnavailableAction label="Yükselt / düşür" icon={<ArrowUpDown aria-hidden />} reason="Yakında" size="sm" />
+            <Link href="/yonetim/faturalar/olustur" className={appButton({ variant: "outline", size: "sm" })}>
+              <FileText aria-hidden />
+              Fatura oluştur
+            </Link>
+            {service.status === "ACTIVE" ? (
+              <button
+                type="button"
+                onClick={() => void handleSuspendService()}
+                className={appButton({ variant: "outline", size: "sm" })}
               >
-                <Pause className="mr-2 h-4 w-4" />
-                Askıya Al
-              </Button>
-            )}
-            {service.status === "SUSPENDED" && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  void handleActivateService();
-                }}
-                className="border-green-500/30 text-green-500 hover:bg-green-500/10"
+                <Pause aria-hidden />
+                Askıya al
+              </button>
+            ) : null}
+            {service.status === "SUSPENDED" ? (
+              <button
+                type="button"
+                onClick={() => void handleActivateService()}
+                className={appButton({ size: "sm" })}
               >
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Aktif Et
-              </Button>
-            )}
-          </div>
-        </div>
-      </BlurFade>
+                <CheckCircle aria-hidden />
+                Aktif et
+              </button>
+            ) : null}
+          </>
+        }
+      />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left Column - Main Info */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Service Info Card */}
-          <BlurFade delay={0.1}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white">Hizmet Bilgileri</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <p className="text-sm text-zinc-500">Hizmet ID</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium font-mono text-zinc-900 dark:text-white">{service.id.slice(0, 12)}</p>
-                      <button
-                        onClick={() => copyToClipboard(service.id, "id")}
-                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                      >
-                        {copiedField === "id" ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-zinc-500">Domain</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-zinc-900 dark:text-white">{service.domain || "-"}</p>
-                      {service.domain && (
-                        <a
-                          href={`https://${service.domain}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-zinc-500">Kategori</p>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-white">{categoryConfig[slug]?.label || service.product.category.name}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-zinc-500">Paket</p>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-white">{service.product.name}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-zinc-500">Oluşturma Tarihi</p>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-white">
-                      {new Date(service.createdAt).toLocaleDateString("tr-TR")}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-zinc-500">Sonraki Yenileme</p>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-white">
-                      {service.nextDueDate ? new Date(service.nextDueDate).toLocaleDateString("tr-TR") : "-"}
-                    </p>
-                  </div>
-                </div>
-
-                {(service.serverName || service.ipAddress) && (
-                  <>
-                    <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-                    <div className="space-y-1">
-                      <p className="text-sm text-zinc-500">Sunucu Bilgileri</p>
-                      <div className="flex items-center gap-4">
-                        {service.serverName && (
-                          <p className="text-sm font-medium text-zinc-900 dark:text-white">{service.serverName}</p>
-                        )}
-                        {service.ipAddress && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-mono text-zinc-600 dark:text-zinc-400">{service.ipAddress}</span>
-                            <button
-                              onClick={() => copyToClipboard(service.ipAddress!, "ip")}
-                              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                            >
-                              {copiedField === "ip" ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {service.suspendReason && (
-                  <>
-                    <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-                    <div className="space-y-1">
-                      <p className="text-sm text-zinc-500">Askıya Alma Nedeni</p>
-                      <p className="text-sm text-zinc-900 dark:text-white">{service.suspendReason}</p>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </BlurFade>
-
-          {/* Tabs for Backups and Activity */}
-          <BlurFade delay={0.15}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardContent className="p-0">
-                <Tabs defaultValue="backups" className="w-full">
-                  <TabsList className="w-full justify-start rounded-none border-b border-zinc-200 dark:border-zinc-800 bg-transparent p-0">
-                    <TabsTrigger
-                      value="backups"
-                      className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6 py-3"
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <SectionCard title="Hizmet bilgileri">
+            <DetailList
+              layout="grid"
+              items={[
+                { label: "Hizmet ID", value: service.id, mono: true, copy: service.id },
+                {
+                  label: "Alan adı",
+                  value: service.domain ? (
+                    <a
+                      href={`https://${service.domain}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 hover:underline"
                     >
-                      Yedekler ({service.backups.length})
-                    </TabsTrigger>
-                  </TabsList>
+                      {service.domain}
+                      <ExternalLink aria-hidden className="size-3.5 text-muted-foreground" />
+                      <span className="sr-only">(yeni sekmede açılır)</span>
+                    </a>
+                  ) : null,
+                },
+                { label: "Etiket", value: service.label },
+                { label: "Kategori", value: categoryName },
+                { label: "Paket", value: `${service.product.name} (${service.product.sku})` },
+                { label: "Kullanıcı adı", value: service.username, mono: true, copy: service.username ?? undefined },
+                { label: "Oluşturma tarihi", value: formatDate(service.createdAt) },
+                { label: "Sonraki yenileme", value: service.nextDueDate ? formatDate(service.nextDueDate) : null },
+                { label: "Bitiş tarihi", value: service.expiresAt ? formatDate(service.expiresAt) : null },
+                { label: "Askıya alınma", value: service.suspendedAt ? formatDateTime(service.suspendedAt) : null },
+                { label: "Askıya alma nedeni", value: service.suspendReason },
+                { label: "İptal tarihi", value: service.cancelledAt ? formatDateTime(service.cancelledAt) : null },
+              ]}
+            />
+          </SectionCard>
 
-                  <TabsContent value="backups" className="p-0 mt-0">
-                    {service.backups.length === 0 ? (
-                      <div className="p-8 text-center">
-                        <p className="text-sm text-zinc-500">Henüz yedek bulunmuyor</p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                              <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tip</th>
-                              <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Boyut</th>
-                              <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Durum</th>
-                              <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tarih</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {service.backups.map((backup) => (
-                              <tr key={backup.id} className="border-b border-zinc-200 dark:border-zinc-800 last:border-0">
-                                <td className="p-4">
-                                  <span className="text-sm text-zinc-900 dark:text-white">{backup.type}</span>
-                                </td>
-                                <td className="p-4">
-                                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                                    {backup.size ? `${(backup.size / 1024).toFixed(2)} GB` : "-"}
-                                  </span>
-                                </td>
-                                <td className="p-4">
-                                  <span className="text-sm text-zinc-600 dark:text-zinc-400">{backup.status}</span>
-                                </td>
-                                <td className="p-4">
-                                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                                    {new Date(backup.createdAt).toLocaleDateString("tr-TR")}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </BlurFade>
+          {service.serverName || service.ipAddress || hasUsage ? (
+            <SectionCard title="Sunucu ve kullanım">
+              <div className="space-y-5">
+                <DetailList
+                  layout="grid"
+                  items={[
+                    { label: "Sunucu", value: service.serverName, mono: true },
+                    { label: "IP adresi", value: service.ipAddress, mono: true, copy: service.ipAddress ?? undefined },
+                  ]}
+                />
+                {hasUsage ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {(service.diskLimit ?? 0) > 0 ? (
+                      <UsageMeter label="Disk" used={service.diskUsed ?? 0} limit={service.diskLimit} unit="GB" />
+                    ) : null}
+                    {(service.bandwidthLimit ?? 0) > 0 ? (
+                      <UsageMeter label="Trafik" used={service.bandwidthUsed ?? 0} limit={service.bandwidthLimit} unit="GB" />
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </SectionCard>
+          ) : null}
+
+          <SectionCard
+            title="Yedekler"
+            description={service.backups.length ? `Son ${service.backups.length} yedek` : undefined}
+            flush
+          >
+            <DataTable
+              framed={false}
+              caption="Yedekler"
+              columns={backupColumns}
+              data={service.backups}
+              pageSize={0}
+              initialSort={[{ id: "createdAt", desc: true }]}
+              mobileCard={(b) => (
+                <ListRow
+                  title={enumLabel("backupType", b.type)}
+                  trailing={formatBackupSize(b.size)}
+                  meta={
+                    <>
+                      <StatusBadge kind="backup" status={b.status} />
+                      <span>{formatDateTime(b.createdAt)}</span>
+                    </>
+                  }
+                />
+              )}
+              emptyState={
+                <div className="p-4">
+                  <EmptyState compact icon={HardDrive} title="Henüz yedek yok" description="Bu hizmet için alınan yedekler burada listelenir." />
+                </div>
+              }
+            />
+          </SectionCard>
         </div>
 
-        {/* Right Column - Customer & Billing */}
         <div className="space-y-6">
-          {/* Customer Card */}
-          <BlurFade delay={0.2}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white text-base flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Müşteri Bilgileri
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium">
-                    {service.customer.name[0]}{service.customer.surname[0]}
-                  </div>
-                  <div>
-                    <p className="font-medium text-zinc-900 dark:text-white">{service.customer.name} {service.customer.surname}</p>
-                    {service.customer.companyName && (
-                      <p className="text-xs text-zinc-500 flex items-center gap-1">
-                        <Building2 className="h-3 w-3" />
-                        {service.customer.companyName}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">{service.customer.email}</p>
-                  {service.customer.phone && (
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">{service.customer.phone}</p>
-                  )}
-                </div>
-                <Link href={`/yonetim/musteriler/${service.customer.id}`}>
-                  <Button variant="outline" size="sm" className="w-full mt-2 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                    Müşteri Profiline Git
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </BlurFade>
+          <SectionCard
+            title="Müşteri"
+            footer={
+              <Link
+                href={`/yonetim/musteriler/${service.customer.id}`}
+                className={appButton({ variant: "outline", size: "sm", className: "w-full" })}
+              >
+                <User aria-hidden />
+                Müşteri profiline git
+              </Link>
+            }
+          >
+            <DetailList
+              items={[
+                { label: "Ad soyad", value: customerName },
+                { label: "Firma", value: service.customer.companyName },
+                { label: "E-posta", value: service.customer.email, copy: service.customer.email },
+                { label: "Telefon", value: service.customer.phone },
+              ]}
+            />
+          </SectionCard>
 
-          {/* Billing Card */}
-          <BlurFade delay={0.25}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white text-base flex items-center gap-2">
-                  <CreditCard className="h-4 w-4" />
-                  Faturalama
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-zinc-500">Dönem</span>
-                  <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                    {billingPeriodLabels[service.billingPeriod] || service.billingPeriod}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-zinc-500">Aylık Tutar</span>
-                  <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                    {formatPrice(Number(service.amount))}
-                  </span>
-                </div>
-                <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-zinc-500">Yıllık Tutar</span>
-                  <span className="text-lg font-bold text-primary">
-                    {formatPrice(yearlyPrice)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-zinc-500">Sonraki Ödeme</span>
-                  <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                    {service.nextDueDate ? new Date(service.nextDueDate).toLocaleDateString("tr-TR") : "-"}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
+          <SectionCard title="Faturalama">
+            <DetailList
+              items={[
+                { label: "Dönem", value: billingPeriodLabel(service.billingPeriod) },
+                {
+                  label: "Dönem tutarı",
+                  value: (
+                    <span className="tabular-nums">
+                      <span className="font-medium">{money(amount)}</span>
+                      <span className="text-muted-foreground"> / {billingPeriodUnit(service.billingPeriod)}</span>
+                    </span>
+                  ),
+                },
+                { label: equivalent.label, value: <span className="tabular-nums text-muted-foreground">{equivalent.value}</span> },
+                { label: "Sonraki ödeme", value: formatDate(service.nextDueDate) },
+              ]}
+            />
+          </SectionCard>
 
-          {/* Quick Actions */}
-          <BlurFade delay={0.3}>
-            <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              <CardHeader>
-                <CardTitle className="text-zinc-900 dark:text-white text-base">Hızlı İşlemler</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button variant="outline" size="sm" className="w-full justify-start bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                  <RefreshCcw className="mr-2 h-4 w-4" />
-                  Manuel Yenileme
-                </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                  <ArrowUpDown className="mr-2 h-4 w-4" />
-                  Paket Değiştir
-                </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                  <FileText className="mr-2 h-4 w-4" />
-                  Yenileme Faturası
-                </Button>
-                <Separator className="bg-zinc-200 dark:bg-zinc-800 my-2" />
-                {service.status !== "CANCELLED" ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      void handleCancelService();
-                    }}
-                    className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-500/10 border-red-500/30"
+          <SectionCard title="Hızlı işlemler" headingLevel={2}>
+            <div className="space-y-2">
+              <UnavailableAction layout="tile" label="Manuel yenileme" icon={<RefreshCcw aria-hidden />} reason="Yakında" />
+              <UnavailableAction layout="tile" label="Paket değiştir" icon={<ArrowUpDown aria-hidden />} reason="Yakında" />
+              <UnavailableAction layout="tile" label="Yenileme faturası" icon={<FileText aria-hidden />} reason="Yakında" />
+              <div className="border-t border-dashed pt-3">
+                {isCancelled ? (
+                  <span
+                    aria-disabled="true"
+                    className={appButton({ variant: "outline", size: "sm", className: "w-full cursor-not-allowed opacity-50" })}
                   >
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Hizmeti İptal Et
-                  </Button>
+                    <XCircle aria-hidden />
+                    Hizmet iptal edildi
+                  </span>
                 ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled
-                    className="w-full justify-start border-zinc-300 dark:border-zinc-700 text-zinc-500"
+                  <button
+                    type="button"
+                    onClick={() => void handleCancelService()}
+                    className={appButton({ variant: "destructive", size: "sm", className: "w-full" })}
                   >
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Hizmet İptal Edildi
-                  </Button>
+                    <XCircle aria-hidden />
+                    Hizmeti iptal et
+                  </button>
                 )}
-              </CardContent>
-            </Card>
-          </BlurFade>
+              </div>
+            </div>
+          </SectionCard>
         </div>
       </div>
-    </div>
+    </>
   );
 }

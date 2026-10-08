@@ -1,9 +1,13 @@
+import type { Metadata } from "next";
 import { getSuspendedOrders } from "@/lib/dal/order-views";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { parsePagination } from "@/lib/utils/pagination";
+import { serializeOrder, withDefaultPerPage } from "../_components/serialize";
 import { SuspendedOrdersContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Askıdaki siparişler" };
 
 export default async function SuspendedOrdersPage({
   searchParams,
@@ -13,16 +17,15 @@ export default async function SuspendedOrdersPage({
   await requireAdmin();
 
   const sp = await searchParams;
-  const params = parsePagination(sp);
+  const params = parsePagination(withDefaultPerPage(sp));
 
   const result = await getSuspendedOrders(params);
 
   return (
     <SuspendedOrdersContent
-      orders={result.data}
+      orders={result.data.map(serializeOrder)}
       total={result.total}
       page={result.page}
-      perPage={result.perPage}
       totalPages={result.totalPages}
     />
   );

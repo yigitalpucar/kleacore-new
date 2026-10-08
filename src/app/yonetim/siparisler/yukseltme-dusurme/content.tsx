@@ -3,21 +3,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowRight, ArrowUp, ArrowUpDown, Check, Eye, UserRound } from "lucide-react";
 import {
-  Search,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Building2,
-  CheckCircle2,
-  Loader2,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { BlurFade } from "@/components/magicui/blur-fade";
+  DataTable,
+  EmptyState,
+  ListRow,
+  PageHeader,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  appButton,
+  type ColumnDef,
+  type RowAction,
+} from "@/components/app";
 import { approvePendingPlanChangeDowngrade } from "@/lib/actions/admin/plan-changes";
 import { toast } from "@/lib/toast";
+import { formatDate } from "@/lib/format/date";
+import { formatTRY } from "@/lib/format/price";
 
 interface OperationItem {
   id: string;
@@ -39,26 +41,36 @@ interface YukseltmeDusurmeContentProps {
   operations: OperationItem[];
 }
 
-const typeConfig: Record<string, { label: string; color: string; icon: typeof ArrowUp }> = {
-  upgrade: { label: "Yükseltme", color: "bg-green-500/10 text-green-500", icon: ArrowUp },
-  downgrade: { label: "Düşürme", color: "bg-orange-500/10 text-orange-500", icon: ArrowDown },
-};
-
-const statusConfig: Record<string, { label: string; color: string }> = {
-  completed: { label: "Tamamlandı", color: "bg-green-500/10 text-green-500" },
-  pending: { label: "Beklemede", color: "bg-yellow-500/10 text-yellow-500" },
-  cancelled: { label: "İptal", color: "bg-red-500/10 text-red-500" },
-};
+const TYPE_LABEL = { upgrade: "Yükseltme", downgrade: "Düşürme" } as const;
+/** DAL statuses are lower-case: completed / pending / cancelled. */
+const enumStatus = (s: string) => s.toUpperCase();
+const hasOrder = (op: OperationItem) => op.orderId !== op.id;
+const tr = (s: string | null | undefined) => (s ?? "").toLocaleLowerCase("tr-TR");
 
 const formatPriceDiff = (price: number) => {
-  const absPrice = Math.abs(price);
-  const prefix = price >= 0 ? "+" : "-";
-  return `${prefix}${new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-  }).format(absPrice)}`;
+  if (!price) return "—";
+  return `${price > 0 ? "+" : "−"}${formatTRY(Math.abs(price), { keepDecimals: true })}`;
 };
+
+function TypeLabel({ type }: { type: OperationItem["type"] }) {
+  const Icon = type === "upgrade" ? ArrowUp : ArrowDown;
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <Icon aria-hidden className="size-3.5 text-muted-foreground" />
+      {TYPE_LABEL[type]}
+    </span>
+  );
+}
+
+function PlanPath({ op }: { op: OperationItem }) {
+  return (
+    <span className="inline-flex min-w-0 max-w-[320px] items-center gap-1.5">
+      <span className="truncate text-muted-foreground">{op.fromProduct}</span>
+      <ArrowRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground/70" />
+      <span className="truncate font-medium">{op.toProduct}</span>
+    </span>
+  );
+}
 
 export function YukseltmeDusurmeContent({ operations }: YukseltmeDusurmeContentProps) {
   const router = useRouter();
@@ -66,160 +78,162 @@ export function YukseltmeDusurmeContent({ operations }: YukseltmeDusurmeContentP
 
   const handleApprove = async (planChangeId: string) => {
     if (approvingId) return;
-
     setApprovingId(planChangeId);
     const result = await approvePendingPlanChangeDowngrade(planChangeId);
-
     if (!result.success) {
       toast.error(result.error ?? "Düşürme talebi onaylanamadı");
       setApprovingId(null);
       return;
     }
-
     toast.success("Düşürme talebi onaylandı ve paket güncellendi");
     router.refresh();
     setApprovingId(null);
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <BlurFade delay={0}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Yükseltme & Düşürme</h1>
-            <p className="text-zinc-600 dark:text-zinc-400">Paket değişiklik işlemleri</p>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10">
-            <ArrowUpDown className="h-5 w-5 text-indigo-500" />
-            <span className="text-sm font-medium text-indigo-500">{operations.length} İşlem</span>
-          </div>
-        </div>
-      </BlurFade>
+  const upgrades = operations.filter((o) => o.type === "upgrade").length;
+  const downgrades = operations.length - upgrades;
+  const pending = operations.filter((o) => o.status === "pending").length;
 
-      {/* Table */}
-      <BlurFade delay={0.1}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Müşteri</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tip</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Önceki Paket</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Yeni Paket</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Fark</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Durum</th>
-                    <th className="text-left p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tarih</th>
-                    <th className="text-right p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">İşlem</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {operations.map((op) => {
-                    const TypeIcon = typeConfig[op.type]?.icon ?? ArrowUpDown;
-                    return (
-                      <tr
-                        key={op.id}
-                        className="border-b border-zinc-200 dark:border-zinc-800 last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors"
-                      >
-                        <td className="p-4">
-                          <div>
-                            <Link
-                              href={`/yonetim/musteriler/${op.customerId}`}
-                              className="text-sm font-medium text-zinc-900 dark:text-white hover:text-primary"
-                            >
-                              {op.customer}
-                            </Link>
-                            {op.companyName && (
-                              <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
-                                <Building2 className="h-3 w-3" />
-                                {op.companyName}
-                              </p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <span className={cn(
-                            "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
-                            typeConfig[op.type]?.color ?? "bg-zinc-500/10 text-zinc-500"
-                          )}>
-                            <TypeIcon className="h-3 w-3" />
-                            {typeConfig[op.type]?.label ?? op.type}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-sm text-zinc-600 dark:text-zinc-400">{op.fromProduct}</span>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-sm text-zinc-900 dark:text-white">{op.toProduct}</span>
-                        </td>
-                        <td className="p-4">
-                          <span className={cn(
-                            "text-sm font-medium",
-                            op.priceDiff >= 0 ? "text-green-500" : "text-orange-500"
-                          )}>
-                            {formatPriceDiff(op.priceDiff)}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <span className={cn(
-                            "inline-flex px-2 py-0.5 rounded text-xs font-medium",
-                            statusConfig[op.status]?.color ?? "bg-zinc-500/10 text-zinc-500"
-                          )}>
-                            {statusConfig[op.status]?.label ?? op.status}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                            {new Date(op.date).toLocaleDateString("tr-TR")}
-                          </span>
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="inline-flex items-center gap-2">
-                            {op.canApprove && op.planChangeId && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => void handleApprove(op.planChangeId!)}
-                                disabled={approvingId === op.planChangeId}
-                              >
-                                {approvingId === op.planChangeId ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <CheckCircle2 className="h-4 w-4 mr-1" />
-                                    Onayla
-                                  </>
-                                )}
-                              </Button>
-                            )}
-                            {op.orderId !== op.id && (
-                              <Link
-                                href={`/yonetim/siparisler/${op.orderId}`}
-                                className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                              >
-                                <Search className="h-4 w-4" />
-                              </Link>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {operations.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="p-8 text-center text-sm text-zinc-500">
-                        Yükseltme/düşürme işlemi bulunamadı
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+  const columns: ColumnDef<OperationItem>[] = [
+    {
+      accessorKey: "customer",
+      header: "Müşteri",
+      cell: ({ row }) => (
+        <div className="min-w-0 max-w-[200px]">
+          <Link href={`/yonetim/musteriler/${row.original.customerId}`} className="block truncate font-medium hover:underline">
+            {row.original.customer}
+          </Link>
+          {row.original.companyName ? (
+            <p className="truncate text-xs text-muted-foreground">{row.original.companyName}</p>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "type",
+      header: "Tür",
+      enableSorting: false,
+      cell: ({ row }) => <TypeLabel type={row.original.type} />,
+    },
+    {
+      id: "plan",
+      header: "Paket",
+      enableSorting: false,
+      cell: ({ row }) => <PlanPath op={row.original} />,
+    },
+    {
+      accessorKey: "priceDiff",
+      header: "Fark",
+      meta: { align: "right" },
+      cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{formatPriceDiff(row.original.priceDiff)}</span>,
+    },
+    {
+      accessorKey: "date",
+      header: "Tarih",
+      cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{formatDate(row.original.date)}</span>,
+    },
+    {
+      accessorKey: "status",
+      header: "Durum",
+      enableSorting: false,
+      cell: ({ row }) => <StatusBadge kind="planChange" status={enumStatus(row.original.status)} />,
+    },
+    {
+      id: "decide",
+      header: () => <span className="sr-only">İşlem</span>,
+      enableSorting: false,
+      meta: { align: "right", className: "w-px" },
+      cell: ({ row }) => {
+        const op = row.original;
+        if (!op.canApprove || !op.planChangeId) return null;
+        return (
+          <button
+            type="button"
+            onClick={() => void handleApprove(op.planChangeId!)}
+            disabled={approvingId !== null}
+            className={appButton({ variant: "outline", size: "sm" })}
+          >
+            <Check aria-hidden />
+            {approvingId === op.planChangeId ? "Onaylanıyor…" : "Onayla"}
+          </button>
+        );
+      },
+    },
+  ];
+
+  const rowActions = (op: OperationItem): RowAction[] => [
+    ...(op.canApprove && op.planChangeId
+      ? [{ label: "Düşürmeyi onayla", icon: <Check aria-hidden />, onSelect: () => void handleApprove(op.planChangeId!) }]
+      : []),
+    ...(hasOrder(op)
+      ? [{ label: "Siparişi görüntüle", href: `/yonetim/siparisler/${op.orderId}`, icon: <Eye aria-hidden />, separator: !!op.canApprove }]
+      : []),
+    { label: "Müşteriyi görüntüle", href: `/yonetim/musteriler/${op.customerId}`, icon: <UserRound aria-hidden /> },
+  ];
+
+  return (
+    <>
+      <PageHeader
+        title="Yükseltme ve düşürme"
+        description="Paket değişikliği işlemleri. Yükseltmeler ödeme ile, düşürmeler yönetici onayıyla tamamlanır."
+      />
+
+      <StatGrid columns={3} className="grid-cols-1 sm:grid-cols-3">
+        <StatCard label="Yükseltme" value={upgrades.toLocaleString("tr-TR")} hint="Tüm kayıtlar" />
+        <StatCard label="Düşürme" value={downgrades.toLocaleString("tr-TR")} hint="Tüm kayıtlar" />
+        <StatCard
+          label="Bekleyen"
+          value={pending.toLocaleString("tr-TR")}
+          hint={pending ? "Ödeme veya onay bekliyor" : "Bekleyen işlem yok"}
+          tone={pending ? "warning" : undefined}
+        />
+      </StatGrid>
+
+      <DataTable
+        caption="Paket değişiklikleri"
+        columns={columns}
+        data={operations}
+        initialSort={[{ id: "date", desc: true }]}
+        searchFn={(op, q) =>
+          tr(op.customer).includes(q) || tr(op.companyName).includes(q) || tr(op.fromProduct).includes(q) || tr(op.toProduct).includes(q)
+        }
+        searchPlaceholder="Müşteri veya paket ara…"
+        filters={[
+          {
+            id: "type",
+            label: "Tür",
+            options: [
+              { value: "upgrade", label: "Yükseltme" },
+              { value: "downgrade", label: "Düşürme" },
+            ],
+            getValue: (op) => op.type,
+          },
+        ]}
+        rowHref={(op) => (hasOrder(op) ? `/yonetim/siparisler/${op.orderId}` : `/yonetim/musteriler/${op.customerId}`)}
+        rowActions={rowActions}
+        mobileCard={(op) => (
+          <ListRow
+            title={op.customer}
+            subtitle={`${op.fromProduct} → ${op.toProduct}`}
+            trailing={op.priceDiff ? formatPriceDiff(op.priceDiff) : undefined}
+            meta={
+              <>
+                <StatusBadge kind="planChange" status={enumStatus(op.status)} />
+                <TypeLabel type={op.type} />
+                <span>{formatDate(op.date)}</span>
+              </>
+            }
+          />
+        )}
+        emptyState={
+          <EmptyState
+            icon={ArrowUpDown}
+            title="Paket değişikliği yok"
+            description="Müşteriler paket yükseltip düşürdüğünde burada listelenir."
+          />
+        }
+        noResultsText="Aramanızla eşleşen işlem bulunamadı."
+      />
+    </>
   );
 }

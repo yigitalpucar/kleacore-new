@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { AddServiceContent } from "./content";
 import type { BillingPeriod, ProductCategorySlug } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Hizmet ekle" };
 
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];

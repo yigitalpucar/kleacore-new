@@ -1,8 +1,10 @@
-import { getServices, getServiceStats } from "@/lib/dal/services";
-import { parsePagination } from "@/lib/utils/pagination";
+import type { Metadata } from "next";
 import { ServicesContent } from "../content";
+import { loadServices } from "../load-services";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "İptal edilen hizmetler" };
 
 export default async function CancelledServicesPage({
   searchParams,
@@ -10,12 +12,14 @@ export default async function CancelledServicesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const params = parsePagination(sp);
+  const { rows, stats, pagination } = await loadServices(sp, "CANCELLED");
 
-  const [result, stats] = await Promise.all([
-    getServices({ ...params, status: "CANCELLED" }),
-    getServiceStats(),
-  ]);
-
-  return <ServicesContent data={result.data} stats={stats} />;
+  return (
+    <ServicesContent
+      rows={rows}
+      stats={stats}
+      pagination={pagination}
+      view={{ title: "İptal edilen hizmetler", description: "İptal edilmiş hizmetlerin kaydı.", status: "CANCELLED" }}
+    />
+  );
 }

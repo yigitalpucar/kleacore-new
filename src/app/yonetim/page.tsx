@@ -1,356 +1,332 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight, CalendarClock, FilePlus, ScrollText, UserPlus } from "lucide-react";
 import {
-  TrendingUp,
-  Headphones,
-  ArrowUpRight,
-  DollarSign,
-  UserPlus,
-  ShoppingCart,
-  FileWarning,
-  CalendarClock,
-  Bell,
-  Search,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { BlurFade } from "@/components/magicui/blur-fade";
+  ChartCard,
+  EmptyState,
+  PageHeader,
+  SectionCard,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  ToneDot,
+  appButton,
+  type StatusTone,
+} from "@/components/app";
+import { DashboardRecentOrders } from "@/components/admin/dashboard-recent-orders";
+import { getActivityLogs } from "@/lib/dal/activity-logs";
 import { getAdminDashboardStats } from "@/lib/dal/dashboard";
+import { getInvoiceStats } from "@/lib/dal/invoices";
+import { getOrderStats } from "@/lib/dal/orders";
+import { getRevenueReport } from "@/lib/dal/reports";
+import { getServiceStats } from "@/lib/dal/services";
+import { formatTRY } from "@/lib/format/price";
+import { daysUntil, formatDate, formatDateLong, formatDateTime } from "@/lib/format/date";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-const orderStatusConfig: Record<string, { label: string; color: string }> = {
-  PENDING: { label: "Beklemede", color: "bg-yellow-500/10 text-yellow-500" },
-  APPROVED: { label: "Onaylandı", color: "bg-blue-500/10 text-blue-500" },
-  PROCESSING: { label: "İşleniyor", color: "bg-blue-500/10 text-blue-500" },
-  COMPLETED: { label: "Tamamlandı", color: "bg-green-500/10 text-green-500" },
-  CANCELLED: { label: "İptal", color: "bg-red-500/10 text-red-500" },
-  REFUNDED: { label: "İade", color: "bg-zinc-500/10 text-zinc-500" },
-};
+export const metadata: Metadata = { title: "Genel bakış" };
 
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-  }).format(price);
-};
+const TZ = "Europe/Istanbul";
+const money = (n: number) => formatTRY(n, { keepDecimals: true });
+const num = (n: number) => n.toLocaleString("tr-TR");
+
+const monthKeyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit" });
+const monthLabelFmt = new Intl.DateTimeFormat("tr-TR", { timeZone: TZ, month: "short" });
+
+/** Last `count` calendar months (Istanbul), oldest first: { key: "2026-10", label: "Eki" }. */
+function lastMonths(now: Date, count: number) {
+  const out: { key: string; label: string }[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 15));
+    out.push({ key: monthKeyFmt.format(d).slice(0, 7), label: monthLabelFmt.format(d) });
+  }
+  return out;
+}
+
+function customerName(c: { name: string; surname: string } | null | undefined) {
+  return c ? `${c.name} ${c.surname}`.trim() : "—";
+}
 
 export default async function AdminDashboard() {
-  const data = await getAdminDashboardStats();
+  const now = new Date();
+  const months = lastMonths(now, 6);
+  const chartFrom = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
-  const stats = [
-    {
-      title: "Toplam Gelir",
-      value: formatPrice(Number(data.totalRevenue)),
-      description: `Bu ay: ${formatPrice(Number(data.monthlyRevenue))}`,
-      icon: DollarSign,
-      color: "text-green-500",
-      bgColor: "bg-green-500/10",
-      href: "/yonetim/faturalar",
-    },
-    {
-      title: "Aylık Gelir",
-      value: formatPrice(Number(data.monthlyRevenue)),
-      description: `Toplam sipariş: ${data.totalOrders.toLocaleString("tr-TR")}`,
-      icon: TrendingUp,
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-      href: "/yonetim/raporlar",
-    },
-    {
-      title: "Yeni Müşteri (Bu Ay)",
-      value: data.newCustomersThisMonth.toLocaleString("tr-TR"),
-      description: `Toplam: ${data.totalCustomers.toLocaleString("tr-TR")} müşteri`,
-      icon: UserPlus,
-      color: "text-purple-500",
-      bgColor: "bg-purple-500/10",
-      href: "/yonetim/musteriler",
-    },
-    {
-      title: "Bekleyen Destek",
-      value: data.pendingTickets.toLocaleString("tr-TR"),
-      description: `${data.activeServices.toLocaleString("tr-TR")} aktif hizmet`,
-      icon: Headphones,
-      color: "text-orange-500",
-      bgColor: "bg-orange-500/10",
-      href: "/yonetim/destek",
-    },
+  const [data, orderStats, invoiceStats, serviceStats, revenue, activity] = await Promise.all([
+    getAdminDashboardStats(),
+    getOrderStats(),
+    getInvoiceStats(),
+    getServiceStats(),
+    getRevenueReport({ from: chartFrom, to: now }),
+    getActivityLogs({ page: 1, perPage: 6 }),
+  ]);
+
+  // Monthly collections from paid invoices (paidAmount by paidAt month).
+  const byMonth = new Map(months.map((m) => [m.key, 0]));
+  for (const inv of revenue.paidInvoices) {
+    if (!inv.paidAt) continue;
+    const key = monthKeyFmt.format(inv.paidAt).slice(0, 7);
+    if (byMonth.has(key)) byMonth.set(key, (byMonth.get(key) ?? 0) + Number(inv.paidAmount));
+  }
+  const chartData = months.map((m) => ({ label: m.label, value: Math.round((byMonth.get(m.key) ?? 0) * 100) / 100 }));
+  const sixMonthTotal = chartData.reduce((s, d) => s + d.value, 0);
+
+  const recentOrders = data.recentOrders.map((o) => ({
+    id: o.id,
+    orderNumber: o.orderNumber,
+    status: o.status,
+    totalAmount: Number(o.totalAmount),
+    createdAt: o.createdAt.toISOString(),
+    productName: o.product?.name ?? null,
+    customer: o.customer ? { id: o.customer.id, name: customerName(o.customer) } : null,
+  }));
+
+  const todo: { label: string; value: number; href: string; tone: StatusTone; hint: string }[] = [
+    { label: "Onay bekleyen sipariş", value: orderStats.pending, href: "/yonetim/siparisler/beklemede", tone: "warning", hint: "Beklemede" },
+    { label: "İşlemdeki sipariş", value: orderStats.processing, href: "/yonetim/siparisler/tum-siparisler", tone: "info", hint: "Kurulum sürüyor" },
+    { label: "Yanıt bekleyen talep", value: data.pendingTickets, href: "/yonetim/destek", tone: "warning", hint: "Açık veya müşteri yanıtladı" },
+    { label: "Gecikmiş fatura", value: invoiceStats.overdue, href: "/yonetim/faturalar/gecikmis", tone: "danger", hint: "Vadesi geçti" },
+    { label: "Askıdaki hizmet", value: serviceStats.suspended, href: "/yonetim/hizmetler/askida", tone: "warning", hint: "Erişim kapalı" },
   ];
 
-  const middleStats = [
-    {
-      title: "Toplam Sipariş",
-      value: data.totalOrders.toLocaleString("tr-TR"),
-      description: `${data.totalCustomers.toLocaleString("tr-TR")} müşteri`,
-      icon: ShoppingCart,
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-      href: "/yonetim/siparisler",
-    },
-    {
-      title: "Aktif Hizmet",
-      value: data.activeServices.toLocaleString("tr-TR"),
-      description: "Aktif servisler",
-      icon: CalendarClock,
-      color: "text-yellow-500",
-      bgColor: "bg-yellow-500/10",
-      href: "/yonetim/hizmetler",
-    },
-    {
-      title: "Toplam Müşteri",
-      value: data.totalCustomers.toLocaleString("tr-TR"),
-      description: `Bu ay: +${data.newCustomersThisMonth.toLocaleString("tr-TR")}`,
-      icon: FileWarning,
-      color: "text-red-500",
-      bgColor: "bg-red-500/10",
-      href: "/yonetim/musteriler",
-    },
-    {
-      title: "Bekleyen Fatura",
-      value: data.upcomingInvoices.length.toLocaleString("tr-TR"),
-      description: "Yaklaşan ödemeler",
-      icon: Bell,
-      color: "text-purple-500",
-      bgColor: "bg-purple-500/10",
-      href: "/yonetim/faturalar?durum=upcoming",
-    },
+  const invoiceMix = [
+    { label: "Ödendi", value: invoiceStats.paid, tone: "success" as const, cls: "bg-foreground" },
+    { label: "Bekleyen", value: invoiceStats.pending, tone: "warning" as const, cls: "bg-foreground/45" },
+    { label: "Gecikmiş", value: invoiceStats.overdue, tone: "danger" as const, cls: "bg-foreground/20" },
   ];
+  const mixTotal = invoiceMix.reduce((s, x) => s + x.value, 0);
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <BlurFade delay={0}>
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Dashboard</h1>
-          <p className="text-zinc-600 dark:text-zinc-400">Hoş geldin, Admin. İşte bugünkü genel bakış.</p>
-        </div>
-      </BlurFade>
-
-      {/* Top Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, index) => (
-          <BlurFade key={stat.title} delay={0.1 + index * 0.05}>
-            <Link href={stat.href}>
-              <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-pointer">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    <div className={cn("p-3 rounded-lg", stat.bgColor)}>
-                      <stat.icon className={cn("h-6 w-6", stat.color)} />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-zinc-900 dark:text-white">{stat.value}</p>
-                      <p className="text-sm text-zinc-600 dark:text-zinc-400">{stat.title}</p>
-                      <p className="text-xs text-zinc-500">{stat.description}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+    <>
+      <PageHeader
+        title="Genel bakış"
+        description={`${formatDateLong(now)} itibarıyla satış, tahsilat ve destek durumu.`}
+        actions={
+          <>
+            <Link href="/yonetim/musteri-ekle" className={appButton({ variant: "outline" })}>
+              <UserPlus aria-hidden />
+              Müşteri ekle
             </Link>
-          </BlurFade>
-        ))}
+            <Link href="/yonetim/faturalar/olustur" className={appButton()}>
+              <FilePlus aria-hidden />
+              Fatura oluştur
+            </Link>
+          </>
+        }
+      />
+
+      <StatGrid columns={4}>
+        <StatCard
+          label="Bu ay tahsilat"
+          value={money(Number(data.monthlyRevenue))}
+          hint={`Toplam tahsilat ${money(Number(data.totalRevenue))}`}
+          href="/yonetim/faturalar/odendi"
+        />
+        <StatCard
+          label="Açık alacak"
+          value={money(Math.max(0, Number(invoiceStats.unpaidAmount)))}
+          hint={
+            invoiceStats.overdue
+              ? `${num(invoiceStats.overdue)} gecikmiş, ${num(invoiceStats.pending)} bekleyen fatura`
+              : `${num(invoiceStats.pending)} bekleyen fatura`
+          }
+          tone={invoiceStats.overdue ? "danger" : undefined}
+          href="/yonetim/faturalar/bekleyen"
+        />
+        <StatCard
+          label="Aktif hizmet"
+          value={num(serviceStats.active)}
+          hint={`${num(serviceStats.total)} hizmetin ${num(serviceStats.suspended)} tanesi askıda`}
+          tone={serviceStats.suspended ? "warning" : undefined}
+          href="/yonetim/hizmetler/aktif"
+        />
+        <StatCard
+          label="Müşteri"
+          value={num(data.totalCustomers)}
+          hint={data.newCustomersThisMonth ? `Bu ay ${num(data.newCustomersThisMonth)} yeni kayıt` : "Bu ay yeni kayıt yok"}
+          href="/yonetim/musteriler"
+        />
+      </StatGrid>
+
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <ChartCard
+          className="lg:col-span-2"
+          title="Aylık tahsilat"
+          description={`Son 6 ayda ödenen faturalar · toplam ${money(sixMonthTotal)}`}
+          data={chartData}
+          formatValue={(n) => formatTRY(n)}
+          height={200}
+          emptyText="Son 6 ayda ödenmiş fatura yok."
+          actions={
+            <Link href="/yonetim/raporlar" className={appButton({ variant: "ghost", size: "sm" })}>
+              Raporlar
+              <ArrowRight aria-hidden />
+            </Link>
+          }
+        />
+
+        <SectionCard title="Bekleyen işler" description="Müdahale gerektiren kayıtlar" flush>
+          <ul className="divide-y">
+            {todo.map((t) => (
+              <li key={t.label}>
+                <Link
+                  href={t.href}
+                  className="group flex min-h-[52px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none md:px-5"
+                >
+                  <ToneDot tone={t.value ? t.tone : "muted"} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm">{t.label}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{t.hint}</span>
+                  </span>
+                  <span className={cn("font-mono text-base tabular-nums", t.value ? "text-foreground" : "text-muted-foreground")}>
+                    {num(t.value)}
+                  </span>
+                  <ArrowRight aria-hidden className="size-4 text-muted-foreground/50 transition-colors group-hover:text-foreground" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
       </div>
 
-      {/* Middle Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {middleStats.map((stat, index) => (
-          <BlurFade key={stat.title} delay={0.5 + index * 0.05}>
-            <Link href={stat.href}>
-              <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-pointer">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    <div className={cn("p-3 rounded-lg", stat.bgColor)}>
-                      <stat.icon className={cn("h-6 w-6", stat.color)} />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-zinc-900 dark:text-white">{stat.value}</p>
-                      <p className="text-sm text-zinc-600 dark:text-zinc-400">{stat.title}</p>
-                      <p className="text-xs text-zinc-500">{stat.description}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <SectionCard
+          className="lg:col-span-2"
+          title="Son siparişler"
+          description={`Toplam ${num(orderStats.total)} sipariş, ${num(orderStats.completed)} tamamlandı`}
+          flush
+          actions={
+            <Link href="/yonetim/siparisler/tum-siparisler" className={appButton({ variant: "ghost", size: "sm" })}>
+              Tümü
+              <ArrowRight aria-hidden />
             </Link>
-          </BlurFade>
-        ))}
+          }
+        >
+          <DashboardRecentOrders orders={recentOrders} />
+        </SectionCard>
+
+        <SectionCard title="Fatura durumu" description={`${num(invoiceStats.total)} fatura`}>
+          {mixTotal > 0 ? (
+            <div className="space-y-4">
+              <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden>
+                {invoiceMix.map((m) =>
+                  m.value ? (
+                    <span key={m.label} className={cn("h-full", m.cls)} style={{ width: `${(m.value / mixTotal) * 100}%` }} />
+                  ) : null
+                )}
+              </div>
+              <dl className="space-y-2.5">
+                {invoiceMix.map((m) => (
+                  <div key={m.label} className="flex items-center gap-2 text-sm">
+                    <span aria-hidden className={cn("size-2.5 shrink-0 rounded-sm", m.cls)} />
+                    <dt className="flex-1 text-muted-foreground">{m.label}</dt>
+                    <dd className="font-mono tabular-nums">
+                      {num(m.value)}
+                      <span className="ml-2 text-xs text-muted-foreground">%{Math.round((m.value / mixTotal) * 100)}</span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="border-t border-dashed pt-3 text-xs text-muted-foreground">
+                Tahsil edilen {money(Number(invoiceStats.paidAmount))} · Kesilen {money(Number(invoiceStats.totalAmount))}
+              </p>
+            </div>
+          ) : (
+            <EmptyState compact title="Henüz fatura yok" />
+          )}
+        </SectionCard>
       </div>
 
-      {/* Recent Orders */}
-      <BlurFade delay={0.7}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-zinc-900 dark:text-white">Son Siparişler</CardTitle>
-            <Button asChild variant="ghost" size="sm" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-              <Link href="/yonetim/siparisler">
-                Tümünü Gör
-                <ArrowUpRight className="ml-1 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Müşteri</th>
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Ürün/Hizmet</th>
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Sipariş No</th>
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tarih</th>
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tutar</th>
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Durum</th>
-                    <th className="text-right pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">İncele</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.recentOrders.map((order) => {
-                    const statusConf = orderStatusConfig[order.status] ?? {
-                      label: order.status,
-                      color: "bg-zinc-500/10 text-zinc-500",
-                    };
-                    return (
-                      <tr
-                        key={order.id}
-                        className="border-b border-zinc-200 dark:border-zinc-800 last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors"
-                      >
-                        <td className="py-3">
-                          <Link
-                            href={`/yonetim/musteriler/${order.customer.id}`}
-                            className="text-sm text-zinc-900 dark:text-white hover:text-primary"
-                          >
-                            {order.customer.name} {order.customer.surname}
-                          </Link>
-                        </td>
-                        <td className="py-3">
-                          <span className="text-sm text-zinc-900 dark:text-white">{order.product.name}</span>
-                        </td>
-                        <td className="py-3">
-                          <span className="text-sm text-zinc-600 dark:text-zinc-400">{order.orderNumber}</span>
-                        </td>
-                        <td className="py-3">
-                          <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                            {new Date(order.createdAt).toLocaleDateString("tr-TR")}
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <SectionCard
+          title="Yaklaşan ödemeler"
+          description="30 gün içinde vadesi dolan veya geçmiş faturalar"
+          flush
+          actions={
+            <Link href="/yonetim/faturalar/bekleyen" className={appButton({ variant: "ghost", size: "sm" })}>
+              Tümü
+              <ArrowRight aria-hidden />
+            </Link>
+          }
+        >
+          {data.upcomingInvoices.length ? (
+            <ul className="divide-y">
+              {data.upcomingInvoices.map((inv) => {
+                const remaining = Math.max(0, Number(inv.totalAmount) - Number(inv.paidAmount));
+                const days = daysUntil(inv.dueDate, now);
+                return (
+                  <li key={inv.id}>
+                    <Link
+                      href={`/yonetim/faturalar/${inv.id}`}
+                      className="flex min-h-[56px] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none md:px-5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm">
+                          <span className="font-mono text-[13px] font-medium">{inv.invoiceNumber}</span>
+                          <span className="text-muted-foreground"> · {customerName(inv.customer)}</span>
+                        </p>
+                        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <StatusBadge kind="invoice" status={inv.status} size="sm" />
+                          <span>
+                            {formatDate(inv.dueDate)}
+                            {days !== null ? (days < 0 ? ` · ${-days} gün gecikti` : days === 0 ? " · bugün" : ` · ${days} gün kaldı`) : ""}
                           </span>
-                        </td>
-                        <td className="py-3">
-                          <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                            {formatPrice(order.totalAmount)}
-                          </span>
-                        </td>
-                        <td className="py-3">
-                          <span className={cn(
-                            "inline-flex px-2 py-0.5 rounded text-xs font-medium",
-                            statusConf.color
-                          )}>
-                            {statusConf.label}
-                          </span>
-                        </td>
-                        <td className="py-3 text-right">
-                          <Link
-                            href={`/yonetim/siparisler/${order.id}`}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                          >
-                            <Search className="h-4 w-4" />
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </p>
+                      </div>
+                      <span className="whitespace-nowrap text-sm font-medium tabular-nums">{money(remaining)}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="p-4 md:p-5">
+              <EmptyState compact icon={CalendarClock} title="Yaklaşan ödeme yok" description="30 gün içinde vadesi dolan fatura bulunmuyor." />
             </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
+          )}
+        </SectionCard>
 
-      {/* Upcoming Due Invoices */}
-      <BlurFade delay={0.8}>
-        <Card className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-zinc-900 dark:text-white">Ödeme Tarihi Yaklaşan Faturalar</CardTitle>
-              <p className="text-sm text-zinc-500 mt-1">Yaklaşan ödenmemiş faturalar</p>
+        <SectionCard
+          title="Son aktivite"
+          description="Panel ve müşteri işlemleri"
+          flush
+          actions={
+            <Link href="/yonetim/aktivite" className={appButton({ variant: "ghost", size: "sm" })}>
+              Tümü
+              <ArrowRight aria-hidden />
+            </Link>
+          }
+        >
+          {activity.data.length ? (
+            <ol className="relative px-4 py-4 md:px-5">
+              <span aria-hidden className="absolute bottom-6 left-[20px] top-6 w-px border-l border-dashed md:left-[24px]" />
+              {activity.data.map((log) => (
+                <li key={log.id} className="relative flex gap-3 py-2">
+                  <span className="relative z-[1] mt-1.5 flex size-2 shrink-0 items-center justify-center rounded-full bg-foreground ring-4 ring-card" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm">
+                      <span className="font-medium">{log.user ? customerName(log.user) : "Sistem"}</span>
+                      <span className="text-muted-foreground"> · {log.user?.role === "ADMIN" ? "yönetici" : "müşteri"}</span>
+                    </p>
+                    <p className="mt-0.5 truncate font-mono text-[12px] text-muted-foreground">
+                      {log.entity} · {log.action}
+                    </p>
+                  </div>
+                  <time dateTime={log.createdAt.toISOString()} className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                    {formatDateTime(log.createdAt)}
+                  </time>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <div className="p-4 md:p-5">
+              <EmptyState compact icon={ScrollText} title="Kayıt yok" description="Henüz aktivite kaydı bulunmuyor." />
             </div>
-            <Button asChild variant="ghost" size="sm" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-              <Link href="/yonetim/faturalar?durum=upcoming">
-                Tümünü Gör
-                <ArrowUpRight className="ml-1 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Müşteri</th>
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Fatura No</th>
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Son Ödeme</th>
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Tutar</th>
-                    <th className="text-left pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">Kalan</th>
-                    <th className="text-right pb-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">İncele</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.upcomingInvoices.map((invoice) => {
-                    const daysLeft = Math.max(
-                      0,
-                      Math.ceil(
-                        (new Date(invoice.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-                      )
-                    );
-                    return (
-                      <tr
-                        key={invoice.id}
-                        className="border-b border-zinc-200 dark:border-zinc-800 last:border-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors"
-                      >
-                        <td className="py-3">
-                          <Link
-                            href={`/yonetim/musteriler/${invoice.customer.id}`}
-                            className="text-sm text-zinc-900 dark:text-white hover:text-primary"
-                          >
-                            {invoice.customer.name} {invoice.customer.surname}
-                          </Link>
-                        </td>
-                        <td className="py-3">
-                          <span className="text-sm text-zinc-600 dark:text-zinc-400">{invoice.invoiceNumber}</span>
-                        </td>
-                        <td className="py-3">
-                          <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                            {new Date(invoice.dueDate).toLocaleDateString("tr-TR")}
-                          </span>
-                        </td>
-                        <td className="py-3">
-                          <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                            {formatPrice(invoice.totalAmount)}
-                          </span>
-                        </td>
-                        <td className="py-3">
-                          <span className={cn(
-                            "inline-flex px-2 py-0.5 rounded text-xs font-medium",
-                            daysLeft <= 2 ? "bg-red-500/10 text-red-500" :
-                            daysLeft <= 4 ? "bg-yellow-500/10 text-yellow-500" :
-                            "bg-zinc-500/10 text-zinc-500"
-                          )}>
-                            {daysLeft} gün
-                          </span>
-                        </td>
-                        <td className="py-3 text-right">
-                          <Link
-                            href={`/yonetim/faturalar/${invoice.id}`}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                          >
-                            <Search className="h-4 w-4" />
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+          )}
+        </SectionCard>
+      </div>
+    </>
   );
 }
