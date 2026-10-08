@@ -1,4 +1,4 @@
-import type { EInvoiceDraft } from "../types";
+import type { EInvoiceDocument } from "../types";
 import type { ParasutCredentials } from "./parasut-credentials";
 
 const API_BASE = "https://api.parasut.com";
@@ -131,11 +131,11 @@ async function findContactByEmail(credentials: ParasutCredentials, email: string
 
 async function createContact(
   credentials: ParasutCredentials,
-  draft: EInvoiceDraft,
+  draft: EInvoiceDocument,
   email?: string
 ) {
-  const customer = draft.ubl.customer;
-  const isCorporate = customer.taxScheme === "VKN";
+  const customer = draft.customer;
+  const isCorporate = customer.scheme === "VKN";
 
   const response = await parasutRequest<ParasutJsonApiResponse>(
     credentials,
@@ -147,13 +147,13 @@ async function createContact(
           type: "contacts",
           attributes: {
             email: email || undefined,
-            name: customer.partyName,
+            name: customer.name,
             contact_type: isCorporate ? "company" : "person",
-            tax_number: customer.taxNumber,
+            tax_number: customer.identifier,
             tax_office: customer.taxOffice,
-            city: customer.address?.city,
-            address: customer.address?.street,
-            country: customer.address?.country ?? "Türkiye",
+            city: customer.city,
+            address: customer.street,
+            country: customer.country,
             account_type: "customer",
           },
         },
@@ -168,15 +168,8 @@ async function createContact(
   return response.data;
 }
 
-async function resolveContact(credentials: ParasutCredentials, draft: EInvoiceDraft) {
-  const invoice = await import("@/lib/db").then(({ db }) =>
-    db.invoice.findUnique({
-      where: { id: draft.invoiceId },
-      select: { customer: { select: { email: true } } },
-    })
-  );
-
-  const email = invoice?.customer.email;
+async function resolveContact(credentials: ParasutCredentials, draft: EInvoiceDocument) {
+  const email = draft.notificationEmail;
   if (email) {
     const existing = await findContactByEmail(credentials, email);
     if (existing?.id) {
@@ -189,17 +182,17 @@ async function resolveContact(credentials: ParasutCredentials, draft: EInvoiceDr
 
 async function createSalesInvoice(
   credentials: ParasutCredentials,
-  draft: EInvoiceDraft,
+  draft: EInvoiceDocument,
   contactId: string
 ) {
-  const issueDate = draft.ubl.issueDate;
-  const details = draft.ubl.invoiceLines.map((line) => ({
+  const issueDate = draft.issueDate;
+  const details = draft.lines.map((line) => ({
     type: "sales_invoice_details",
     attributes: {
       quantity: line.quantity,
-      unit_price: line.unitPrice,
+      unit_price: Number(line.unitPrice),
       vat_rate: line.taxPercent,
-      description: line.description,
+      description: line.name,
     },
   }));
 
@@ -243,7 +236,7 @@ async function createSalesInvoice(
 
 async function createElectronicDocument(
   credentials: ParasutCredentials,
-  draft: EInvoiceDraft,
+  draft: EInvoiceDocument,
   salesInvoiceId: string
 ) {
   const resourceType = draft.type === "e-fatura" ? "e_invoices" : "e_archives";
@@ -281,17 +274,17 @@ async function createElectronicDocument(
 
 export async function submitParasutEInvoiceDraft(
   credentials: ParasutCredentials,
-  draft: EInvoiceDraft
+  draft: EInvoiceDocument
 ) {
   const contact = await resolveContact(credentials, draft);
   const salesInvoice = await createSalesInvoice(credentials, draft, contact.id!);
   const electronic = await createElectronicDocument(credentials, draft, salesInvoice.id!);
 
   return {
-    documentUuid: electronic.id ?? draft.ubl.uuid,
+    documentUuid: electronic.id ?? draft.uuid,
     documentNumber: salesInvoice.attributes?.invoice_no
       ? String(salesInvoice.attributes.invoice_no)
-      : draft.ubl.id,
+      : draft.invoiceNumber,
     providerResponse: {
       contactId: contact.id,
       salesInvoiceId: salesInvoice.id,
@@ -308,4 +301,15 @@ export async function checkParasutConnection(credentials: ParasutCredentials) {
     `/v4/${credentials.companyId}/contacts?page[size]=1`
   );
   return true;
+}
+
+/** Paraşüt e-invoice inbox lookup: a VKN with an inbox is an e-Fatura user. */
+export async function findParasutEInvoiceInbox(credentials: ParasutCredentials, vkn: string) {
+  const response = await parasutRequest<ParasutJsonApiResponse>(
+    credentials,
+    `/v4/${credentials.companyId}/e_invoice_inboxes?filter[vkn]=${encodeURIComponent(vkn)}`
+  );
+  const inbox = Array.isArray(response.data) ? response.data[0] : undefined;
+  const attributes = (inbox?.attributes ?? {}) as { e_invoice_address?: string; name?: string };
+  return inbox ? { alias: attributes.e_invoice_address, title: attributes.name } : null;
 }
