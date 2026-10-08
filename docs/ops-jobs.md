@@ -174,6 +174,21 @@ ilk şifre (ya da "ayrıca iletildi"), notlar → **Aktifleştir**: hizmet `ACTI
 bugünden başlar, şifre şifreli saklanır, müşteriye "hizmet aktif" gider. SLA hedefi
 `manual_provisioning_sla_hours` (24), müşteriye gösterilen süre metni
 `manual_provisioning_eta_text`. MANUAL görevler `provisioning.run` kuyruğuna girmez.
+## Alan adı yenileme (`domain.renew`)
+
+- Yenileme faturası ödendiğinde (`fulfillInvoicePayment`, aynı transaction)
+  `onDomainRenewalPaid(invoiceId)` `domain_renewals` satırını `PAID` yapar ve
+  `domain.renew` işini kuyruğa ekler (`singletonKey` = yenileme id'si).
+- İş Gri'de `renewDomainWithRegistrar` çağırır; başarılıysa `expiresAt`
+  (registrar yanıtında yeni tarih varsa o, yoksa dönem başı + yıl) ilerler,
+  satır `COMPLETED` olur, domain geçmişine ve aktivite kaydına yazılır.
+- Toplam 5 deneme (≈10, 20, 40, 80 dk). Tekrar denemeden önce registrar'daki
+  bitiş tarihi kontrol edilir; yenileme zaten yapılmışsa ikinci kez yenilenmez.
+- Son deneme de başarısızsa satır `FAILED`, iş /yonetim/isler'de "başarısız",
+  tüm yöneticilere bildirim gider. /yonetim/domainler/[id] → "Registrar'da
+  yenile" ile elle tekrar denenir.
+- Kuyruk erişilemezse satır `PAID` kalır; günlük `domain-renewals` cron'u
+  kuyruğa ekler.
 
 ## Cron kilidi ve çalışma kaydı
 

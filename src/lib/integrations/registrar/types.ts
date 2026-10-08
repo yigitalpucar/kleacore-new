@@ -17,6 +17,21 @@ export interface RenewDomainInput {
   years: number;
 }
 
+/** Registrar's view of a domain (status sync). Missing fields mean "unknown", never "empty". */
+export interface RegistrarDomainInfo {
+  domain: string;
+  expiresAt?: Date | null;
+  /** Raw registrar status, e.g. "active", "expired", "transfer_pending". */
+  status?: string | null;
+  nameservers?: string[];
+}
+
+export interface RenewDomainResultData {
+  reference?: string;
+  /** New expiry reported by the registrar, when its response carries one. */
+  expiresAt?: Date | null;
+}
+
 export interface NameserverInput {
   domain: string;
   nameservers: string[];

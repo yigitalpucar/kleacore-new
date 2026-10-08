@@ -6,3 +6,4 @@ export { sendScheduledNotifications } from "./send-notifications";
 export { suspendOverdueServices } from "./suspend-overdue-services";
 export { syncEInvoiceStatusesJob } from "./sync-einvoice-statuses";
 export type { CronJobResult } from "./types";
+export { runDomainNotices, runDomainRenewals, runDomainSync } from "./domain-lifecycle";

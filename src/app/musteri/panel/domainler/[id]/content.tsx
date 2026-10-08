@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ import {
   Loader2,
   Lock,
   Plus,
+  Receipt,
   RefreshCcw,
   Server,
   Settings,
@@ -49,6 +51,8 @@ import { formatDate, daysUntil } from "@/lib/format/date";
 import {
   addDnsRecord,
   deleteDnsRecord,
+  requestDomainRenewal,
+  setDomainAutoRenew,
   updateDnsRecord,
   updateNameservers,
 } from "@/lib/actions/customer/domains";
@@ -95,9 +99,20 @@ interface DomainDetail {
   dnsRecords: DnsRecord[];
 }
 
+interface CurrentRenewal {
+  status: string;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  invoiceStatus: string | null;
+}
+
 interface DomainDetayContentProps {
   domain: DomainDetail;
+  renewal: CurrentRenewal | null;
 }
+
+const OPEN_INVOICE_STATUSES = new Set(["DRAFT", "PENDING", "OVERDUE"]);
+const RENEWABLE_STATUSES = new Set(["ACTIVE", "EXPIRED"]);
 
 const emptyDnsForm = {
   type: "A" as DnsRecordType,
@@ -107,8 +122,12 @@ const emptyDnsForm = {
   priority: "10",
 };
 
-export function DomainDetayContent({ domain }: DomainDetayContentProps) {
+export function DomainDetayContent({ domain, renewal }: DomainDetayContentProps) {
   const router = useRouter();
+  const [autoRenew, setAutoRenew] = useState(domain.autoRenew);
+  const [autoRenewTarget, setAutoRenewTarget] = useState<boolean | null>(null);
+  const [isAutoRenewSaving, setIsAutoRenewSaving] = useState(false);
+  const [isRenewing, setIsRenewing] = useState(false);
   const [dnsRecords, setDnsRecords] = useState<DnsRecord[]>(domain.dnsRecords);
   const [nameservers, setNameservers] = useState<string[]>(domain.nameservers);
 
@@ -229,6 +248,52 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
 
   const showPriorityField = dnsForm.type === "MX" || dnsForm.type === "SRV";
 
+  const openInvoice =
+    renewal?.status === "PENDING" && renewal.invoiceId && renewal.invoiceStatus && OPEN_INVOICE_STATUSES.has(renewal.invoiceStatus)
+      ? { id: renewal.invoiceId, number: renewal.invoiceNumber }
+      : null;
+  const renewalInProgress = renewal?.status === "PAID" || renewal?.status === "PROCESSING" || renewal?.status === "FAILED";
+  const canRenew = RENEWABLE_STATUSES.has(domain.status) && !renewalInProgress;
+
+  const handleRenewNow = async () => {
+    if (isRenewing) return;
+    if (openInvoice) {
+      router.push(`/musteri/panel/faturalar/${openInvoice.id}`);
+      return;
+    }
+    setIsRenewing(true);
+    const result = await requestDomainRenewal(domain.id);
+    if (!result.success) {
+      toast.error(result.error);
+      setIsRenewing(false);
+      return;
+    }
+    toast.success(result.created ? "Yenileme faturanız oluşturuldu" : "Mevcut yenileme faturanız açılıyor");
+    router.push(`/musteri/panel/faturalar/${result.invoiceId}`);
+  };
+
+  const handleAutoRenewConfirm = async () => {
+    if (autoRenewTarget === null || isAutoRenewSaving) return;
+    setIsAutoRenewSaving(true);
+    const result = await setDomainAutoRenew(domain.id, autoRenewTarget);
+    setIsAutoRenewSaving(false);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    setAutoRenew(result.autoRenew);
+    setAutoRenewTarget(null);
+    toast.success(result.autoRenew ? "Otomatik yenileme açıldı" : "Otomatik yenileme kapatıldı");
+    router.refresh();
+  };
+
+  const renewLabel = openInvoice ? "Yenileme faturasını öde" : "Şimdi yenile";
+  const renewDisabledReason = renewalInProgress
+    ? "Yenileme ödendi, işleniyor"
+    : !RENEWABLE_STATUSES.has(domain.status)
+      ? "Bu durumda yenilenemez"
+      : null;
+
   useEffect(() => {
     setDnsRecords(domain.dnsRecords);
     setNameservers(domain.nameservers);
@@ -262,14 +327,18 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
             </span>
             <span>{domain.registrar}</span>
             {domain.privacyEnabled ? <StatusBadge tone="neutral" label="Gizlilik koruması" /> : null}
-            {domain.autoRenew ? <StatusBadge tone="neutral" label="Otomatik yenileme" /> : null}
+            {autoRenew ? <StatusBadge tone="neutral" label="Otomatik yenileme" /> : null}
           </>
         }
         actions={
-          <>
-            <UnavailableAction label="Yenile" icon={<RefreshCcw aria-hidden />} />
-            <UnavailableAction label="Yönet" icon={<Settings aria-hidden />} />
-          </>
+          canRenew ? (
+            <button type="button" className={appButton()} onClick={() => void handleRenewNow()} disabled={isRenewing}>
+              {isRenewing ? <Loader2 aria-hidden className="animate-spin" /> : openInvoice ? <Receipt aria-hidden /> : <RefreshCcw aria-hidden />}
+              {renewLabel}
+            </button>
+          ) : (
+            <UnavailableAction label="Şimdi yenile" icon={<RefreshCcw aria-hidden />} reason={renewDisabledReason ?? undefined} />
+          )
         }
       />
 
@@ -436,7 +505,18 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
                 { label: "Kayıt firması", value: domain.registrar },
                 {
                   label: "Otomatik yenileme",
-                  value: <StatusBadge tone={domain.autoRenew ? "success" : "muted"} label={domain.autoRenew ? "Açık" : "Kapalı"} />,
+                  value: (
+                    <span className="flex items-center gap-2">
+                      <Switch
+                        id="auto-renew"
+                        checked={autoRenew}
+                        onCheckedChange={(checked) => setAutoRenewTarget(checked)}
+                        disabled={isAutoRenewSaving}
+                        aria-label="Otomatik yenileme"
+                      />
+                      <span>{autoRenew ? "Açık" : "Kapalı"}</span>
+                    </span>
+                  ),
                 },
                 {
                   label: "Gizlilik koruması",
@@ -445,10 +525,40 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
               ]}
             />
             <p className="mt-3 text-xs text-muted-foreground">
-              Bu ayarları değiştirmek için destek talebi açabilirsiniz; panelden değiştirme yakında eklenecek.
+              {autoRenew
+                ? "Bitişten 30 gün önce yenileme faturası kesilir; ödendiğinde alan adınız otomatik yenilenir."
+                : "Otomatik yenileme kapalı: fatura kesilmez, yalnızca hatırlatma gönderilir."}{" "}
+              Gizlilik koruması için destek talebi açabilirsiniz.
             </p>
+            {openInvoice ? (
+              <p className="mt-3 text-xs">
+                Yenileme faturası ödeme bekliyor:{" "}
+                <Link href={`/musteri/panel/faturalar/${openInvoice.id}`} className="font-mono underline underline-offset-2">
+                  {openInvoice.number ?? "Faturayı görüntüle"}
+                </Link>
+              </p>
+            ) : renewalInProgress ? (
+              <p className="mt-3 text-xs text-muted-foreground">Yenileme ödendi; kayıt firmasında işleniyor.</p>
+            ) : null}
             <div className="mt-4 border-t pt-4">
-              <UnavailableAction label="Alan adını yenile" icon={<RefreshCcw aria-hidden />} className="w-full" />
+              {canRenew ? (
+                <button
+                  type="button"
+                  className={appButton({ variant: "outline", className: "w-full" })}
+                  onClick={() => void handleRenewNow()}
+                  disabled={isRenewing}
+                >
+                  {isRenewing ? <Loader2 aria-hidden className="animate-spin" /> : <RefreshCcw aria-hidden />}
+                  {renewLabel}
+                </button>
+              ) : (
+                <UnavailableAction
+                  label="Alan adını yenile"
+                  icon={<RefreshCcw aria-hidden />}
+                  reason={renewDisabledReason ?? undefined}
+                  className="w-full"
+                />
+              )}
             </div>
           </SectionCard>
 
@@ -561,6 +671,38 @@ export function DomainDetayContent({ domain }: DomainDetayContentProps) {
             >
               {isDnsSubmitting ? <Loader2 aria-hidden className="animate-spin" /> : null}
               {isDnsSubmitting ? "Kaydediliyor…" : editingRecordId ? "Güncelle" : "Ekle"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={autoRenewTarget !== null} onOpenChange={(open) => (!open ? setAutoRenewTarget(null) : undefined)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{autoRenewTarget ? "Otomatik yenileme açılsın mı?" : "Otomatik yenileme kapatılsın mı?"}</DialogTitle>
+            <DialogDescription>
+              {autoRenewTarget
+                ? `${domain.name} için bitişten önce yenileme faturası otomatik kesilir; fatura ödendiğinde alan adınız kayıt firmasında yenilenir.`
+                : `${domain.name} için yenileme faturası kesilmez. Süre dolmadan elle yenilemezseniz alan adınızı kaybedebilirsiniz; hatırlatma bildirimleri gönderilmeye devam eder.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <button
+              type="button"
+              className={appButton({ variant: "outline" })}
+              onClick={() => setAutoRenewTarget(null)}
+              disabled={isAutoRenewSaving}
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              className={appButton({ variant: autoRenewTarget ? "primary" : "destructive" })}
+              onClick={() => void handleAutoRenewConfirm()}
+              disabled={isAutoRenewSaving}
+            >
+              {isAutoRenewSaving ? <Loader2 aria-hidden className="animate-spin" /> : null}
+              {autoRenewTarget ? "Aç" : "Kapat"}
             </button>
           </DialogFooter>
         </DialogContent>

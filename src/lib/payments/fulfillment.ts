@@ -23,6 +23,7 @@ import { createLogger } from "@/lib/logger";
 import { max as maxMoney, toNumber, type MoneyInput } from "@/lib/money";
 
 const log = createLogger("payments.fulfillment");
+import { onDomainRenewalPaid } from "@/lib/domains/renew";
 
 interface FulfillInvoicePaymentInput {
   invoiceId: string;
@@ -422,6 +423,18 @@ export async function fulfillInvoicePayment(
   }
 
   await completeInvoicePayment(tx, invoice.id, now, input);
+
+  // Domain renewal invoices carry no order: route the payment to the
+  // registrar renew (domain.renew job, enqueued in this transaction). Local
+  // work only; a failure here must not roll back the payment — the renewal
+  // stays PENDING on a PAID invoice and the domain-renewals cron routes it.
+  const domainRenewal = await withSavepoint(tx, () => onDomainRenewalPaid(invoice.id, tx));
+  if (!domainRenewal.ok) {
+    log.error("domain renewal routing failed after payment; cron will retry", {
+      invoiceId: invoice.id,
+      error: domainRenewal.error,
+    });
+  }
 
   let renewal: RenewalResult | null = null;
   let orderCompleted = false;

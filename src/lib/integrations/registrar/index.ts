@@ -49,6 +49,18 @@ export async function renewDomainWithRegistrar(input: RenewDomainInput) {
   return provider.renewDomain(input);
 }
 
+/**
+ * Registrar domain info for the status sync. `{ ok: false, skipped: true }`
+ * when the registrar is disabled/unconfigured or doesn't support lookups.
+ */
+export async function getDomainInfoFromRegistrar(domain: string) {
+  const provider = await getRegistrarProvider();
+  if (!provider.getDomainInfo) {
+    return { ok: false, skipped: true, provider: provider.name, error: "REGISTRAR_INFO_NOT_SUPPORTED" };
+  }
+  return provider.getDomainInfo(domain);
+}
+
 export async function updateRegistrarNameservers(input: NameserverInput) {
   const provider = await getRegistrarProvider();
   return provider.updateNameservers(input);
@@ -102,7 +114,9 @@ export type {
   GriTldPricingRow,
   NameserverInput,
   RegisterDomainInput,
+  RegistrarDomainInfo,
   RenewDomainInput,
+  RenewDomainResultData,
   TransferInput,
 } from "./types";
 export type { RegistrarProvider } from "./providers/types";

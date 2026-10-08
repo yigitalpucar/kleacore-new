@@ -566,7 +566,11 @@ export function CustomerDetailContent({ customer }: { customer: CustomerDetail }
                   <li key={d.id} className="px-4 py-3 md:px-5">
                     <ListRow
                       leading={<Globe aria-hidden className="mt-0.5 size-4 text-muted-foreground" />}
-                      title={d.name}
+                      title={
+                        <Link href={`/yonetim/domainler/${d.id}`} className="hover:underline">
+                          {d.name}
+                        </Link>
+                      }
                       meta={
                         <>
                           <StatusBadge kind="domain" status={d.status} />

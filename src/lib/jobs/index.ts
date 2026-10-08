@@ -3,6 +3,7 @@ export { drainJobs, startWorker, type DrainOptions, type DrainResult, type Worke
 export { configureJobsRole, getBoss, stopBoss, JOBS_SCHEMA } from "./boss";
 export {
   jobRegistry,
+  DOMAIN_RENEW_JOB,
   EFATURA_ISSUE_JOB,
   NOTIFICATION_SEND_JOB,
   PAYMENT_SETTLED_JOB,

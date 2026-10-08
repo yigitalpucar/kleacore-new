@@ -16,6 +16,7 @@ export type StatusKind =
   | "ticket"
   | "ticketPriority"
   | "domain"
+  | "domainRenewal"
   | "ssl"
   | "payment"
   | "backup"
@@ -90,6 +91,15 @@ const domain: Map = {
   EXPIRED: { label: "Süresi doldu", tone: "danger" },
   TRANSFERRING: { label: "Transfer ediliyor", tone: "info" },
   PENDING: { label: "Beklemede", tone: "warning" },
+};
+
+const domainRenewal: Map = {
+  PENDING: { label: "Ödeme bekliyor", tone: "warning" },
+  PAID: { label: "Ödendi, sırada", tone: "info" },
+  PROCESSING: { label: "Registrar'da işleniyor", tone: "info" },
+  COMPLETED: { label: "Yenilendi", tone: "success" },
+  FAILED: { label: "Başarısız", tone: "danger" },
+  CANCELLED: { label: "İptal", tone: "muted" },
 };
 
 const ssl: Map = {
@@ -223,6 +233,7 @@ const MAPS: Record<StatusKind, Map> = {
   ticket: ticketCustomer,
   ticketPriority,
   domain,
+  domainRenewal,
   ssl,
   payment,
   backup,

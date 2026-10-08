@@ -20,7 +20,12 @@ import {
   serviceUnsuspended,
   sslExpiryNotice,
 } from "./services";
-import { adminManualProvisioning, adminTicketCustomerReply, supportTicketReplied } from "./support";
+import {
+  adminDomainRenewalFailed,
+  adminManualProvisioning,
+  adminTicketCustomerReply,
+  supportTicketReplied,
+} from "./support";
 import type { NotificationTemplate } from "./types";
 
 const definitions = [
@@ -48,6 +53,7 @@ const definitions = [
   supportTicketReplied,
   adminTicketCustomerReply,
   adminManualProvisioning,
+  adminDomainRenewalFailed,
 ] as const;
 
 export type RegisteredTemplate = (typeof definitions)[number];

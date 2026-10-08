@@ -73,7 +73,8 @@ export async function getManualEtaText() {
 
 export { slaState, type SlaState } from "./sla";
 
-async function adminRecipients() {
+/** Staff e-mail / phone for admin notifications (manual tasks, domain renewal failures). */
+export async function getAdminNotificationRecipients() {
   const email =
     (await getSettingValue("admin_notification_email")).trim() ||
     (await getSettingValue("support_email")).trim() ||
@@ -118,7 +119,7 @@ export async function openManualProvisioningTask(
   });
 
   const slaHours = await getManualSlaHours();
-  const recipients = await adminRecipients();
+  const recipients = await getAdminNotificationRecipients();
 
   if (recipients.email || recipients.phone) {
     await sendNotification({

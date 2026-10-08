@@ -114,7 +114,7 @@ function rowActions(d: DomainItem): RowAction[] {
   return [
     { label: "DNS yönetimi", href: `${P}/${d.id}`, icon: <Settings aria-hidden /> },
     { label: "WHOIS sorgula", href: `/domain/whois?domain=${encodeURIComponent(d.name)}`, icon: <ExternalLink aria-hidden /> },
-    { label: "Yenile", icon: <RefreshCcw aria-hidden />, disabledReason: "Yakında", separator: true },
+    { label: "Yenile / otomatik yenileme", href: `${P}/${d.id}`, icon: <RefreshCcw aria-hidden />, separator: true },
     { label: d.privacyEnabled ? "Gizliliği kapat" : "Gizlilik ekle", icon: <Lock aria-hidden />, disabledReason: "Yakında" },
     { label: "Transfer et", icon: <ArrowRightLeft aria-hidden />, disabledReason: "Yakında" },
   ];

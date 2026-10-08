@@ -104,3 +104,38 @@ export const adminManualProvisioning = defineTemplate({
   }),
   sms: (data) => `KLEACORE: Manuel kurulum bekliyor — ${data.productName} (${data.orderNumber}).`,
 });
+
+export const adminDomainRenewalFailed = defineTemplate({
+  key: "admin.domain-renewal-failed",
+  label: "Alan adı yenilemesi başarısız (yönetim)",
+  group: "Yönetim",
+  audience: "admin",
+  schema: templateSchema({
+    domainId: z.string(),
+    domain: z.string(),
+    renewalId: z.string(),
+    invoiceId: z.string().nullable().optional(),
+    error: z.string(),
+  }),
+  sample: {
+    domainId: "ornek",
+    domain: "ornek.com",
+    renewalId: "ornek",
+    invoiceId: "ornek",
+    error: "REGISTRAR_RENEW_FAILED",
+  },
+  render: (data, { baseUrl }) => ({
+    subject: `Alan adı yenilemesi başarısız: ${data.domain}`,
+    heading: "Alan adı yenilemesi başarısız",
+    greetingName: null,
+    intro: [
+      `${data.domain} registrar'da yenilenemedi. Ödeme alındı; alan adının elle yenilenmesi gerekiyor.`,
+    ],
+    details: [
+      { label: "Alan adı", value: data.domain, mono: true },
+      { label: "Hata", value: data.error },
+    ],
+    action: { label: "Alan adını aç", url: `${baseUrl}/yonetim/domainler/${data.domainId}` },
+  }),
+  sms: (data) => `KLEACORE: ${data.domain} registrar yenilemesi başarısız, elle yenileme gerekli.`,
+});

@@ -33,6 +33,32 @@ export const provisioningRunJob = defineJob({
   },
 });
 
+export const DOMAIN_RENEW_JOB = "domain.renew";
+
+/**
+ * Registrar renew of a paid DomainRenewal row (src/lib/domains/renew.ts),
+ * queued in the payment transaction by onDomainRenewalPaid.
+ * Exclusive per renewal id. 5 attempts in total, backoff ≈ 10m, 20m, 40m, 80m
+ * (capped at 6h); the final failure marks the row FAILED and notifies admins.
+ */
+export const domainRenewJob = defineJob({
+  name: DOMAIN_RENEW_JOB,
+  label: "Alan adı yenileme (registrar)",
+  schema: z.object({ renewalId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 4,
+    retryDelay: 10 * 60,
+    retryBackoff: true,
+    retryDelayMax: 6 * 60 * 60,
+    expireInSeconds: 5 * 60,
+  },
+  handler: async ({ renewalId }, context) => {
+    const { runDomainRenewal } = await import("@/lib/domains/renew");
+    return runDomainRenewal(renewalId, context);
+  },
+});
+
 export const EFATURA_ISSUE_JOB = "efatura.issue";
 
 /**
@@ -120,7 +146,13 @@ export const notificationSendJob = defineJob({
   },
 });
 
-const definitions = [provisioningRunJob, efaturaIssueJob, paymentSettledJob, notificationSendJob] as const;
+const definitions = [
+  provisioningRunJob,
+  domainRenewJob,
+  efaturaIssueJob,
+  paymentSettledJob,
+  notificationSendJob,
+] as const;
 
 export type RegisteredJob = (typeof definitions)[number];
 export type JobName = RegisteredJob["name"];

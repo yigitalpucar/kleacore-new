@@ -5,6 +5,8 @@ import type {
   GriTldPricingRow,
   NameserverInput,
   RegisterDomainInput,
+  RegistrarDomainInfo,
+  RenewDomainResultData,
   RenewDomainInput,
   TransferInput,
 } from "../types";
@@ -14,7 +16,9 @@ export interface RegistrarProvider {
   registerDomain(
     input: RegisterDomainInput
   ): Promise<IntegrationResult<{ reference?: string }>>;
-  renewDomain(input: RenewDomainInput): Promise<IntegrationResult<{ reference?: string }>>;
+  renewDomain(input: RenewDomainInput): Promise<IntegrationResult<RenewDomainResultData>>;
+  /** Registrar status/expiry/nameservers for the daily sync (optional). */
+  getDomainInfo?(domain: string): Promise<IntegrationResult<RegistrarDomainInfo>>;
   updateNameservers(
     input: NameserverInput
   ): Promise<IntegrationResult<{ reference?: string }>>;
