@@ -1,5 +1,7 @@
 "use server";
 
+import { signIn } from "@/lib/auth";
+import { issueLoginToken } from "@/lib/auth/login-token";
 import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
 import {
@@ -73,7 +75,7 @@ export async function changePassword(formData: FormData) {
 
     const user = await db.user.findUnique({
       where: { id: session.user.id },
-      select: { password: true },
+      select: { id: true, email: true, password: true },
     });
 
     if (!user) {
@@ -90,10 +92,23 @@ export async function changePassword(formData: FormData) {
 
     const hashedPassword = await hash(parsed.data.newPassword, 12);
 
+    // Bumping sessionVersion revokes every other session of this user.
     await db.user.update({
       where: { id: session.user.id },
-      data: { password: hashedPassword },
+      data: { password: hashedPassword, sessionVersion: { increment: 1 } },
     });
+
+    // Re-issue the current session so the user who just changed the password
+    // stays signed in on this device.
+    try {
+      await signIn("credentials", {
+        email: user.email,
+        loginToken: await issueLoginToken(user),
+        redirect: false,
+      });
+    } catch (error) {
+      console.error("[Profile] session re-issue after password change failed:", error);
+    }
 
     return { success: true };
   } catch {

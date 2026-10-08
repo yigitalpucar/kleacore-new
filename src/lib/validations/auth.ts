@@ -7,17 +7,31 @@ export const passwordSchema = z
   .regex(/[A-Z]/, "Şifre en az bir büyük harf içermeli")
   .regex(/[0-9]/, "Şifre en az bir rakam içermeli");
 
+export const emailSchema = z
+  .string({ required_error: "E-posta gerekli", invalid_type_error: "Geçerli bir e-posta adresi girin" })
+  .trim()
+  .toLowerCase()
+  .max(254, "E-posta adresi çok uzun")
+  .email("Geçerli bir e-posta adresi girin");
+
+const personNameSchema = (label: string) =>
+  z
+    .string({ required_error: `${label} gerekli`, invalid_type_error: `${label} geçersiz` })
+    .trim()
+    .min(2, `${label} en az 2 karakter olmalı`)
+    .max(80, `${label} en fazla 80 karakter olabilir`);
+
 export const loginSchema = z.object({
-  email: z.string().email("Geçerli bir e-posta adresi girin"),
+  email: emailSchema,
   password: z.string().min(1, "Şifre gerekli"),
 });
 
 export const registerSchema = z
   .object({
-    name: z.string().min(2, "Ad en az 2 karakter olmalı"),
-    surname: z.string().min(2, "Soyad en az 2 karakter olmalı"),
-    email: z.string().email("Geçerli bir e-posta adresi girin"),
-    phone: z.string().optional(),
+    name: personNameSchema("Ad"),
+    surname: personNameSchema("Soyad"),
+    email: emailSchema,
+    phone: z.string().trim().max(32, "Telefon numarası çok uzun").optional(),
     password: passwordSchema,
     confirmPassword: z.string(),
   })
@@ -26,8 +40,16 @@ export const registerSchema = z
     path: ["confirmPassword"],
   });
 
+/** JSON body of POST /api/auth/register. */
+export const registerApiSchema = z.object({
+  name: personNameSchema("Ad"),
+  surname: personNameSchema("Soyad"),
+  email: emailSchema,
+  password: passwordSchema,
+});
+
 export const passwordResetRequestSchema = z.object({
-  email: z.string().email("Geçerli bir e-posta adresi girin"),
+  email: emailSchema,
 });
 
 export const passwordResetSchema = z

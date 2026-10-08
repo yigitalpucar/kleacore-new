@@ -300,6 +300,13 @@ model User {
   twoFactorEnabled    Boolean @default(false)
   twoFactorSecret     String?
   twoFactorBackupCodes String?
+  // Last accepted TOTP time step; codes at or before it are rejected (replay protection)
+  twoFactorLastUsedStep Int?
+  // sha256 of the one-time nonce inside the short-lived "verified" login token
+  loginTokenNonceHash  String?
+
+  // Bumped on password change/reset; JWTs carrying an older value are revoked
+  sessionVersion Int @default(0)
 
   // Balance
   balance       Float    @default(0)

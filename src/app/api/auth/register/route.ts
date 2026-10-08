@@ -4,32 +4,28 @@ import {
   AFFILIATE_REF_COOKIE,
   createCustomerUser,
 } from "@/lib/affiliate";
+import { findUserByEmail } from "@/lib/auth/email";
 import { db } from "@/lib/db";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
-import { passwordSchema } from "@/lib/validations/auth";
+import { registerApiSchema } from "@/lib/validations/auth";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { name, surname, email, password } = body;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Geçersiz istek gövdesi" }, { status: 400 });
+  }
 
-  if (!name || !surname || !email || !password) {
+  const parsed = registerApiSchema.safeParse(body);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "Tüm alanları doldurun" },
+      { error: parsed.error.errors[0]?.message ?? "Tüm alanları doldurun" },
       { status: 400 }
     );
   }
 
-  const passwordResult = passwordSchema.safeParse(password);
-  if (!passwordResult.success) {
-    return NextResponse.json(
-      {
-        error:
-          passwordResult.error.errors[0]?.message ??
-          "Şifre güvenlik gereksinimlerini karşılamıyor",
-      },
-      { status: 400 }
-    );
-  }
+  const { name, surname, email, password } = parsed.data;
 
   const limit = await checkRateLimit({
     key: `api-register:${normalizeRateLimitKey(email)}`,
@@ -43,7 +39,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existing = await db.user.findUnique({ where: { email } });
+  const existing = await findUserByEmail(email);
   if (existing) {
     return NextResponse.json(
       { error: "Bu e-posta adresi zaten kayıtlı" },
