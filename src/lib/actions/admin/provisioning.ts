@@ -5,6 +5,9 @@ import { manualRetryProvisioningJob } from "@/lib/provisioning/retry-queue";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("admin.provisioning");
 
 const errorMessages: Record<string, string> = {
   JOB_NOT_FOUND: "Provisioning işi bulunamadı",
@@ -57,7 +60,8 @@ export async function retryProvisioningJobAction(jobId: string) {
     }
 
     return { success: true };
-  } catch {
+  } catch (error) {
+    log.error("manual provisioning retry failed", { error });
     return { success: false, error: "Provisioning yeniden denenirken bir hata oluştu" };
   }
 }

@@ -6,6 +6,9 @@ import { generateInvoiceNumber } from "@/lib/utils/number-generators";
 import { provisionCompletedOrder } from "@/lib/provisioning/internal";
 import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("admin.orders");
 
 export async function approveOrder(id: string) {
   const session = await requireAdmin();
@@ -91,7 +94,8 @@ export async function approveOrder(id: string) {
       success: true,
       data: { orderId: updatedOrder.id, invoiceId: invoice.id },
     };
-  } catch {
+  } catch (error) {
+    log.error("approve order failed", { error });
     return { success: false, error: "Sipariş onaylanırken bir hata oluştu" };
   }
 }
@@ -130,7 +134,8 @@ export async function rejectOrder(id: string, reason: string) {
 
     revalidatePath("/yonetim/siparisler");
     return { success: true };
-  } catch {
+  } catch (error) {
+    log.error("reject order failed", { error });
     return { success: false, error: "Sipariş reddedilirken bir hata oluştu" };
   }
 }
@@ -169,7 +174,8 @@ export async function cancelOrder(id: string, reason: string) {
 
     revalidatePath("/yonetim/siparisler");
     return { success: true };
-  } catch {
+  } catch (error) {
+    log.error("cancel order failed", { error });
     return { success: false, error: "Sipariş iptal edilirken bir hata oluştu" };
   }
 }
@@ -218,7 +224,8 @@ export async function completeOrder(id: string) {
     revalidatePath("/musteri/panel/hizmetlerim");
     revalidatePath("/musteri/panel/domainler");
     return { success: true };
-  } catch {
+  } catch (error) {
+    log.error("complete order failed", { error });
     return { success: false, error: "Sipariş tamamlanırken bir hata oluştu" };
   }
 }

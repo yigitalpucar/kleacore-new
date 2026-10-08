@@ -14,6 +14,9 @@ import {
 import { fulfillInvoicePayment, notifyInvoicePaymentReceived } from "@/lib/payments/fulfillment";
 import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("admin.invoices");
 
 interface InvoiceItemInput {
   description: string;
@@ -95,7 +98,8 @@ export async function createInvoice(data: InvoiceInput) {
     revalidatePath("/musteri/panel/faturalar");
     revalidatePath("/musteri/panel/e-posta");
     return { success: true, data: { id: invoice.id, invoiceNumber } };
-  } catch {
+  } catch (error) {
+    log.error("create invoice failed", { error });
     return { success: false, error: "Fatura oluşturulurken bir hata oluştu" };
   }
 }
@@ -161,7 +165,8 @@ export async function markPaid(id: string) {
 
   try {
     return await fulfillInvoiceAsAdmin(id, session.user.id, "Admin ödeme onayı");
-  } catch {
+  } catch (error) {
+    log.error("mark invoice paid failed", { error });
     return { success: false, error: "Fatura ödenirken bir hata oluştu" };
   }
 }
@@ -198,7 +203,8 @@ export async function approveBankTransfer(id: string) {
       session.user.id,
       "Banka transferi admin onayı"
     );
-  } catch {
+  } catch (error) {
+    log.error("approve bank transfer failed", { error });
     return { success: false, error: "Banka transferi onaylanırken bir hata oluştu" };
   }
 }
@@ -227,7 +233,8 @@ export async function cancelInvoice(id: string) {
 
     revalidatePath("/yonetim/faturalar");
     return { success: true };
-  } catch {
+  } catch (error) {
+    log.error("cancel invoice failed", { error });
     return { success: false, error: "Fatura iptal edilirken bir hata oluştu" };
   }
 }
@@ -299,7 +306,8 @@ export async function sendInvoiceReminder(id: string) {
     revalidatePath("/musteri/panel/e-posta");
 
     return { success: true, message: "Hatırlatma gönderildi" };
-  } catch {
+  } catch (error) {
+    log.error("send invoice reminder failed", { error });
     return { success: false, error: "Hatırlatma gönderilirken bir hata oluştu" };
   }
 }
@@ -373,7 +381,8 @@ export async function sendInvoiceReceipt(id: string) {
     revalidatePath("/musteri/panel/e-posta");
 
     return { success: true, message: "Makbuz gönderildi" };
-  } catch {
+  } catch (error) {
+    log.error("send receipt failed", { error });
     return { success: false, error: "Makbuz gönderilirken bir hata oluştu" };
   }
 }

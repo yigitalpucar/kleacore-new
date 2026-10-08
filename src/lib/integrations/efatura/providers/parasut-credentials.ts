@@ -1,3 +1,7 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("efatura.parasut");
+
 export interface ParasutCredentials {
   clientId: string;
   clientSecret: string;
@@ -32,6 +36,8 @@ export function parseParasutCredentials(raw: string): ParasutCredentials | null 
       }
       return null;
     } catch {
+      // Don't log the parse error: its message quotes the (secret) input.
+      log.error("stored Paraşüt credentials are not valid JSON; e-invoices cannot be sent");
       return null;
     }
   }
