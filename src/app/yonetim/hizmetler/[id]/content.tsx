@@ -299,8 +299,13 @@ export function ServiceDetailContent({ service, moduleView, proxmoxView }: Servi
                 />
                 {hasUsage ? (
                   <div className="grid gap-4 sm:grid-cols-2">
-                    {(service.diskLimit ?? 0) > 0 ? (
-                      <UsageMeter label="Disk" used={service.diskUsed ?? 0} limit={service.diskLimit} unit="GB" />
+                    {(service.diskLimit ?? 0) > 0 && service.diskUsed != null ? (
+                      <UsageMeter label="Disk" used={service.diskUsed} limit={service.diskLimit} unit="GB" />
+                    ) : (service.diskLimit ?? 0) > 0 ? (
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Disk boyutu </span>
+                        <span className="font-medium tabular-nums">{service.diskLimit} GB</span>
+                      </p>
                     ) : null}
                     {(service.bandwidthLimit ?? 0) > 0 ? (
                       <UsageMeter label="Trafik" used={service.bandwidthUsed ?? 0} limit={service.bandwidthLimit} unit="GB" />

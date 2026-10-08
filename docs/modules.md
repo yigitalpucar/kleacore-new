@@ -193,7 +193,7 @@ return { ok: true, data: { remoteId: String(vmid), ipAddress: ip.address } };
 
 ## 7. Paralel ajanlar için notlar
 
-- **Proxmox** (`server/proxmox`): `productCategories: ["vds","vps","server","cloud"]`, `productOptionsSchema` (templateVmid, cores, memoryMB, diskGB, storage, bridge, ipPoolId?), yetenekler `power`, `console`, `reinstall`, `usage`, `ipam`, `listAccounts`. IP için §6. Gerçek PVE'de hiçbir şey oluşturmayın; fixture kullanın.
+- **Proxmox** (`server/proxmox`) — **yapıldı**, ayrıntı: [`docs/modules/proxmox.md`](modules/proxmox.md). Sözleşmeye eklenenler: `ServerAccountContext.state` (`Service.moduleData`), `ServerModule.abandonProvisioning?`, `ServerUsage.powerState?`. İlk plan: `productCategories: ["vds","vps","server","cloud"]`, `productOptionsSchema` (templateVmid, cores, memoryMB, diskGB, storage, bridge, ipPoolId?), yetenekler `power`, `console`, `reinstall`, `usage`, `ipam`, `listAccounts`. IP için §6. Gerçek PVE'de hiçbir şey oluşturmayın; fixture kullanın.
 - **Cloudflare DNS** (`dns/cloudflare`): `DnsModule` + `describeDnsModuleBehaviour` (durum tutan fetch sahtesiyle). Hizmet/alan adı tarafında çağırmak için `listActiveInstances("dns")` + `createContract(instance, "dns")`.
 - **cPanel SSO / kullanım** (`server/cpanel-whm`): `getSsoUrl` (+ `sso`) ve `getUsage` (+ `usage`) ekleyin; manifest'in `capabilities` listesini güncellemezseniz sözleşme testi kırılır. Legacy hizmetler için önce hizmeti örneğe bağlamak gerekir (§4).
 - **İçe aktarma**: `listAccounts` (server) / `listDomains` (registrar) ekleyin; içe aktarılan hizmete `moduleInstanceId` + `remoteId` yazın.
