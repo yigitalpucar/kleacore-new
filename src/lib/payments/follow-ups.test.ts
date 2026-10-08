@@ -2,16 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   issueEInvoiceForInvoice: vi.fn(),
-  isJobQueueReady: vi.fn(),
-  enqueue: vi.fn(),
 }));
 
 vi.mock("@/lib/integrations/efatura", () => ({ issueEInvoiceForInvoice: mocks.issueEInvoiceForInvoice }));
-vi.mock("@/lib/provisioning/queue", () => ({ isJobQueueReady: mocks.isJobQueueReady }));
-vi.mock("@/lib/jobs/enqueue", () => ({ enqueue: mocks.enqueue }));
 
 import type { Prisma } from "@prisma/client";
-import { queuePaymentFollowUps, runEInvoiceIssueJob, withSavepoint } from "./follow-ups";
+import { runEInvoiceIssueJob, withSavepoint } from "./follow-ups";
 
 function fakeTx() {
   const sql: string[] = [];
@@ -30,34 +26,6 @@ describe("withSavepoint", () => {
     expect(result).toMatchObject({ ok: false });
     expect(sql[0]).toMatch(/^SAVEPOINT kc_sp_\d+$/);
     expect(sql[1]).toMatch(/^ROLLBACK TO SAVEPOINT kc_sp_\d+$/);
-  });
-});
-
-describe("queuePaymentFollowUps", () => {
-  beforeEach(() => Object.values(mocks).forEach((mock) => mock.mockReset()));
-
-  it("enqueues e-invoice and payment.settled with the payment transaction, once per invoice", async () => {
-    const { tx } = fakeTx();
-    mocks.isJobQueueReady.mockResolvedValue(true);
-    mocks.enqueue.mockResolvedValue({ id: "j", deduplicated: false });
-
-    await expect(queuePaymentFollowUps(tx, { invoiceId: "inv-1", userId: "u", events: [] })).resolves.toBe(true);
-    expect(mocks.enqueue).toHaveBeenCalledWith("efatura.issue", { invoiceId: "inv-1" }, { singletonKey: "inv-1", tx });
-    expect(mocks.enqueue).toHaveBeenCalledWith(
-      "payment.settled",
-      { invoiceId: "inv-1", userId: "u", events: [] },
-      { singletonKey: "inv-1", tx }
-    );
-  });
-
-  it("never fails the payment when the queue is down", async () => {
-    const { tx } = fakeTx();
-    mocks.isJobQueueReady.mockResolvedValue(true);
-    mocks.enqueue.mockRejectedValue(new Error("pgboss down"));
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
-    await expect(queuePaymentFollowUps(tx, { invoiceId: "inv-1", userId: "u", events: [] })).resolves.toBe(false);
-    error.mockRestore();
   });
 });
 

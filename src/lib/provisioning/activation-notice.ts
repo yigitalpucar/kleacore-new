@@ -1,8 +1,12 @@
 import type { Prisma, Product, Service } from "@prisma/client";
 import { getCpanelWhmConfig } from "@/lib/integrations/provisioning/config";
 import { isCpanelCategory, isVpsVdsCategory } from "@/lib/integrations/provisioning/categories";
+import { db } from "@/lib/db";
+import { emitEvent } from "@/lib/events/emit";
 import { getSettingValue } from "@/lib/integrations/settings";
-import { sendNotification } from "@/lib/notifications/send";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("provisioning.activation-notice");
 
 export const DEFAULT_NAMESERVERS = ["ns1.kleacore.com", "ns2.kleacore.com"];
 
@@ -27,10 +31,12 @@ function serviceLabel(service: Pick<Service, "label" | "domain">, product: Pick<
 }
 
 /**
- * Queues "hizmet aktif + giriş bilgileri" (once per service). Hosting:
+ * Emits service.activated (outbox), whose notifications subscriber sends
+ * "hizmet aktif + giriş bilgileri" (once per service). Hosting:
  * cPanel user + panel URL + nameservers. Server: IP, hostname, user and the
  * initial password when the admin chose to include it (encrypted in the
- * queue/log, redacted in the customer inbox copy).
+ * outbox payload and the queue/log, redacted in the customer inbox copy).
+ * With `tx` the event commits with the activation; without, it never throws.
  */
 export async function queueServiceActivatedNotice(
   tx: Prisma.TransactionClient | undefined,
@@ -46,24 +52,29 @@ export async function queueServiceActivatedNotice(
   const { service, kind } = input;
   const panelUrl = input.panelUrl ?? (kind === "hosting" ? await hostingPanelUrl() : undefined);
 
-  return sendNotification({
-    userId: service.customerId,
-    template: "service.activated",
-    data: {
-      serviceId: service.id,
-      serviceLabel: serviceLabel(service, service.product),
-      kind,
-      domain: service.domain ?? undefined,
-      username: service.username ?? undefined,
-      panelUrl,
-      nameservers: kind === "hosting" ? DEFAULT_NAMESERVERS : undefined,
-      ipAddress: kind === "server" ? (service.ipAddress ?? undefined) : undefined,
-      hostname: kind === "server" ? (service.serverName ?? undefined) : undefined,
-      password: input.password,
-      passwordDelivery: input.passwordDelivery ?? (kind === "hosting" ? "panel" : undefined),
-      notes: input.notes,
-    },
-    dedupeKey: `service.activated:${service.id}`,
-    tx,
-  });
+  const payload = {
+    serviceId: service.id,
+    customerId: service.customerId,
+    serviceLabel: serviceLabel(service, service.product),
+    kind,
+    domain: service.domain ?? undefined,
+    username: service.username ?? undefined,
+    panelUrl,
+    nameservers: kind === "hosting" ? DEFAULT_NAMESERVERS : undefined,
+    ipAddress: kind === "server" ? (service.ipAddress ?? undefined) : undefined,
+    hostname: kind === "server" ? (service.serverName ?? undefined) : undefined,
+    password: input.password,
+    passwordDelivery: input.passwordDelivery ?? (kind === "hosting" ? ("panel" as const) : undefined),
+    notes: input.notes,
+  };
+
+  if (tx) {
+    return emitEvent(tx, "service.activated", payload);
+  }
+  try {
+    return await emitEvent(db, "service.activated", payload);
+  } catch (error) {
+    log.error("service.activated could not be recorded", { serviceId: service.id, error });
+    return null;
+  }
 }

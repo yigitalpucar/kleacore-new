@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   applyAffiliateCommission: vi.fn(),
-  queuePaymentFollowUps: vi.fn(),
-  runPaymentFollowUpsWithoutQueue: vi.fn(),
+  emitEvent: vi.fn(),
   applyServiceRenewalFromOrder: vi.fn(),
   applyPlanChangeFromOrder: vi.fn(),
   prepareOrderProvisioning: vi.fn(),
@@ -14,11 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/affiliate", () => ({ applyAffiliateCommission: mocks.applyAffiliateCommission }));
 vi.mock("@/lib/notifications/send", () => ({ sendNotification: vi.fn() }));
-vi.mock("@/lib/payments/follow-ups", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/payments/follow-ups")>()),
-  queuePaymentFollowUps: mocks.queuePaymentFollowUps,
-  runPaymentFollowUpsWithoutQueue: mocks.runPaymentFollowUpsWithoutQueue,
-}));
+vi.mock("@/lib/events/emit", () => ({ emitEvent: mocks.emitEvent }));
 vi.mock("@/lib/payments/renewal-fulfillment", () => ({
   applyServiceRenewalFromOrder: mocks.applyServiceRenewalFromOrder,
 }));
@@ -204,7 +199,7 @@ function payment(overrides: Partial<FakePayment> = {}): FakePayment {
 
 beforeEach(() => {
   Object.values(mocks).forEach((mock) => mock.mockReset());
-  mocks.queuePaymentFollowUps.mockResolvedValue(true);
+  mocks.emitEvent.mockImplementation(async (_tx, type) => ({ id: `evt-${type}`, type, queued: true }));
   mocks.applyServiceRenewalFromOrder.mockResolvedValue({ applied: false });
   mocks.applyPlanChangeFromOrder.mockResolvedValue({ applied: false });
   mocks.prepareOrderProvisioning.mockResolvedValue({
@@ -228,7 +223,8 @@ describe("fulfillInvoicePayment idempotency", () => {
     expect(results.filter((result) => result.fulfilled)).toHaveLength(1);
     expect(mocks.prepareOrderProvisioning).toHaveBeenCalledTimes(1);
     expect(mocks.applyAffiliateCommission).toHaveBeenCalledTimes(1);
-    expect(mocks.queuePaymentFollowUps).toHaveBeenCalledTimes(1);
+    // invoice.paid + order.paid, written once (the winning callback only).
+    expect(mocks.emitEvent.mock.calls.map((call) => call[1])).toEqual(["invoice.paid", "order.paid"]);
     // Domain renewal routing runs once, inside the paying transaction.
     expect(mocks.onDomainRenewalPaid).toHaveBeenCalledTimes(1);
     expect(mocks.onDomainRenewalPaid).toHaveBeenCalledWith("inv-1", tx);
@@ -286,7 +282,7 @@ describe("fulfillInvoicePayment idempotency", () => {
       expect(state.invoices.get("inv-1")?.status).toBe(status);
     }
     expect(mocks.prepareOrderProvisioning).not.toHaveBeenCalled();
-    expect(mocks.queuePaymentFollowUps).not.toHaveBeenCalled();
+    expect(mocks.emitEvent).not.toHaveBeenCalled();
   });
 
   it("records a second, really charged session on a paid invoice as a duplicate instead of re-fulfilling", async () => {
@@ -319,7 +315,7 @@ describe("fulfillInvoicePayment idempotency", () => {
       paymentReference: "sess-1",
     });
 
-    expect(result).toMatchObject({ fulfilled: true, followUpsQueued: true });
+    expect(result).toMatchObject({ fulfilled: true, eventsRecorded: true });
     expect(result.fulfilled && result.fulfilmentError).toMatch(/^FULFILMENT_ERROR: DOMAIN_REQUIRED/);
     expect(state.invoices.get("inv-1")).toMatchObject({ status: "PAID", paidAmount: 120 });
     expect(state.payments[0]).toMatchObject({ status: "COMPLETED", transactionId: "sess-1" });
@@ -330,25 +326,39 @@ describe("fulfillInvoicePayment idempotency", () => {
     ]);
     expect(state.order.status).toBe("PROCESSING");
     expect(mocks.applyAffiliateCommission).toHaveBeenCalledTimes(1);
-    expect(mocks.queuePaymentFollowUps).toHaveBeenCalledTimes(1);
+    // Parked order: no order.paid, but the payment itself is announced.
+    expect(mocks.emitEvent.mock.calls.map((call) => call[1])).toEqual(["invoice.paid"]);
   });
 
-  it("queues e-invoice, events and notification instead of running them in the transaction", async () => {
+  it("writes the payment events to the outbox in the payment transaction", async () => {
     const { tx } = createStore([invoice()], [payment()]);
 
     await fulfillInvoicePayment(tx, { invoiceId: "inv-1", performedBy: "cus-1", paymentReference: "sess-1" });
 
-    expect(mocks.queuePaymentFollowUps).toHaveBeenCalledWith(
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
       tx,
-      expect.objectContaining({
-        invoiceId: "inv-1",
-        userId: "cus-1",
-        events: [
-          expect.objectContaining({ type: "payment.completed" }),
-          expect.objectContaining({ type: "order.paid" }),
-        ],
-      })
+      "invoice.paid",
+      expect.objectContaining({ invoiceId: "inv-1", customerId: "cus-1", paymentReference: "sess-1", context: "order" }),
+      { actorId: "cus-1" }
     );
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      tx,
+      "order.paid",
+      expect.objectContaining({ orderId: "ord-1", invoiceId: "inv-1" }),
+      { actorId: "cus-1" }
+    );
+  });
+
+  it("never fails the payment when the events can't be written; they are retried after commit", async () => {
+    const { state, tx } = createStore([invoice()], [payment()]);
+    mocks.emitEvent.mockRejectedValueOnce(new Error("outbox insert failed"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const result = await fulfillInvoicePayment(tx, { invoiceId: "inv-1", performedBy: "cus-1", paymentReference: "sess-1" });
+
+    expect(result).toMatchObject({ fulfilled: true, eventsRecorded: false });
+    expect(state.invoices.get("inv-1")?.status).toBe("PAID");
+    expect(result.fulfilled && result.events.map((event) => event.type)).toEqual(["invoice.paid", "order.paid"]);
   });
 
   it("does not lift a suspension when a plan change is paid", async () => {

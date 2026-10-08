@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
+vi.mock("@/lib/events/emit", () => ({ emitEvent: vi.fn().mockResolvedValue({ id: "evt-1", queued: true }) }));
 vi.mock("@/lib/affiliate", () => ({ createCustomerUser: mocks.createCustomerUser }));
 vi.mock("@/lib/auth/email", () => ({ findUserByEmail: mocks.findUserByEmail }));
 vi.mock("@/lib/auth/email-verification", () => ({ sendVerificationEmail: mocks.sendVerificationEmail }));

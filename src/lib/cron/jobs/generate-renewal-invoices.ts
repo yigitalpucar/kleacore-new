@@ -1,5 +1,6 @@
 import type { BillingPeriod } from "@prisma/client";
 import { db } from "@/lib/db";
+import { emitEvent } from "@/lib/events/emit";
 import {
   generateInvoiceNumber,
   generateOrderNumber,
@@ -98,7 +99,7 @@ export async function generateRenewalInvoices(): Promise<CronJobResult> {
         },
       });
 
-      return tx.invoice.create({
+      const created = await tx.invoice.create({
         data: {
           invoiceNumber: await generateInvoiceNumber(),
           customerId: service.customerId,
@@ -117,8 +118,18 @@ export async function generateRenewalInvoices(): Promise<CronJobResult> {
             }),
           },
         },
-        select: { id: true },
+        select: { id: true, invoiceNumber: true, totalAmount: true, dueDate: true },
       });
+      // "Fatura oluştu" via the outbox; same dedupe key as the hourly sweep.
+      await emitEvent(tx, "invoice.created", {
+        invoiceId: created.id,
+        invoiceNumber: created.invoiceNumber,
+        customerId: service.customerId,
+        totalAmount: created.totalAmount,
+        dueDate: created.dueDate,
+        source: "renewal",
+      });
+      return created;
     });
 
     createdInvoiceIds.push(invoice.id);

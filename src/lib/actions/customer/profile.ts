@@ -10,7 +10,7 @@ import {
 } from "@/lib/validations/customer";
 import { compare, hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import { sendNotification } from "@/lib/notifications/send";
+import { emitEventAfterCommit } from "@/lib/events/emit";
 
 export async function updateProfile(formData: FormData) {
   const session = await requireCustomer();
@@ -99,11 +99,12 @@ export async function changePassword(formData: FormData) {
       data: { password: hashedPassword, sessionVersion: { increment: 1 } },
     });
 
-    await sendNotification({
-      userId: session.user.id,
-      template: "auth.password-changed",
-      data: { changedAt: new Date(), method: "profile" },
-    });
+    // "Şifreniz değiştirildi" via the outbox (notifications subscriber).
+    await emitEventAfterCommit(
+      "user.password_changed",
+      { userId: session.user.id, changedAt: new Date(), method: "profile" },
+      { actorId: session.user.id }
+    );
 
     // Re-issue the current session so the user who just changed the password
     // stays signed in on this device.

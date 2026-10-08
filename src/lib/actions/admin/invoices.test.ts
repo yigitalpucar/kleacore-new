@@ -4,14 +4,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   userFindUnique: vi.fn(),
   invoiceCreate: vi.fn(),
+  emitEvent: vi.fn(),
 }));
 
-vi.mock("@/lib/db", () => ({
-  db: {
+vi.mock("@/lib/db", () => {
+  const db = {
     user: { findUnique: mocks.userFindUnique },
     invoice: { create: mocks.invoiceCreate },
-  },
-}));
+    $transaction: (fn: (tx: unknown) => unknown) => fn(db),
+  };
+  return { db };
+});
+vi.mock("@/lib/events/emit", () => ({ emitEvent: mocks.emitEvent }));
 vi.mock("@/lib/utils/auth-helpers", () => ({
   requireAdmin: vi.fn().mockResolvedValue({ user: { id: "admin-1" } }),
 }));
@@ -83,6 +87,14 @@ describe("createInvoice (admin fatura oluştur)", () => {
     const lineSum = lines.reduce((acc, line) => acc.plus(line.totalPrice), new Prisma.Decimal(0));
     expect(lineSum.equals(data.subtotal)).toBe(true);
     expect(data.subtotal.plus(data.taxAmount).equals(data.totalAmount)).toBe(true);
+
+    // "Fatura oluştu" is the invoice.created event written with the invoice.
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "invoice.created",
+      expect.objectContaining({ invoiceId: "inv-1", customerId: "cus-1", source: "admin" }),
+      { actorId: "admin-1" }
+    );
   });
 
   it("rejects invalid lines and tax rates", async () => {

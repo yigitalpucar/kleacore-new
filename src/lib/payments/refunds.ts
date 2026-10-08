@@ -21,7 +21,7 @@ import { cancelEInvoiceRecord } from "@/lib/integrations/efatura";
 import { getPaymentGatewayConfig } from "@/lib/integrations/payment-gateways/config";
 import type { GatewayRefundResult } from "@/lib/integrations/payment-gateways/types";
 import { terminateRemoteService } from "@/lib/integrations/provisioning";
-import { sendNotification } from "@/lib/notifications/send";
+import { emitEvent } from "@/lib/events/emit";
 import { add, sum, toFixed2, toNumber } from "@/lib/money";
 import { detectCardGateway, executeGatewayRefund } from "./refunds-gateways";
 import {
@@ -276,6 +276,39 @@ async function completeRefund(refundId: string, result: GatewayRefundResult, now
       if (cancelled.count > 0) cancelledServiceId = invoice.order.serviceId;
     }
 
+    // Outbox: "iade yapıldı" notice (refund.completed) and the invoice
+    // status event commit with the balances.
+    await emitEvent(
+      tx,
+      "refund.completed",
+      {
+        refundId: refund.id,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        customerId: refund.customerId,
+        amount: toFixed2(refund.amount),
+        method: REFUND_NOTICE_METHOD[refund.method],
+        refundedAt: refund.completedAt ?? now,
+        reason: refund.reason,
+      },
+      { actorId: refund.createdBy }
+    );
+    if (status === "REFUNDED" || status === "PARTIALLY_REFUNDED") {
+      await emitEvent(
+        tx,
+        status === "REFUNDED" ? "invoice.refunded" : "invoice.partially_refunded",
+        {
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          customerId: invoice.customerId,
+          refundId: refund.id,
+          amount: toFixed2(refund.amount),
+          refundedTotal: toFixed2(refundedAmount),
+        },
+        { actorId: refund.createdBy }
+      );
+    }
+
     return { refund, invoice: { ...invoice, refundedAmount, status }, cancelledServiceId };
   });
 }
@@ -299,7 +332,7 @@ const REFUND_NOTICE_METHOD: Record<string, string | undefined> = {
   MANUAL: undefined,
 };
 
-/** e-Arşiv cancel / return-invoice flag, notification, activity log, remote service cancel. */
+/** e-Arşiv cancel / return-invoice flag, activity log, remote service cancel (the notice is the refund.completed event). */
 async function afterRefundCompleted(
   completed: NonNullable<Awaited<ReturnType<typeof completeRefund>>>
 ): Promise<string | null> {
@@ -359,20 +392,6 @@ async function afterRefundCompleted(
       eInvoiceAction,
       serviceAction: refund.serviceAction,
     },
-  });
-
-  await sendNotification({
-    userId: refund.customerId,
-    template: "billing.refund-issued",
-    data: {
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.invoiceNumber,
-      amount: toFixed2(refund.amount),
-      method: REFUND_NOTICE_METHOD[refund.method],
-      refundedAt: refund.completedAt ?? now,
-      reason: refund.reason,
-    },
-    dedupeKey: `refund.issued:${refund.id}`,
   });
 
   return eInvoiceAction;

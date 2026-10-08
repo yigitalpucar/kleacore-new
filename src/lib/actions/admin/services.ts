@@ -8,12 +8,7 @@ import {
   terminateRemoteService,
   unsuspendRemoteService,
 } from "@/lib/integrations/provisioning-provider";
-import {
-  dispatchNotification,
-  loadCustomerRecipient,
-  sendServiceSuspendedEmail,
-} from "@/lib/notifications/email";
-import { sendNotification } from "@/lib/notifications/send";
+import { emitEvent } from "@/lib/events/emit";
 import { logActivity } from "@/lib/activity-log";
 import { productPeriodPricing } from "@/lib/billing/period-price";
 import { revalidatePath } from "next/cache";
@@ -152,33 +147,29 @@ export async function suspendService(id: string, reason: string) {
     }
 
     const suspendedAt = new Date();
-    const updatedService = await db.service.update({
-      where: { id },
-      data: {
-        status: "SUSPENDED",
-        suspendedAt,
-        suspendReason: reason,
-      },
+    const serviceLabel = service.label || service.domain || service.product.name;
+    // Status + service.suspended (customer notice via the outbox) commit together.
+    const updatedService = await db.$transaction(async (tx) => {
+      const row = await tx.service.update({
+        where: { id },
+        data: {
+          status: "SUSPENDED",
+          suspendedAt,
+          suspendReason: reason,
+        },
+      });
+      await emitEvent(
+        tx,
+        "service.suspended",
+        { serviceId: id, customerId: service.customerId, serviceLabel, reason, suspendedAt },
+        { actorId: session.user.id }
+      );
+      return row;
     });
     const integration = await suspendRemoteService(
       { ...updatedService, product: service.product, customer: service.customer },
       reason
     );
-
-    dispatchNotification(async () => {
-      const customer = await loadCustomerRecipient(service.customerId);
-      if (!customer) {
-        return;
-      }
-
-      await sendServiceSuspendedEmail({
-        customer,
-        serviceId: service.id,
-        serviceLabel: service.label || service.domain || service.product.name,
-        reason,
-        suspendedAt,
-      });
-    });
 
     await logActivity({
       userId: session.user.id,
@@ -205,7 +196,7 @@ export async function suspendService(id: string, reason: string) {
 }
 
 export async function activateService(id: string) {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   try {
     const service = await db.service.findUnique({
@@ -225,27 +216,31 @@ export async function activateService(id: string) {
       return { success: false, error: "Sadece askıdaki hizmetler aktifleştirilebilir" };
     }
 
-    const updatedService = await db.service.update({
-      where: { id },
-      data: {
-        status: "ACTIVE",
-        suspendedAt: null,
-        suspendReason: null,
-      },
+    const updatedService = await db.$transaction(async (tx) => {
+      const row = await tx.service.update({
+        where: { id },
+        data: {
+          status: "ACTIVE",
+          suspendedAt: null,
+          suspendReason: null,
+        },
+      });
+      await emitEvent(
+        tx,
+        "service.unsuspended",
+        {
+          serviceId: service.id,
+          customerId: service.customerId,
+          serviceLabel: service.label || service.domain || service.product.name,
+        },
+        { actorId: session.user.id }
+      );
+      return row;
     });
     const integration = await unsuspendRemoteService({
       ...updatedService,
       product: service.product,
       customer: service.customer,
-    });
-
-    await sendNotification({
-      userId: service.customerId,
-      template: "service.unsuspended",
-      data: {
-        serviceId: service.id,
-        serviceLabel: service.label || service.domain || service.product.name,
-      },
     });
 
     revalidatePath("/yonetim/hizmetler");
@@ -257,7 +252,7 @@ export async function activateService(id: string) {
 }
 
 export async function cancelService(id: string) {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   try {
     const service = await db.service.findUnique({
@@ -277,12 +272,27 @@ export async function cancelService(id: string) {
       return { success: false, error: "Bu hizmet zaten iptal edilmiş" };
     }
 
-    const updatedService = await db.service.update({
-      where: { id },
-      data: {
-        status: "CANCELLED",
-        cancelledAt: new Date(),
-      },
+    const terminatedAt = new Date();
+    const updatedService = await db.$transaction(async (tx) => {
+      const row = await tx.service.update({
+        where: { id },
+        data: {
+          status: "CANCELLED",
+          cancelledAt: terminatedAt,
+        },
+      });
+      await emitEvent(
+        tx,
+        "service.terminated",
+        {
+          serviceId: id,
+          customerId: service.customerId,
+          serviceLabel: service.label || service.domain || service.product.name,
+          terminatedAt,
+        },
+        { actorId: session.user.id }
+      );
+      return row;
     });
     const integration = await terminateRemoteService({
       ...updatedService,

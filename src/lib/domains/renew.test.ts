@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   renewDomainWithRegistrar: vi.fn(),
   getDomainInfoFromRegistrar: vi.fn(),
   sendNotification: vi.fn(),
+  emitEvent: vi.fn(),
   notificationCreateMany: vi.fn(),
   getAdminNotificationRecipients: vi.fn(),
 }));
@@ -45,6 +46,7 @@ vi.mock("@/lib/integrations/registrar", () => ({
   getDomainInfoFromRegistrar: mocks.getDomainInfoFromRegistrar,
 }));
 vi.mock("@/lib/notifications/send", () => ({ sendNotification: mocks.sendNotification }));
+vi.mock("@/lib/events/emit", () => ({ emitEvent: mocks.emitEvent }));
 vi.mock("@/lib/provisioning/manual", () => ({
   getAdminNotificationRecipients: mocks.getAdminNotificationRecipients,
 }));
@@ -143,7 +145,12 @@ describe("runDomainRenewal", () => {
     expect(mocks.activityCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: "cust-1", action: "domain.renewed", entityId: "dom-1" }),
     });
-    expect(mocks.sendNotification).toHaveBeenCalledWith(expect.objectContaining({ template: "domain.renewed" }));
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "domain.renewed",
+      expect.objectContaining({ domainId: "dom-1", renewalId: "ren-1", customerId: "cust-1", expiresAt: oneYearLater }),
+      expect.anything()
+    );
   });
 
   it("prefers the expiry reported by the registrar", async () => {

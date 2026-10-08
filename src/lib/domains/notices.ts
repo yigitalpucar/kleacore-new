@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/format/date";
-import { sendNotification } from "@/lib/notifications/send";
+import { emitEvent } from "@/lib/events/emit";
 import { getAppBaseUrl } from "@/lib/stripe";
 import type { CronJobResult } from "@/lib/cron/jobs/types";
 import {
@@ -105,13 +105,13 @@ export function noticeContent(kind: DomainNoticeKind, domain: NoticeDomain, sett
   }
 }
 
-const NOTICE_STAGE: Record<DomainNoticeKind, "expiring" | "expired" | "grace_ending" | "redemption"> = {
-  expiring_30: "expiring",
-  expiring_7: "expiring",
-  expiring_1: "expiring",
-  expired: "expired",
-  grace_ending: "grace_ending",
-  redemption: "redemption",
+const NOTICE_EVENT: Record<DomainNoticeKind, "domain.expiring" | "domain.expired" | "domain.redemption"> = {
+  expiring_30: "domain.expiring",
+  expiring_7: "domain.expiring",
+  expiring_1: "domain.expiring",
+  expired: "domain.expired",
+  grace_ending: "domain.expired",
+  redemption: "domain.redemption",
 };
 
 async function sendDomainNotice(
@@ -120,39 +120,39 @@ async function sendDomainNotice(
   settings: DomainLifecycleSettings,
   now: Date
 ) {
-  // Marker first: a concurrent or repeated run hits the unique key and stops.
-  let markerId: string;
+  const content = noticeContent(kind, domain, settings);
+  const daysLeft = Math.ceil((domain.expiresAt.getTime() - now.getTime()) / DAY_MS);
+  const payload = {
+    domainId: domain.id,
+    domain: domain.name,
+    customerId: domain.customerId,
+    kind,
+    daysLeft: kind === "expiring_30" ? 30 : kind === "expiring_7" ? 7 : kind === "expiring_1" ? 1 : Math.min(0, daysLeft),
+    expiresAt: domain.expiresAt,
+    graceEndsAt: new Date(domain.expiresAt.getTime() + settings.graceDays * DAY_MS),
+    autoRenew: domain.autoRenew,
+    renewUrl: `${getAppBaseUrl()}/musteri/panel/domainler/${domain.id}`,
+  };
+
+  // Marker + event in one transaction: a concurrent or repeated run hits the
+  // unique marker and stops; the notice itself (domain.expiry-notice, same
+  // dedupe key as before) is sent by the outbox notifications subscriber.
   try {
-    const marker = await db.domainNotice.create({
-      data: { domainId: domain.id, kind, periodStart: domain.expiresAt },
-      select: { id: true },
+    await db.$transaction(async (tx) => {
+      await tx.domainNotice.create({
+        data: { domainId: domain.id, kind, periodStart: domain.expiresAt },
+        select: { id: true },
+      });
+      const type = NOTICE_EVENT[kind];
+      if (type === "domain.expired") {
+        await emitEvent(tx, type, { ...payload, stage: kind === "grace_ending" ? "grace_ending" : "expired" });
+      } else {
+        await emitEvent(tx, type, payload);
+      }
     });
-    markerId = marker.id;
   } catch (error) {
     if (isUniqueViolation(error)) return false;
     throw error;
-  }
-
-  const content = noticeContent(kind, domain, settings);
-  const daysLeft = Math.ceil((domain.expiresAt.getTime() - now.getTime()) / DAY_MS);
-  const result = await sendNotification({
-    userId: domain.customerId,
-    template: "domain.expiry-notice",
-    data: {
-      domain: domain.name,
-      daysLeft: kind === "expiring_30" ? 30 : kind === "expiring_7" ? 7 : kind === "expiring_1" ? 1 : Math.min(0, daysLeft),
-      expiresAt: domain.expiresAt,
-      stage: NOTICE_STAGE[kind],
-      graceEndsAt: new Date(domain.expiresAt.getTime() + settings.graceDays * DAY_MS),
-      autoRenew: domain.autoRenew,
-      renewUrl: `${getAppBaseUrl()}/musteri/panel/domainler/${domain.id}`,
-    },
-    dedupeKey: `domain.notice:${domain.id}:${kind}:${domain.expiresAt.toISOString().slice(0, 10)}`,
-  });
-  if (!result.ok) {
-    // Not queued: drop the marker so tomorrow's run tries again.
-    await db.domainNotice.delete({ where: { id: markerId } }).catch(() => {});
-    throw new Error(result.error ?? "NOTIFICATION_NOT_QUEUED");
   }
 
   await recordDomainEvent({

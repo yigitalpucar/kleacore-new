@@ -1,6 +1,7 @@
 import type { DomainRenewal } from "@prisma/client";
 import type { PrismaTransactionLike } from "pg-boss";
 import { db } from "@/lib/db";
+import { emitEvent } from "@/lib/events/emit";
 import { enqueue } from "@/lib/jobs/enqueue";
 import { getBoss } from "@/lib/jobs/boss";
 import { DOMAIN_RENEW_JOB } from "@/lib/jobs/definitions";
@@ -206,22 +207,24 @@ async function completeRenewal(
         },
       },
     });
-  });
 
-  // Never throws; deduped per renewal (a retried job doesn't mail twice).
-  const notice = await sendNotification({
-    userId: renewal.domain.customerId,
-    template: "domain.renewed",
-    data: {
-      domain: renewal.domain.name,
-      years: renewal.years,
-      expiresAt: newExpiresAt,
-    },
-    dedupeKey: `domain.renewed:${renewal.id}`,
+    // "Alan adınız yenilendi" via the outbox (deduped per renewal, so a
+    // retried job doesn't mail twice).
+    await emitEvent(
+      tx,
+      "domain.renewed",
+      {
+        domainId: renewal.domainId,
+        domain: renewal.domain.name,
+        customerId: renewal.domain.customerId,
+        renewalId: renewal.id,
+        years: renewal.years,
+        expiresAt: newExpiresAt,
+        invoiceId: renewal.invoiceId,
+      },
+      { actorId: actorId ?? null }
+    );
   });
-  if (!notice.ok) {
-    domainLog.error("renewal notification could not be queued", { renewalId: renewal.id, error: notice.error });
-  }
 
   return newExpiresAt;
 }

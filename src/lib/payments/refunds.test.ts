@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   executeGatewayRefund: vi.fn(),
   cancelEInvoiceRecord: vi.fn(),
   terminateRemoteService: vi.fn(),
-  sendNotification: vi.fn(),
+  emitEvent: vi.fn(),
   logActivity: vi.fn(),
 }));
 
@@ -15,7 +15,7 @@ vi.mock("@/lib/activity-log", () => ({ logActivity: mocks.logActivity }));
 vi.mock("@/lib/integrations/efatura", () => ({ cancelEInvoiceRecord: mocks.cancelEInvoiceRecord }));
 vi.mock("@/lib/integrations/payment-gateways/config", () => ({ getPaymentGatewayConfig: async () => ({}) }));
 vi.mock("@/lib/integrations/provisioning", () => ({ terminateRemoteService: mocks.terminateRemoteService }));
-vi.mock("@/lib/notifications/send", () => ({ sendNotification: mocks.sendNotification }));
+vi.mock("@/lib/events/emit", () => ({ emitEvent: mocks.emitEvent }));
 vi.mock("./refunds-gateways", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./refunds-gateways")>()),
   executeGatewayRefund: mocks.executeGatewayRefund,
@@ -228,7 +228,7 @@ beforeEach(() => {
   mocks.executeGatewayRefund.mockReset();
   mocks.executeGatewayRefund.mockResolvedValue({ ok: true, operation: "iade", gatewayRef: "KL1", message: "PayTR iadeyi onayladı." });
   mocks.cancelEInvoiceRecord.mockReset();
-  mocks.sendNotification.mockReset();
+  mocks.emitEvent.mockReset();
   mocks.terminateRemoteService.mockReset();
 });
 
@@ -401,16 +401,20 @@ describe("createRefund — balance, service and e-fatura", () => {
     });
   });
 
-  it("notifies the customer", async () => {
+  it("notifies the customer through refund.completed + invoice status event in the refund transaction", async () => {
     seed();
     await createRefund(input({ amount: "10.00" }));
-    expect(mocks.sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "cus-1",
-        template: "billing.refund-issued",
-        data: expect.objectContaining({ amount: "10.00", method: "CARD" }),
-        dedupeKey: expect.stringMatching(/^refund\.issued:/),
-      })
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "refund.completed",
+      expect.objectContaining({ customerId: "cus-1", amount: "10.00", method: "CARD" }),
+      expect.anything()
+    );
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "invoice.partially_refunded",
+      expect.objectContaining({ amount: "10.00" }),
+      expect.anything()
     );
   });
 });

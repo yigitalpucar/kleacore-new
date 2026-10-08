@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   db: {} as Record<string, unknown>,
   fulfillInvoicePayment: vi.fn(),
   finalizeFulfilledInvoices: vi.fn(),
-  sendNotification: vi.fn(),
+  emitEvent: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
@@ -12,7 +12,7 @@ vi.mock("@/lib/payments/fulfillment", () => ({
   fulfillInvoicePayment: mocks.fulfillInvoicePayment,
   finalizeFulfilledInvoices: mocks.finalizeFulfilledInvoices,
 }));
-vi.mock("@/lib/notifications/send", () => ({ sendNotification: mocks.sendNotification }));
+vi.mock("@/lib/events/emit", () => ({ emitEvent: mocks.emitEvent }));
 
 import {
   approveBankTransferNotice,
@@ -118,7 +118,7 @@ beforeEach(() => {
     store.state.invoices.get(input.invoiceId)!.status = "PAID";
     return { fulfilled: true };
   });
-  mocks.sendNotification.mockReset();
+  mocks.emitEvent.mockReset();
 });
 
 describe("parseNoticeInput", () => {
@@ -172,13 +172,13 @@ describe("approve / reject", () => {
     });
     expect(store.state.payments[0]).toMatchObject({ transactionId: `HVL-${id}` });
     expect(store.state.notices[0]).toMatchObject({ status: "APPROVED", reviewedBy: "admin-1" });
-    // Approval notice commits with the payment; post-commit steps run once.
-    expect(mocks.sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "cus-1",
-        template: "billing.bank-transfer-approved",
-        dedupeKey: `bank-transfer.approved:${id}`,
-      })
+    // Approval event commits with the payment (notice sent by the outbox
+    // subscriber with the same template + dedupe key); post-commit steps run once.
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "bank_transfer.approved",
+      expect.objectContaining({ noticeId: id, customerId: "cus-1", invoiceId: "inv-1" }),
+      { actorId: "admin-1" }
     );
     expect(mocks.finalizeFulfilledInvoices).toHaveBeenCalledTimes(1);
   });
@@ -213,12 +213,11 @@ describe("approve / reject", () => {
 
     expect(store.state.notices[0]).toMatchObject({ status: "REJECTED", rejectionReason: "Hesaba ulaşmadı" });
     expect(store.state.payments[0]).toMatchObject({ status: "FAILED" });
-    expect(mocks.sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "cus-1",
-        template: "billing.bank-transfer-rejected",
-        data: expect.objectContaining({ reason: "Hesaba ulaşmadı", invoiceNumber: "F-2026-000007" }),
-      })
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "bank_transfer.rejected",
+      expect.objectContaining({ customerId: "cus-1", reason: "Hesaba ulaşmadı", invoiceNumber: "F-2026-000007" }),
+      { actorId: "admin-1" }
     );
     await expect(approveBankTransferNotice(id, "admin-1")).rejects.toThrow(/sonuçlandırılmış/);
   });

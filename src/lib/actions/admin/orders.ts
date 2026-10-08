@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { emitEvent } from "@/lib/events/emit";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { generateInvoiceNumber } from "@/lib/utils/number-generators";
 import { prepareOrderProvisioning } from "@/lib/provisioning/internal";
@@ -119,24 +120,30 @@ export async function rejectOrder(id: string, reason: string) {
       return { success: false, error: "Sadece bekleyen siparişler reddedilebilir" };
     }
 
-    await db.$transaction([
-      db.order.update({
+    await db.$transaction(async (tx) => {
+      await tx.order.update({
         where: { id },
         data: {
           status: "CANCELLED",
           cancelledAt: new Date(),
           cancellationReason: reason,
         },
-      }),
-      db.orderActivity.create({
+      });
+      await tx.orderActivity.create({
         data: {
           orderId: id,
           action: "REJECTED",
           description: `Sipariş reddedildi: ${reason}`,
           performedBy: session.user.id,
         },
-      }),
-    ]);
+      });
+      await emitEvent(
+        tx,
+        "order.cancelled",
+        { orderId: id, orderNumber: order.orderNumber, customerId: order.customerId, reason },
+        { actorId: session.user.id }
+      );
+    });
 
     revalidatePath("/yonetim/siparisler");
     return { success: true };
@@ -159,24 +166,30 @@ export async function cancelOrder(id: string, reason: string) {
       return { success: false, error: "Bu sipariş iptal edilemez" };
     }
 
-    await db.$transaction([
-      db.order.update({
+    await db.$transaction(async (tx) => {
+      await tx.order.update({
         where: { id },
         data: {
           status: "CANCELLED",
           cancelledAt: new Date(),
           cancellationReason: reason,
         },
-      }),
-      db.orderActivity.create({
+      });
+      await tx.orderActivity.create({
         data: {
           orderId: id,
           action: "CANCELLED",
           description: `Sipariş iptal edildi: ${reason}`,
           performedBy: session.user.id,
         },
-      }),
-    ]);
+      });
+      await emitEvent(
+        tx,
+        "order.cancelled",
+        { orderId: id, orderNumber: order.orderNumber, customerId: order.customerId, reason },
+        { actorId: session.user.id }
+      );
+    });
 
     revalidatePath("/yonetim/siparisler");
     return { success: true };
