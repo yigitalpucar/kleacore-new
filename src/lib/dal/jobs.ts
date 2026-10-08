@@ -14,6 +14,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   "suspend-services": "Hizmet askıya alma",
   "retry-provisioning": "Provisioning kuyruk eşitleme",
   "efatura-status": "E-Fatura durum sorgusu",
+  "usage-sync": "Hosting kullanım senkronu (kuyruğa alma)",
   notifications: "Fatura bildirimleri ve bildirim kuyruğu eşitleme",
   "jobs-drain": "İş kuyruğu (drain)",
 };

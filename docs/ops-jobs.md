@@ -131,6 +131,19 @@ Otomasyonu olmayan ürünlerde (`manual_provisioning_categories`, ör. VDS) ayn�
 transaction `provisioning.run` yerine `MANUAL` görev açar (aşağıya bakın); yönetim
 bildirimi `notification_logs` + kuyruk üzerinden commit ile birlikte gider.
 
+## Hosting kullanım senkronu (`hosting.usage-sync`)
+
+`usage-sync` cron'u (04:30, advisory lock + `cron_runs`) yalnızca kuyruğa alır:
+`bulkUsage` yeteneği olan (cPanel/WHM) ve canlı hizmeti bulunan her sunucu modülü
+örneği için bir `hosting.usage-sync` işi (`singletonKey` = örnek id, exclusive).
+İş, örnekteki tüm hesapları iki çağrıda okur (WHM `listaccts` + `showbw`) ve
+`ACTIVE`/`SUSPENDED` hizmetlere `diskUsed/diskLimit/bandwidthUsed/bandwidthLimit`
+(GB; bant genişliği bu ay, sınırsız = `null`) ve `usageSyncedAt` yazar. Eşleşme
+`remoteId` (yoksa `username`) ile, büyük/küçük harf duyarsız; panelde bulunamayan
+hizmetler sonuçta `missing` olarak listelenir. Panel hatası denemeyi başarısız
+sayar (3 deneme, ≈15/30 dk). Salt okunur: panelde hiçbir şey değişmez.
+Kota aşan hesaplar: `/yonetim/hizmetler/kota`.
+
 ## Bildirimler (`notification.send`)
 
 Kod: `src/lib/notifications/` — yönetim: **/yonetim/bildirimler** (kayıtlar, filtre,

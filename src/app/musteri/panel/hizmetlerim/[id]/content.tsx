@@ -9,12 +9,9 @@ import {
   Check,
   Cloud,
   CreditCard,
-  Database,
   Download,
-  ExternalLink,
   Hourglass,
   FileText,
-  FolderOpen,
   Loader2,
   Lock,
   Mail,
@@ -50,6 +47,7 @@ import {
   appButton,
   enumLabel,
 } from "@/components/app";
+import { HostingAccessCard, type HostingAccessData } from "@/components/panel/hosting-access-card";
 import { submitCancellationRequest } from "@/lib/actions/customer/cancellation";
 import { toast } from "@/lib/toast";
 import { formatTRY } from "@/lib/format/price";
@@ -84,6 +82,10 @@ interface ServiceData {
   bandwidthLimit: number | null;
   cpuUsage: number | null;
   ramUsage: number | null;
+  /** Last panel usage sync (hosting), ISO. */
+  usageSyncedAt: string | null;
+  /** cPanel access card data; null for non-hosting services. */
+  hostingAccess: HostingAccessData | null;
   product: {
     id: string;
     name: string;
@@ -119,6 +121,21 @@ interface HizmetDetayContentProps {
 }
 
 const P = "/musteri/panel/hizmetlerim";
+
+/** Usage without a panel limit ("sınırsız"): amount only, no bar. */
+function UnlimitedUsage({ label, used }: { label: string; used: number }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between gap-3 text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-medium tabular-nums">
+          {used.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} GB <span className="text-muted-foreground">/ sınırsız</span>
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full bg-muted" aria-hidden />
+    </div>
+  );
+}
 
 export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
   const router = useRouter();
@@ -159,9 +176,13 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
 
   const hasDisk = service.diskUsed != null && service.diskLimit != null && service.diskLimit > 0;
   const hasBandwidth = service.bandwidthUsed != null && service.bandwidthLimit != null && service.bandwidthLimit > 0;
+  // Synced from the panel with no limit there ("unlimited"): show the amount used.
+  const synced = Boolean(service.usageSyncedAt);
+  const unlimitedDisk = synced && service.diskUsed != null && !hasDisk;
+  const unlimitedBandwidth = synced && service.bandwidthUsed != null && !hasBandwidth;
   const hasCpu = isServer && service.cpuUsage != null;
   const hasRam = isServer && service.ramUsage != null;
-  const hasUsage = hasDisk || hasBandwidth || hasCpu || hasRam;
+  const hasUsage = hasDisk || hasBandwidth || hasCpu || hasRam || unlimitedDisk || unlimitedBandwidth;
 
   const limits = service.product.resourceLimits ?? {};
   const specItems = [
@@ -185,20 +206,18 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
     .filter((f): f is { label: string; value: string | null } => Boolean(f && f.label));
 
   // Quick actions: real links where a page exists, honest "Yakında" otherwise.
+  // Hosting: cPanel / Webmail / File Manager / phpMyAdmin are single sign-on
+  // links in the "cPanel erişimi" card below.
   const quickLinks: { label: string; description: string; href: string; icon: React.ReactNode }[] = isHosting
     ? [
-        { label: "E-posta hesapları", description: "cPanel e-posta yönetimi", href: `${P}/${service.id}/eposta`, icon: <Mail aria-hidden /> },
-        { label: "Webmail", description: "Gelen kutusu erişimi", href: "/musteri/panel/webmail", icon: <Mail aria-hidden /> },
+        { label: "E-posta hesapları", description: "Hesap ve kota listesi", href: `${P}/${service.id}/eposta`, icon: <Mail aria-hidden /> },
+        ...(service.hostingAccess?.sso
+          ? []
+          : [{ label: "Webmail", description: "Gelen kutusu erişimi", href: "/musteri/panel/webmail", icon: <Mail aria-hidden /> }]),
       ]
     : [];
-  const soonActions: { label: string; description: string; icon: React.ReactNode }[] = vds
+  const soonActions: { label: string; description: string; icon: React.ReactNode }[] = vds || isHosting
     ? []
-    : isHosting
-    ? [
-        { label: "cPanel", description: "Kontrol paneli", icon: <ExternalLink aria-hidden /> },
-        { label: "phpMyAdmin", description: "Veritabanı yönetimi", icon: <Database aria-hidden /> },
-        { label: "Dosya yöneticisi", description: "Dosya işlemleri", icon: <FolderOpen aria-hidden /> },
-      ]
     : isServer
       ? [
           { label: "SSH konsol", description: "Terminal erişimi", icon: <Terminal aria-hidden /> },
@@ -312,11 +331,22 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
             />
           ) : null}
 
+          {service.hostingAccess && service.status !== "PENDING" ? <HostingAccessCard data={service.hostingAccess} /> : null}
+
           {!vds && (isHosting || isServer) ? (
-            <SectionCard title="Kaynak kullanımı">
+            <SectionCard
+              title="Kaynak kullanımı"
+              description={
+                service.usageSyncedAt
+                  ? `Son güncelleme ${formatDateTime(service.usageSyncedAt)} · bant genişliği bu ay`
+                  : undefined
+              }
+            >
               {hasUsage ? (
                 <div className="grid gap-5 sm:grid-cols-2">
                   {hasDisk ? <UsageMeter label="Disk" used={service.diskUsed} limit={service.diskLimit} unit="GB" /> : null}
+                  {unlimitedDisk ? <UnlimitedUsage label="Disk" used={service.diskUsed!} /> : null}
+                  {unlimitedBandwidth ? <UnlimitedUsage label="Bant genişliği" used={service.bandwidthUsed!} /> : null}
                   {hasBandwidth ? (
                     <UsageMeter
                       label="Bant genişliği"

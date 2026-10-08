@@ -124,7 +124,13 @@ export function createModuleProvisioningProvider(binding: ServerBinding): Provis
         },
       });
 
-      return { ok: true, provider: moduleId, reference: created.remoteId, data: { reference: created.remoteId } };
+      // The password goes back to createRemoteService, which stores it encrypted.
+      return {
+        ok: true,
+        provider: moduleId,
+        reference: created.remoteId,
+        data: { reference: created.remoteId, ...(created.password ? { password: created.password } : {}) },
+      };
     },
     suspendService: (service, reason) => run(service, (ctx) => module.suspend(ctx, reason)),
     unsuspendService: (service) => run(service, (ctx) => module.unsuspend(ctx)),

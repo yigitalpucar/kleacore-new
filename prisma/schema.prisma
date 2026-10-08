@@ -712,13 +712,23 @@ model Service {
   /// sent to the browser as-is; see src/lib/modules/service-state.ts.
   moduleData       Json?
 
-  // Resources
+  // Resources. Disk / bandwidth in GB (bandwidth = current month); hosting
+  // accounts are refreshed daily from the panel (hosting.usage-sync job),
+  // usageSyncedAt = last successful sync. A null limit after a sync means
+  // "unlimited" on the panel.
   diskUsed       Float?
   diskLimit      Float?
   bandwidthUsed  Float?
   bandwidthLimit Float?
   cpuUsage       Float?
   ramUsage       Float?
+  usageSyncedAt  DateTime?
+
+  /// Control panel (cPanel) password generated at createAccount or by the
+  /// customer's "Şifreyi sıfırla"; encrypted (enc:v1:, src/lib/secrets/crypto).
+  /// Never logged, never sent to the browser except an explicit reveal.
+  panelPassword      String?
+  panelPasswordSetAt DateTime?
 
   // Billing
   billingPeriod BillingPeriod @default(monthly)

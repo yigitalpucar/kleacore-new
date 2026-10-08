@@ -52,6 +52,7 @@ export function cpanelInstanceConfigFromLegacy(config: CpanelWhmConfig): CpanelW
     apiToken: config.apiToken,
     useSsl: config.useSsl,
     defaultPlan: config.defaultPlan,
+    packagePrefix: "auto",
   };
 }
 

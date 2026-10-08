@@ -36,6 +36,46 @@ export interface CpanelEmailAccount {
   diskused?: number | string;
 }
 
+/** WHM `create_user_session` result. `url` carries a one-time session token: never log or store it. */
+export interface WhmUserSession {
+  url: string;
+  /** Unix seconds. */
+  expires?: number;
+}
+
+/** One row of WHM `listaccts` / `accountsummary` (the fields we read). */
+export interface WhmAccountRow {
+  user: string;
+  domain?: string;
+  email?: string;
+  plan?: string;
+  ip?: string;
+  /** "102M", "1.5G" … */
+  diskused?: string | number;
+  /** "1000M" or "unlimited". */
+  disklimit?: string | number;
+  suspended?: number | string;
+  unix_startdate?: number | string;
+}
+
+/** One row of WHM `showbw` (current month). */
+export interface WhmBandwidthRow {
+  user: string;
+  /** Bytes used this month. */
+  totalbytes?: number | string;
+  /** Bytes, 0 / "unlimited" = no limit. */
+  limit?: number | string;
+}
+
+/** One row of WHM `listpkgs`. */
+export interface WhmPackageRow {
+  name: string;
+  /** MB or "unlimited". */
+  QUOTA?: string | number;
+  /** MB or "unlimited". */
+  BWLIMIT?: string | number;
+}
+
 export class CpanelWhmApiError extends Error {
   constructor(
     message: string,
@@ -116,16 +156,23 @@ export function createCpanelWhmClient(config: CpanelWhmConfig) {
 
   async function fetchJson<T>(
     endpoint: string,
-    params: Record<string, string | number | undefined> = {}
+    params: Record<string, string | number | undefined> = {},
+    method: "GET" | "POST" = "GET"
   ): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    const url = `${baseUrl}/json-api/${endpoint}?${buildQuery(params)}`;
+    // POST keeps secrets (new passwords) out of URLs and WHM access logs.
+    const query = buildQuery(params);
+    const url = method === "GET" ? `${baseUrl}/json-api/${endpoint}?${query}` : `${baseUrl}/json-api/${endpoint}`;
 
     try {
       const response = await fetch(url, {
-        method: "GET",
-        headers: { Authorization: authorization },
+        method,
+        headers:
+          method === "GET"
+            ? { Authorization: authorization }
+            : { Authorization: authorization, "Content-Type": "application/x-www-form-urlencoded" },
+        ...(method === "POST" ? { body: query } : {}),
         signal: controller.signal,
       });
 
@@ -169,9 +216,10 @@ export function createCpanelWhmClient(config: CpanelWhmConfig) {
 
   async function requestWhm(
     endpoint: string,
-    params: Record<string, string | number | undefined> = {}
+    params: Record<string, string | number | undefined> = {},
+    method: "GET" | "POST" = "GET"
   ) {
-    const payload = await fetchJson<WhmApiResponse>(endpoint, params);
+    const payload = await fetchJson<WhmApiResponse>(endpoint, params, method);
 
     if (payload.metadata?.result === 0) {
       throw new CpanelWhmApiError(payload.metadata.reason || "CPANEL_WHM_REQUEST_FAILED");
@@ -204,6 +252,51 @@ export function createCpanelWhmClient(config: CpanelWhmConfig) {
       requestWhm("removeacct", { username, keepdns: 0 }),
     changePackage: (username: string, newPlan: string) =>
       requestWhm("changepackage", { user: username, pkg: newPlan }),
+    /**
+     * One-time login URL (WHM API 1 create_user_session). service "cpaneld"
+     * (cPanel) or "webmaild"; `app` opens a cPanel app (FileManager_Home …).
+     */
+    createUserSession: async (
+      username: string,
+      service: "cpaneld" | "webmaild",
+      app?: string
+    ): Promise<WhmUserSession> => {
+      const payload = await requestWhm("create_user_session", { user: username, service, app });
+      const data = (payload.data ?? {}) as { url?: unknown; expires?: unknown };
+      if (typeof data.url !== "string" || !/^https?:\/\//.test(data.url)) {
+        throw new CpanelWhmApiError("CPANEL_SESSION_URL_MISSING");
+      }
+      return { url: data.url, expires: typeof data.expires === "number" ? data.expires : undefined };
+    },
+    /** Changes the cPanel account password (POST: the password never appears in a URL). */
+    setPassword: (username: string, password: string) =>
+      requestWhm("passwd", { user: username, password }, "POST"),
+    accountSummary: async (username: string): Promise<WhmAccountRow | null> => {
+      const payload = await requestWhm("accountsummary", { user: username });
+      const rows = ((payload.data ?? {}) as { acct?: WhmAccountRow[] }).acct;
+      return Array.isArray(rows) && rows[0] ? rows[0] : null;
+    },
+    /** Every account the token can see (a reseller sees its own accounts). */
+    listAccounts: async (): Promise<WhmAccountRow[]> => {
+      const payload = await requestWhm("listaccts", {
+        want: "user,domain,email,plan,ip,diskused,disklimit,suspended,unix_startdate",
+      });
+      const rows = ((payload.data ?? {}) as { acct?: WhmAccountRow[] }).acct;
+      return Array.isArray(rows) ? rows : [];
+    },
+    /** This month's bandwidth for every visible account, or one account (`username`). */
+    showBandwidth: async (username?: string): Promise<WhmBandwidthRow[]> => {
+      // `search` may match as a pattern/substring: filter to the exact user.
+      const payload = await requestWhm("showbw", username ? { searchtype: "user", search: username } : {});
+      const rows = ((payload.data ?? {}) as { acct?: WhmBandwidthRow[] }).acct;
+      const list = Array.isArray(rows) ? rows : [];
+      return username ? list.filter((row) => row?.user === username) : list;
+    },
+    listPackages: async (): Promise<WhmPackageRow[]> => {
+      const payload = await requestWhm("listpkgs");
+      const rows = ((payload.data ?? {}) as { pkg?: WhmPackageRow[] }).pkg;
+      return Array.isArray(rows) ? rows.filter((row) => typeof row?.name === "string") : [];
+    },
     cpanelApi: (
       user: string,
       module: string,

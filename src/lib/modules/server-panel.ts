@@ -187,7 +187,8 @@ export async function refreshServiceUsage(
       return { refreshed: false, error: result.error };
     }
     const usage = result.data;
-    const gb = (mb: number | undefined) => (mb === undefined ? undefined : Math.round((mb / 1024) * 100) / 100);
+    // null limit = unlimited (ServerUsage), stored as null like the hosting usage sync.
+    const gb = (mb: number | null | undefined) => (mb == null ? mb : Math.round((mb / 1024) * 100) / 100);
     await db.service.update({
       where: { id: service.id },
       data: {

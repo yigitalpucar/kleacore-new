@@ -249,16 +249,21 @@ async function retryServiceProvisioning(
       "@/lib/provisioning/activation-notice"
     );
     const kind = activationKindForCategory(order.product.category.slug);
-    // A module-bound service got its IP / username / remote id written by the
-    // bridge just now: mail those. Server modules keep the initial password in
-    // the panel (shown once), never in the e-mail.
-    const bound = service.moduleInstanceId
-      ? await db.service.findUnique({ where: { id: service.id }, include: { product: true } })
-      : null;
+    // Provisioning just wrote the username / remote id / IP (module bridge)
+    // and, for cPanel, the generated panel password (encrypted). Hosting: the
+    // notice shows that password once (encrypted in the queue/log, redacted in
+    // the inbox copy). Server modules (Proxmox) keep the initial password in
+    // the panel (shown once, moduleData), never in the e-mail.
+    const fresh = await db.service.findUnique({ where: { id: service.id }, include: { product: true } });
+    const bound = service.moduleInstanceId && fresh ? fresh : null;
+    const { readStoredPanelPassword } = await import("@/lib/services/panel-access");
+    const password = kind === "hosting" ? (readStoredPanelPassword(fresh?.panelPassword) ?? undefined) : undefined;
+    const base = bound ? { ...bound, serverName: null } : { ...service, serverName: provisioning.reference ?? service.serverName };
     await queueServiceActivatedNotice(undefined, {
-      service: bound ? { ...bound, serverName: null } : { ...service, serverName: provisioning.reference ?? service.serverName },
+      service: { ...base, username: fresh?.username ?? fresh?.remoteId ?? service.username },
       kind,
       ...(bound && kind === "server" ? { passwordDelivery: "panel" as const } : {}),
+      ...(password ? { password, passwordDelivery: "included" as const } : {}),
     });
   }
 

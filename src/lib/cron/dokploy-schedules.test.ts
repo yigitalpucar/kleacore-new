@@ -38,6 +38,7 @@ describe("Dokploy cron schedules", () => {
       "run-backups",
       "ssl-expiry",
       "suspend-services",
+      "usage-sync",
     ]);
   });
 });

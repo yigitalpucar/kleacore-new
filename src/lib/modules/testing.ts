@@ -193,7 +193,11 @@ export function restoreFetch() {
 const OPTIONAL_METHOD_CAPABILITIES: Partial<Record<ModuleKind, Record<string, string>>> = {
   server: {
     getUsage: "usage",
+    listUsage: "bulkUsage",
     getSsoUrl: "sso",
+    resetPassword: "password",
+    listPackages: "packages",
+    resolvePackageName: "packages",
     getConsoleUrl: "console",
     powerAction: "power",
     reinstall: "reinstall",
@@ -356,7 +360,12 @@ export function describeModuleContract(manifest: AnyModuleManifest, options: Mod
           await expectGracefulFailure("terminate", () => subject.terminate(ctx));
           await expectGracefulFailure("changePackage", () => subject.changePackage(ctx));
           if (subject.getUsage) await expectGracefulFailure("getUsage", () => subject.getUsage!(ctx));
+          if (subject.listUsage) await expectGracefulFailure("listUsage", () => subject.listUsage!());
           if (subject.getSsoUrl) await expectGracefulFailure("getSsoUrl", () => subject.getSsoUrl!(ctx));
+          if (subject.resetPassword) {
+            await expectGracefulFailure("resetPassword", () => subject.resetPassword!(ctx, "Test-Password-123"));
+          }
+          if (subject.listPackages) await expectGracefulFailure("listPackages", () => subject.listPackages!());
           if (subject.getConsoleUrl) await expectGracefulFailure("getConsoleUrl", () => subject.getConsoleUrl!(ctx));
           if (subject.powerAction) await expectGracefulFailure("powerAction", () => subject.powerAction!(ctx, "restart"));
           if (subject.reinstall) await expectGracefulFailure("reinstall", () => subject.reinstall!(ctx, {}));

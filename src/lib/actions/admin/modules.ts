@@ -5,7 +5,14 @@ import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity-log";
 import { db } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
-import { requireManifest, runHealthCheck, runSettingsHealthCheck, saveModuleInstance } from "@/lib/modules/instances";
+import {
+  createContract,
+  getInstance,
+  requireManifest,
+  runHealthCheck,
+  runSettingsHealthCheck,
+  saveModuleInstance,
+} from "@/lib/modules/instances";
 import { syncLegacyModuleInstances, verifyLegacyModuleInstances } from "@/lib/modules/legacy";
 import { getModule, parseProductOptions } from "@/lib/modules/registry";
 import { describeSchema, formValuesToInput, type SchemaFormValues } from "@/lib/modules/schema-form";
@@ -168,15 +175,80 @@ export async function syncLegacyModulesAction(): Promise<
 // Product → module binding (Faz 2.2)
 // ---------------------------------------------------------------------------
 
+export interface ProductPackageCheck {
+  /** The module lists its packages (capability "packages"). */
+  supported: boolean;
+  packages: Array<{ name: string; diskLimitMB?: number | null; bandwidthLimitMB?: number | null }>;
+  /** Package name the product would provision with (prefix rule applied). */
+  resolved: string | null;
+  /** null when it couldn't be checked (unsupported / panel unreachable). */
+  exists: boolean | null;
+  /** Panel error (unreachable, token rejected …). */
+  error?: string;
+}
+
+/**
+ * Read-only: packages the instance's credentials can use (WHM listpkgs)
+ * and whether the product's package — after the reseller prefix rule —
+ * is one of them.
+ */
+async function checkProductPackages(
+  product: { sku: string },
+  instanceId: string,
+  options: Record<string, unknown>
+): Promise<ProductPackageCheck> {
+  const none: ProductPackageCheck = { supported: false, packages: [], resolved: null, exists: null };
+  const instance = await getInstance(instanceId).catch(() => null);
+  if (!instance || instance.kind !== "server") return none;
+  const server = createContract(instance, "server");
+  if (!server.listPackages) return none;
+
+  const resolved = server.resolvePackageName?.(options, product) ?? null;
+  const listed = await server.listPackages();
+  if (!listed.ok || !listed.data) {
+    return { supported: true, packages: [], resolved, exists: null, error: listed.error ?? "Paketler alınamadı." };
+  }
+  const packages = [...listed.data].sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  return {
+    supported: true,
+    packages,
+    resolved,
+    exists: resolved ? packages.some((pkg) => pkg.name === resolved) : null,
+  };
+}
+
+/** Otomasyon form: list the selected instance's packages and check the product's package against them. */
+export async function checkProductPackagesAction(
+  productId: string,
+  input: { moduleInstanceId: string; values: SchemaFormValues }
+): Promise<ActionResult<{ check: ProductPackageCheck }>> {
+  await requireAdmin();
+  const product = await db.product.findUnique({ where: { id: productId }, select: { sku: true } });
+  if (!product) return { success: false, error: "Ürün bulunamadı." };
+  const instance = await db.moduleInstance.findUnique({ where: { id: input.moduleInstanceId }, select: { moduleId: true } });
+  if (!instance) return { success: false, error: "Modül örneği bulunamadı." };
+  const manifest = requireManifest(instance.moduleId);
+  const fields = manifest.productOptionsSchema ? describeSchema(manifest.productOptionsSchema, manifest.productOptionsFields) : [];
+  const parsed = parseProductOptions(manifest, formValuesToInput(fields, input.values));
+  try {
+    const check = await checkProductPackages(product, input.moduleInstanceId, parsed.success ? parsed.data : {});
+    return { success: true, check };
+  } catch (error) {
+    log.warn("package check failed", { instanceId: input.moduleInstanceId, error });
+    return { success: false, error: "Paketler alınamadı." };
+  }
+}
+
 export async function saveProductModuleBindingAction(
   productId: string,
   input: { moduleInstanceId: string | null; values: SchemaFormValues }
-): Promise<ActionResult> {
+): Promise<ActionResult<{ warning?: string }>> {
   const session = await requireAdmin();
   const product = await db.product.findUnique({ where: { id: productId }, include: { category: true } });
   if (!product) return { success: false, error: "Ürün bulunamadı." };
 
   let moduleOptions: Prisma.InputJsonObject = {};
+  let packageWarning: string | undefined;
   if (input.moduleInstanceId) {
     const instance = await db.moduleInstance.findUnique({ where: { id: input.moduleInstanceId } });
     if (!instance || instance.kind !== "server") return { success: false, error: "Sunucu modülü örneği bulunamadı." };
@@ -190,6 +262,21 @@ export async function saveProductModuleBindingAction(
     const parsed = parseProductOptions(manifest, formValuesToInput(fields, input.values));
     if (!parsed.success) return { success: false, error: "Modül seçenekleri geçersiz.", fieldErrors: parsed.fieldErrors };
     moduleOptions = parsed.data as Prisma.InputJsonObject;
+
+    // The package must exist for the instance's credentials (a reseller
+    // token only sees "<reseller>_<Paket>"); an unreachable panel doesn't
+    // block saving but is reported.
+    const check = await checkProductPackages(product, input.moduleInstanceId, parsed.data).catch((error) => {
+      log.warn("package check failed", { instanceId: input.moduleInstanceId, error });
+      return null;
+    });
+    if (check?.supported && check.exists === false && check.resolved) {
+      const message = `“${check.resolved}” paketi bu sunucuda yok. Mevcut paketlerden birini seçin.`;
+      return { success: false, error: message, fieldErrors: { package: message } };
+    }
+    if (check?.supported && check.exists === null && check.error) {
+      packageWarning = `Paket sunucuda doğrulanamadı (${check.error}).`;
+    }
   }
 
   await db.product.update({
@@ -205,7 +292,7 @@ export async function saveProductModuleBindingAction(
   });
   revalidatePath(`/yonetim/urunler/paketler/${productId}`);
   revalidatePath(`/yonetim/urunler/paketler/${productId}/duzenle`);
-  return { success: true };
+  return { success: true, ...(packageWarning ? { warning: packageWarning } : {}) };
 }
 
 /**

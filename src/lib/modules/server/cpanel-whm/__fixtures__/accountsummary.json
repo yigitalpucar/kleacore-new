@@ -1,0 +1,19 @@
+{
+  "data": {
+    "acct": [
+      {
+        "user": "ornekcom",
+        "domain": "ornek.com.tr",
+        "email": "musteri@test.local",
+        "plan": "kleacore_Starter",
+        "diskused": "1536M",
+        "disklimit": "5120M",
+        "suspended": 0,
+        "ip": "188.132.235.10",
+        "owner": "kleacore",
+        "unix_startdate": 1759910400
+      }
+    ]
+  },
+  "metadata": { "command": "accountsummary", "reason": "OK", "result": 1, "version": 1 }
+}

@@ -97,9 +97,23 @@ export async function getVpsVdsProvider(): Promise<ProvisioningProvider> {
   return createVpsVdsProvider();
 }
 
+/**
+ * Creates the remote account. A panel password the provider generated is
+ * stored encrypted on the service (shown once in the "hizmet aktif" notice,
+ * then revealable in the customer panel) and stripped from the result, so
+ * callers can't log it by accident.
+ */
 export async function createRemoteService(service: ServiceWithProduct) {
   const provider = await getProvisioningProviderForService(service);
-  return provider.createService(service);
+  const result = await provider.createService(service);
+  if (!result.data || !("password" in result.data)) return result;
+
+  const { password, ...data } = result.data;
+  if (result.ok && password) {
+    const { storeServicePanelPassword } = await import("@/lib/services/panel-access");
+    await storeServicePanelPassword(service.id, password);
+  }
+  return { ...result, data };
 }
 
 export async function suspendRemoteService(service: ServiceWithProduct, reason?: string) {

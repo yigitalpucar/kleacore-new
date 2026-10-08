@@ -14,7 +14,7 @@ import { cpanelWhmModule } from "./server/cpanel-whm";
 import { griModule } from "./registrar/gri";
 import { assertConfigRoundTrip } from "./testing";
 
-const whmConfig = { host: "whm.test", port: 2087, username: "kleacore", apiToken: "TOKEN-123", useSsl: true, defaultPlan: "default" };
+const whmConfig = { host: "whm.test", port: 2087, username: "kleacore", apiToken: "TOKEN-123", useSsl: true, defaultPlan: "default", packagePrefix: "auto" };
 
 describe("module config encryption", () => {
   it("encrypts only secret fields and round-trips", () => {

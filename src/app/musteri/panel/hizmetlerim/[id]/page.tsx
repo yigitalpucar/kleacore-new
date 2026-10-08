@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { getServiceById } from "@/lib/dal/services";
 import { getManualEtaText } from "@/lib/provisioning/manual";
 import { getVdsPanelView, refreshServiceUsage } from "@/lib/modules/server-panel";
+import { activationKindForCategory } from "@/lib/provisioning/activation-notice";
+import { getPanelCapabilities } from "@/lib/services/panel-access";
 import { HizmetDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +57,13 @@ export default async function HizmetDetayPage(props: Props) {
     },
   });
 
-  // Serialize for client component
+  const isHosting = activationKindForCategory(service.product.category?.slug ?? "") === "hosting";
+  // Section by module: a Proxmox-bound service gets the VDS panel (one-time
+  // initial password lives in moduleData); hosting (cPanel/WHM or a legacy
+  // unbound account) gets the cPanel access card (stored panel password).
+  const panel = !vds && isHosting ? await getPanelCapabilities(service) : null;
+
+  // Serialize for client component (never the stored panel password itself)
   const serialized = {
     id: service.id,
     label: service.label,
@@ -74,6 +82,18 @@ export default async function HizmetDetayPage(props: Props) {
     bandwidthLimit: service.bandwidthLimit != null ? Number(service.bandwidthLimit) : null,
     cpuUsage: service.cpuUsage != null ? Number(service.cpuUsage) : null,
     ramUsage: service.ramUsage != null ? Number(service.ramUsage) : null,
+    usageSyncedAt: service.usageSyncedAt ? service.usageSyncedAt.toISOString() : null,
+    hostingAccess: panel
+      ? {
+          serviceId: service.id,
+          status: service.status,
+          username: service.username ?? service.remoteId,
+          sso: panel.sso,
+          passwordReset: panel.passwordReset,
+          hasStoredPassword: Boolean(service.panelPassword),
+          passwordSetAt: service.panelPasswordSetAt ? service.panelPasswordSetAt.toISOString() : null,
+        }
+      : null,
     product: {
       id: service.product.id,
       name: service.product.name,

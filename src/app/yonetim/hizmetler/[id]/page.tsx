@@ -6,6 +6,7 @@ import { serializeMoney } from "@/lib/money";
 import { getServiceModuleView } from "@/lib/modules/admin-view";
 import { getProxmoxAdminView } from "@/lib/modules/server-panel";
 import { omitModuleData } from "@/lib/modules/service-state";
+import { getPanelCapabilities } from "@/lib/services/panel-access";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +22,21 @@ export default async function ServiceDetailPage({
 
   if (!service) return notFound();
 
-  const [moduleView, proxmoxView] = await Promise.all([getServiceModuleView(service), getProxmoxAdminView(service)]);
+  const [moduleView, proxmoxView, panel] = await Promise.all([
+    getServiceModuleView(service),
+    getProxmoxAdminView(service),
+    getPanelCapabilities(service),
+  ]);
+  // Never ship secrets to the browser: moduleData may hold encrypted VDS
+  // credentials, panelPassword the encrypted cPanel password.
+  const { panelPassword, ...rest } = omitModuleData(service);
 
-  // moduleData may hold encrypted credentials: never ship it to the browser.
   return (
-    <ServiceDetailContent service={serializeMoney(omitModuleData(service))} moduleView={moduleView} proxmoxView={proxmoxView} />
+    <ServiceDetailContent
+      service={serializeMoney({ ...rest, hasPanelPassword: Boolean(panelPassword) })}
+      moduleView={moduleView}
+      proxmoxView={proxmoxView}
+      panelLogin={!proxmoxView && panel.sso && (service.status === "ACTIVE" || service.status === "SUSPENDED")}
+    />
   );
 }

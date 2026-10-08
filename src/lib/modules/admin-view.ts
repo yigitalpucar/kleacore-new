@@ -184,6 +184,8 @@ export interface ProductBindingOption {
   isActive: boolean;
   groupKey: string | null;
   optionFields: SchemaFieldDescriptor[];
+  /** Module can list its packages (capability "packages") → the form shows and checks them. */
+  listsPackages: boolean;
 }
 
 /**
@@ -213,6 +215,7 @@ export async function getProductBindingOptions(categorySlug: string, currentInst
       optionFields: manifest.productOptionsSchema
         ? describeSchema(manifest.productOptionsSchema, manifest.productOptionsFields)
         : [],
+      listsPackages: (manifest.capabilities as readonly string[]).includes("packages"),
     });
   }
   return options;

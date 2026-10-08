@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import type { IntegrationResult } from "../../settings";
 import type { CpanelWhmConfig, ServiceWithProduct } from "../types";
 import type { ProvisioningProvider } from "./types";
@@ -21,7 +22,8 @@ function toIntegrationError(error: unknown): IntegrationResult<{ reference?: str
 
 function generatePassword(length = 16) {
   const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%";
-  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  // Real credential now (stored + shown to the customer): crypto RNG.
+  return Array.from({ length }, () => chars[randomInt(chars.length)]).join("");
 }
 
 function resolveAccountUsername(service: ServiceWithProduct) {
@@ -62,19 +64,20 @@ export function createCpanelWhmProvider(config: CpanelWhmConfig): ProvisioningPr
     createService: async (service) => {
       try {
         const username = resolveAccountUsername(service);
+        const password = generatePassword();
         const response = await client.createAccount({
           username,
           domain: resolveDomain(service),
           plan: resolvePlan(service, config),
           contactemail: service.customer?.email || "noreply@kleacore.com",
-          password: generatePassword(),
+          password,
         });
 
         return {
           ok: true,
           provider,
           reference: username,
-          data: { reference: username },
+          data: { reference: username, password },
         };
       } catch (error) {
         return toIntegrationError(error);

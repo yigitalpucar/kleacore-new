@@ -1,0 +1,12 @@
+{
+  "data": {
+    "acct": [
+      { "user": "ornekcom", "maindomain": "ornek.com.tr", "totalbytes": "536870912", "limit": "10737418240", "deleted": 0, "bwusage": [] },
+      { "user": "sinirsiz", "maindomain": "sinirsiz.com", "totalbytes": 0, "limit": "unlimited", "deleted": 0, "bwusage": [] }
+    ],
+    "month": 10,
+    "year": 2026,
+    "reseller": "kleacore"
+  },
+  "metadata": { "command": "showbw", "reason": "OK", "result": 1, "version": 1 }
+}

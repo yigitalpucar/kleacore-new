@@ -1,0 +1,10 @@
+{
+  "data": {
+    "url": "https://whm.test:2083/cpsess4567890123/login/?session=ornekcom%3aAbCdEfGh%3acreate_user_session%2c0123456789abcdef",
+    "session": "ornekcom:AbCdEfGh:create_user_session,0123456789abcdef",
+    "service": "cpaneld",
+    "expires": 1791000000,
+    "cp_security_token": "/cpsess4567890123"
+  },
+  "metadata": { "command": "create_user_session", "reason": "OK", "result": 1, "version": 1 }
+}

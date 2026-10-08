@@ -171,6 +171,31 @@ export const serverReinstallJob = defineJob({
   },
 });
 
+export const HOSTING_USAGE_SYNC_JOB = "hosting.usage-sync";
+
+/**
+ * Disk / bandwidth usage of every account on one server module instance
+ * (src/lib/services/usage-sync.ts), queued daily by the `usage-sync` cron.
+ * Exclusive per instance; a panel error fails the attempt (3 attempts,
+ * ≈ 15, 30 min apart). Read-only on the panel side.
+ */
+export const hostingUsageSyncJob = defineJob({
+  name: HOSTING_USAGE_SYNC_JOB,
+  label: "Hosting kullanım senkronu",
+  schema: z.object({ instanceId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 2,
+    retryDelay: 15 * 60,
+    retryBackoff: true,
+    expireInSeconds: 10 * 60,
+  },
+  handler: async ({ instanceId }) => {
+    const { syncInstanceUsage } = await import("@/lib/services/usage-sync");
+    return syncInstanceUsage(instanceId);
+  },
+});
+
 const definitions = [
   provisioningRunJob,
   domainRenewJob,
@@ -178,6 +203,7 @@ const definitions = [
   paymentSettledJob,
   notificationSendJob,
   serverReinstallJob,
+  hostingUsageSyncJob,
 ] as const;
 
 export type RegisteredJob = (typeof definitions)[number];

@@ -1,0 +1,9 @@
+{
+  "data": {
+    "acct": [
+      { "user": "ornekcom", "domain": "ornek.com.tr", "email": "musteri@test.local", "plan": "kleacore_Starter", "ip": "188.132.235.10", "diskused": "1536M", "disklimit": "5120M", "suspended": 0, "unix_startdate": 1759910400 },
+      { "user": "sinirsiz", "domain": "sinirsiz.com", "email": "b@test.local", "plan": "kleacore_Pro", "ip": "188.132.235.10", "diskused": "0M", "disklimit": "unlimited", "suspended": 1, "unix_startdate": 1759910400 }
+    ]
+  },
+  "metadata": { "command": "listaccts", "reason": "OK", "result": 1, "version": 1 }
+}

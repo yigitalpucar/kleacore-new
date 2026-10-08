@@ -5,5 +5,6 @@ export { runScheduledBackups } from "./run-scheduled-backups";
 export { sendScheduledNotifications } from "./send-notifications";
 export { suspendOverdueServices } from "./suspend-overdue-services";
 export { syncEInvoiceStatusesJob } from "./sync-einvoice-statuses";
+export { syncHostingUsageJob } from "./sync-hosting-usage";
 export type { CronJobResult } from "./types";
 export { runDomainNotices, runDomainRenewals, runDomainSync } from "./domain-lifecycle";
