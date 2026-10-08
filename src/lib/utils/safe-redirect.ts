@@ -23,9 +23,16 @@ export function getSafeRedirectPath(
   return fallback;
 }
 
-export function isAllowedCheckoutUrl(url: string): boolean {
+/**
+ * Gateway-hosted checkout pages, or our own card form (Kuveyt Türk) when the
+ * URL has the current page's origin.
+ */
+export function isAllowedCheckoutUrl(url: string, currentOrigin?: string): boolean {
   try {
     const parsed = new URL(url);
+    if (currentOrigin && parsed.origin === currentOrigin && parsed.pathname.startsWith("/odeme/")) {
+      return true;
+    }
     if (parsed.protocol !== "https:") {
       return false;
     }
@@ -37,7 +44,7 @@ export function isAllowedCheckoutUrl(url: string): boolean {
 }
 
 export function redirectToCheckoutUrl(url: string): boolean {
-  if (!isAllowedCheckoutUrl(url)) {
+  if (!isAllowedCheckoutUrl(url, window.location.origin)) {
     return false;
   }
 

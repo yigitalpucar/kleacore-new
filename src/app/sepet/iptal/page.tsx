@@ -11,6 +11,8 @@ import { CheckoutHeader } from "@/components/site/hosting/checkout-header";
 import { formatTRY } from "@/lib/format/price";
 import { db } from "@/lib/db";
 import { sum, toNumber } from "@/lib/money";
+import { auth } from "@/lib/auth";
+import { getKuveytTurkFailureMessage } from "@/lib/integrations/payment-gateways/providers/kuveytturk-flow";
 
 const formatPrice = (price: number | string | { toString(): string }) =>
   formatTRY(Number(price), { keepDecimals: true });
@@ -23,7 +25,7 @@ export const metadata: Metadata = {
 };
 
 interface CheckoutCancelPageProps {
-  searchParams: Promise<{ invoice_ids?: string }>;
+  searchParams: Promise<{ invoice_ids?: string; ref?: string; durum?: string }>;
 }
 
 function parseInvoiceIds(value?: string) {
@@ -64,9 +66,13 @@ async function getCancelledCheckoutSummary(invoiceIds: string[]) {
 }
 
 export default async function CheckoutCancelPage({ searchParams }: CheckoutCancelPageProps) {
-  const { invoice_ids: invoiceIdsParam } = await searchParams;
+  const { invoice_ids: invoiceIdsParam, ref, durum } = await searchParams;
   const invoiceIds = parseInvoiceIds(invoiceIdsParam);
   const summary = await getCancelledCheckoutSummary(invoiceIds);
+  const underReview = durum === "inceleme";
+  const bankMessage = ref
+    ? await getKuveytTurkFailureMessage({ merchantOrderId: ref }, (await auth())?.user?.id)
+    : null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -77,11 +83,20 @@ export default async function CheckoutCancelPage({ searchParams }: CheckoutCance
           align="center"
           icon={<XCircle aria-hidden className="size-6 text-muted-foreground" />}
           eyebrow="Ödeme"
-          title="Ödeme tamamlanmadı"
-          description="Ödeme oturumu iptal edildi. Sepetinize dönerek tekrar deneyebilir veya farklı bir ödeme yöntemi seçebilirsiniz."
+          title={underReview ? "Ödemeniz kontrol ediliyor" : "Ödeme tamamlanmadı"}
+          description={
+            underReview
+              ? "Ödemeniz bankadan onay bekliyor veya kontrol ediliyor. Kartınızdan çekim yapıldıysa ekibimiz faturanızı kısa sürede güncelleyecek; tekrar ödeme yapmayın."
+              : "Ödeme oturumu iptal edildi. Faturalarım sayfasından tekrar deneyebilir veya farklı bir ödeme yöntemi seçebilirsiniz."
+          }
         />
         <Section spacing="sm" container="narrow">
           <div className="mx-auto max-w-2xl space-y-8">
+            {bankMessage ? (
+              <p role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                Banka yanıtı: {bankMessage}
+              </p>
+            ) : null}
             {summary ? (
               <section aria-labelledby="bekleyen-kayitlar" className="overflow-hidden rounded-2xl border bg-background">
                 <div className="flex items-center gap-2 border-b px-5 py-4">

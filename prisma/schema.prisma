@@ -918,6 +918,9 @@ model Payment {
   notes         String?
   paidAt        DateTime?
   createdAt     DateTime      @default(now())
+  /// Gateway references needed after the callback (bank order id, RRN,
+  /// provision number for refunds) and the provisioning claim. Never card data.
+  gatewayData   Json?
 
   // One row per invoice per gateway session: a callback for any session
   // matches exactly one payment of each invoice it covers.

@@ -1,11 +1,50 @@
 import { db } from "@/lib/db";
 import { getPaymentGatewayProvider } from "@/lib/integrations/payment-gateways";
+import type { CheckoutCustomerInfo } from "@/lib/integrations/payment-gateways/types";
 import { getAppBaseUrl } from "@/lib/stripe";
 import type { PaymentContext } from "@/lib/payments/context";
 import type { CustomerPaymentMethod } from "@/lib/payments/methods";
 import { toNumber, type MoneyInput } from "@/lib/money";
 
 export type { PaymentContext } from "@/lib/payments/context";
+
+/** Customer fields the card gateways need (billing info for 3-D Secure). */
+export async function loadCheckoutCustomer(
+  customerId: string,
+  ip?: string
+): Promise<CheckoutCustomerInfo> {
+  const customer = await db.user.findUnique({
+    where: { id: customerId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      surname: true,
+      phone: true,
+      address: true,
+      city: true,
+      country: true,
+      taxNumber: true,
+    },
+  });
+
+  if (!customer) {
+    throw new Error("CUSTOMER_NOT_FOUND");
+  }
+
+  return {
+    id: customer.id,
+    email: customer.email,
+    name: customer.name,
+    surname: customer.surname,
+    phone: customer.phone,
+    address: customer.address,
+    city: customer.city,
+    country: customer.country,
+    identityNumber: customer.taxNumber,
+    ip,
+  };
+}
 
 interface CreateStripeCheckoutInput {
   customerId: string;
@@ -25,38 +64,11 @@ export function roundMoney(value: MoneyInput): number {
 /** @deprecated Use getPaymentGatewayProvider().createCheckout() */
 export async function createStripeCheckoutForInvoices(input: CreateStripeCheckoutInput) {
   const provider = await getPaymentGatewayProvider();
-  const customer = await db.user.findUnique({
-    where: { id: input.customerId },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      surname: true,
-      phone: true,
-      address: true,
-      city: true,
-      country: true,
-      taxNumber: true,
-    },
-  });
-
-  if (!customer) {
-    throw new Error("CUSTOMER_NOT_FOUND");
-  }
+  const customer = await loadCheckoutCustomer(input.customerId);
 
   const result = await provider.createCheckout({
     customerId: input.customerId,
-    customer: {
-      id: customer.id,
-      email: customer.email,
-      name: customer.name,
-      surname: customer.surname,
-      phone: customer.phone,
-      address: customer.address,
-      city: customer.city,
-      country: customer.country,
-      identityNumber: customer.taxNumber,
-    },
+    customer,
     invoiceIds: input.invoiceIds,
     totalAmount: input.totalAmount,
     description: input.description,
@@ -98,40 +110,12 @@ export async function initiateCreditCardPayment(input: InitiateCreditCardPayment
       ? `${baseUrl}/musteri/panel/hizmetlerim?renewal=cancelled`
       : `${baseUrl}/musteri/panel/faturalar/${input.invoiceId}?payment=cancelled`;
 
-  const customer = await db.user.findUnique({
-    where: { id: input.customerId },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      surname: true,
-      phone: true,
-      address: true,
-      city: true,
-      country: true,
-      taxNumber: true,
-    },
-  });
-
-  if (!customer) {
-    throw new Error("CUSTOMER_NOT_FOUND");
-  }
+  const customer = await loadCheckoutCustomer(input.customerId, input.customerIp);
 
   const provider = await getPaymentGatewayProvider();
   const result = await provider.createCheckout({
     customerId: input.customerId,
-    customer: {
-      id: customer.id,
-      email: customer.email,
-      name: customer.name,
-      surname: customer.surname,
-      phone: customer.phone,
-      address: customer.address,
-      city: customer.city,
-      country: customer.country,
-      identityNumber: customer.taxNumber,
-      ip: input.customerIp,
-    },
+    customer,
     invoiceIds: [input.invoiceId],
     totalAmount: input.amount,
     description: `${input.invoiceNumber} fatura ödemesi`,

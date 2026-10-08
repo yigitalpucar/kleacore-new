@@ -1,7 +1,7 @@
 import type { IntegrationResult } from "@/lib/integrations/settings";
 import type { PaymentContext } from "@/lib/payments/context";
 
-export type PaymentGatewayId = "stripe" | "iyzico" | "paytr" | "disabled";
+export type PaymentGatewayId = "stripe" | "iyzico" | "paytr" | "kuveytturk" | "disabled";
 
 export interface CheckoutCustomerInfo {
   id: string;

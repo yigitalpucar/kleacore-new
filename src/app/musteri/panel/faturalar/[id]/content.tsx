@@ -79,13 +79,20 @@ interface SerializedInvoice {
   } | null;
 }
 
+export interface InvoicePaymentNotice {
+  tone: "success" | "error" | "warning";
+  title: string;
+  message: string;
+}
+
 interface FaturaDetayContentProps {
   invoice: SerializedInvoice;
+  paymentNotice?: InvoicePaymentNotice | null;
 }
 
 const money = (n: number) => formatTRY(n, { keepDecimals: true });
 
-export function FaturaDetayContent({ invoice }: FaturaDetayContentProps) {
+export function FaturaDetayContent({ invoice, paymentNotice }: FaturaDetayContentProps) {
   const router = useRouter();
   const canPay = invoice.status === "PENDING" || invoice.status === "OVERDUE";
   const description = invoice.items[0]?.description ?? invoice.invoiceNumber;
@@ -204,6 +211,36 @@ export function FaturaDetayContent({ invoice }: FaturaDetayContentProps) {
           </>
         }
       />
+
+      {paymentNotice ? (
+        <div
+          role={paymentNotice.tone === "success" ? "status" : "alert"}
+          className={cn(
+            "flex items-start gap-3 rounded-lg border bg-card p-4 text-sm",
+            paymentNotice.tone === "success"
+              ? "border-emerald-500/40"
+              : paymentNotice.tone === "error"
+                ? "border-red-500/40"
+                : "border-amber-500/40"
+          )}
+        >
+          {paymentNotice.tone === "success" ? (
+            <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+          ) : (
+            <AlertTriangle
+              aria-hidden
+              className={cn(
+                "mt-0.5 size-4 shrink-0",
+                paymentNotice.tone === "error" ? "text-red-500" : "text-amber-500"
+              )}
+            />
+          )}
+          <div>
+            <p className="font-medium">{paymentNotice.title}</p>
+            <p className="mt-0.5 text-muted-foreground">{paymentNotice.message}</p>
+          </div>
+        </div>
+      ) : null}
 
       {invoice.status === "OVERDUE" ? (
         <div role="alert" className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-card p-4 text-sm">

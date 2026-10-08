@@ -74,6 +74,14 @@ export interface PaymentGatewayConfig {
   provider: string;
   iyzico: { enabled: boolean; apiKey: string; hasSecretKey: boolean; testMode: boolean };
   paytr: { enabled: boolean; merchantId: string; hasMerchantKey: boolean; hasMerchantSalt: boolean };
+  kuveytturk: {
+    enabled: boolean;
+    merchantId: string;
+    customerId: string;
+    username: string;
+    hasPassword: boolean;
+    testMode: boolean;
+  };
 }
 
 export interface EfaturaConfig {

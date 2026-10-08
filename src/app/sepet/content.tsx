@@ -25,7 +25,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { redirectToCheckoutUrl } from "@/lib/utils/safe-redirect";
+import { handleCreditCardCheckoutRedirect } from "@/lib/payments/checkout-redirect";
 import { addonPeriodTotal, priceBasisForItemType } from "@/lib/billing/period-price";
 import { PeriodBadge, PeriodNote } from "@/components/checkout/period-note";
 import type { CartItem } from "@/store/cart-store";
@@ -102,9 +102,17 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
       }
 
       clearCart();
-      const checkoutUrl =
-        result.data && "checkoutUrl" in result.data ? result.data.checkoutUrl : null;
-      if (checkoutUrl && redirectToCheckoutUrl(checkoutUrl)) {
+      if (
+        result.data &&
+        handleCreditCardCheckoutRedirect(
+          {
+            checkoutUrl: "checkoutUrl" in result.data ? result.data.checkoutUrl : null,
+            checkoutHtml: "checkoutHtml" in result.data ? result.data.checkoutHtml : null,
+            paytrToken: "paytrToken" in result.data ? result.data.paytrToken : null,
+          },
+          router
+        )
+      ) {
         return;
       }
 
@@ -126,7 +134,7 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
     {
       value: "CREDIT_CARD",
       label: "Kredi kartı",
-      description: "Güvenli ödeme sayfasına yönlendirilirsiniz.",
+      description: "Kart bilgilerinizi bir sonraki adımda girersiniz; 3D Secure ile tek çekim.",
       icon: CreditCard,
     },
     {

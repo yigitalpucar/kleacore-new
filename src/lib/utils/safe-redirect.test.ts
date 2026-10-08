@@ -32,3 +32,21 @@ describe("isAllowedCheckoutUrl", () => {
     ).toBe(false);
   });
 });
+
+describe("isAllowedCheckoutUrl (own card form)", () => {
+  it("allows our /odeme/ pages on the current origin only", () => {
+    expect(
+      isAllowedCheckoutUrl("http://localhost:3000/odeme/kuveytturk?ref=KC1", "http://localhost:3000")
+    ).toBe(true);
+    expect(
+      isAllowedCheckoutUrl("https://kleacore.com/odeme/kuveytturk?ref=KC1", "https://kleacore.com")
+    ).toBe(true);
+    expect(
+      isAllowedCheckoutUrl("https://evil.com/odeme/kuveytturk?ref=KC1", "https://kleacore.com")
+    ).toBe(false);
+    expect(isAllowedCheckoutUrl("https://kleacore.com/musteri/panel", "https://kleacore.com")).toBe(
+      false
+    );
+    expect(isAllowedCheckoutUrl("https://kleacore.com/odeme/kuveytturk?ref=KC1")).toBe(false);
+  });
+});
