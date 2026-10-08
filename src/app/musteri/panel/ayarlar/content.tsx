@@ -72,6 +72,8 @@ interface AyarlarContentProps {
   twoFactorEnabled: boolean;
   twoFactorSetupPending: boolean;
   twoFactorGloballyEnabled: boolean;
+  /** Staff sent here by require_staff_2fa: open the security tab with a notice. */
+  staffTwoFactorRequired?: boolean;
 }
 
 interface NewlyCreatedApiKey {
@@ -117,9 +119,10 @@ export function AyarlarContent({
   twoFactorEnabled,
   twoFactorSetupPending,
   twoFactorGloballyEnabled,
+  staffTwoFactorRequired = false,
 }: AyarlarContentProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabId>("profile");
+  const [activeTab, setActiveTab] = useState<TabId>(staffTwoFactorRequired ? "security" : "profile");
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState(
     profile ?? {
@@ -137,7 +140,11 @@ export function AyarlarContent({
   );
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
+    staffTwoFactorRequired
+      ? { type: "error", text: "Yönetim paneline erişmek için önce iki faktörlü doğrulamayı etkinleştirmeniz gerekiyor." }
+      : null
+  );
   const [showCreateKeyForm, setShowCreateKeyForm] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<NewlyCreatedApiKey | null>(null);

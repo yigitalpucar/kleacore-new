@@ -13,7 +13,12 @@ function maskApiKey(key: string): string {
   return key.substring(0, 7) + "****" + key.substring(key.length - 4);
 }
 
-export default async function AyarlarPage() {
+export default async function AyarlarPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { "2fa": twoFactorNotice } = await searchParams;
   const session = await auth();
   const userId = session!.user.id;
 
@@ -55,6 +60,7 @@ export default async function AyarlarPage() {
         !profile?.twoFactorEnabled && Boolean(profile?.twoFactorSecret)
       }
       twoFactorGloballyEnabled={twoFactorGloballyEnabled}
+      staffTwoFactorRequired={twoFactorNotice === "personel" && !profile?.twoFactorEnabled}
     />
   );
 }
