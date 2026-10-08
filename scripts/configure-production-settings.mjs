@@ -26,8 +26,10 @@ const db = new PrismaClient({ adapter });
 const SETTINGS = [
   { key: "company_name", value: "KLEAWORK DIGITAL LLC" },
   { key: "company_email", value: "info@kleacore.com" },
-  { key: "company_phone", value: "+90 850 000 00 00" },
-  { key: "company_address", value: "İstanbul, Türkiye" },
+  // No company_phone until a real number exists (contracts/e-mails render
+  // none). Address = the company on the site footer (src/lib/company-info.ts)
+  // until the Turkish invoicing company is set up.
+  { key: "company_address", value: "30 N Gould St Ste R, Sheridan, WY 82801, USA" },
   { key: "tax_rate", value: "20" },
   { key: "currency", value: "TRY" },
   { key: "two_factor", value: "true" },

@@ -1,3 +1,4 @@
+import { COMPANY_INFO_DEFAULTS } from "@/lib/company-info";
 import Link from "next/link";
 import Image from "next/image";
 import { Mail, MapPin } from "lucide-react";
@@ -35,22 +36,22 @@ export function Footer() {
             </p>
 
             <address className="mt-6 space-y-3 text-sm not-italic text-muted-foreground">
-              <p className="font-medium text-foreground">KLEAWORK DIGITAL LLC</p>
+              <p className="font-medium text-foreground">{COMPANY_INFO_DEFAULTS.name}</p>
               <p className="flex gap-2">
                 <MapPin aria-hidden className="mt-0.5 size-4 shrink-0" />
                 <span>
-                  30 N Gould St Ste R
+                  {COMPANY_INFO_DEFAULTS.addressLines[0]}
                   <br />
-                  Sheridan, WY 82801, USA
+                  {COMPANY_INFO_DEFAULTS.addressLines[1]}
                 </span>
               </p>
               <p>
-                <a href="mailto:support@kleacore.com" className={`${linkClass} gap-2`}>
+                <a href={`mailto:${COMPANY_INFO_DEFAULTS.email}`} className={`${linkClass} gap-2`}>
                   <Mail aria-hidden className="size-4" />
-                  support@kleacore.com
+                  {COMPANY_INFO_DEFAULTS.email}
                 </a>
               </p>
-              <p className="font-mono text-xs">EIN: 36-5157418</p>
+              <p className="font-mono text-xs">{COMPANY_INFO_DEFAULTS.taxId.replace(/^EIN /, "EIN: ")}</p>
             </address>
           </div>
 
@@ -92,7 +93,7 @@ export function Footer() {
           <GridLineHorizontal className="top-0" />
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <p className="text-sm text-muted-foreground">
-              © {year} KLEACORE · KLEAWORK DIGITAL LLC. Tüm hakları saklıdır.
+              © {year} KLEACORE · {COMPANY_INFO_DEFAULTS.name}. Tüm hakları saklıdır.
             </p>
             <nav aria-label="Yasal">
               <ul className="flex flex-wrap gap-x-5 gap-y-1">

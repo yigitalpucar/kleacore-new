@@ -126,9 +126,15 @@ function variables(context: LegalRenderContext): Record<string, string> {
   };
 }
 
+/** The "· Telefon: {{seller.phone}}" segment, dropped when the seller has no real phone. */
+const SELLER_PHONE_SEGMENT = /(?:\s*·\s*)?Telefon:\s*\{\{\s*seller\.phone\s*\}\}/g;
+
 export function renderLegalTemplate(template: string, context: LegalRenderContext) {
   const values = variables(context);
-  return template.replace(/\{\{\s*([a-z_.]+)\s*\}\}/g, (_match, name: string) => {
+  // No seller phone configured: drop the whole "Telefon:" segment instead of
+  // printing an empty (or placeholder) number in a contract.
+  const source = context.seller.phone.trim() ? template : template.replace(SELLER_PHONE_SEGMENT, "");
+  return source.replace(/\{\{\s*([a-z_.]+)\s*\}\}/g, (_match, name: string) => {
     if (name === "order.items_table") return itemsTable(context.order);
     return escapeLegalHtml(values[name] ?? "");
   });

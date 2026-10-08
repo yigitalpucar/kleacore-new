@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/db", () => ({ db: {} }));
+const settingRows = vi.hoisted(() => ({ rows: [] as Array<{ key: string; value: string }> }));
+vi.mock("@/lib/db", () => ({ db: { setting: { findMany: async () => settingRows.rows } } }));
 
-import { DEFAULT_BRAND, renderNotification } from "./render";
+import { DEFAULT_BRAND, loadBrand, renderNotification } from "./render";
 import { listTemplates } from "./templates";
 import type { RenderContext } from "./templates/types";
 
@@ -10,7 +11,7 @@ const ctx: RenderContext = {
   brand: {
     ...DEFAULT_BRAND,
     companyName: "KLEAWORK DIGITAL LLC",
-    companyAddress: "İstanbul, Türkiye",
+    companyAddress: "30 N Gould St Ste R, Sheridan, WY 82801, USA",
     supportEmail: "destek@kleacore.com",
   },
   baseUrl: "https://kleacore.com",
@@ -38,6 +39,7 @@ const REQUIRED_KEYS = [
   "domain.expiry-notice",
   "support.ticket-replied",
   "admin.manual-provisioning",
+  "admin.domain-renewal-failed",
 ];
 
 describe("notification templates", () => {
@@ -138,5 +140,31 @@ describe("notification templates", () => {
     );
     expect(rendered.text).toMatch(/1\.199,90\s₺/);
     expect(rendered.text).toContain("15.10.2026");
+  });
+});
+
+describe("e-mail footer company block", () => {
+  it("drops the placeholder phone/address and uses the site-footer company", async () => {
+    settingRows.rows = [
+      { key: "company_name", value: "KLEAWORK DIGITAL LLC" },
+      { key: "company_phone", value: "+90 850 000 00 00" },
+      { key: "company_address", value: "İstanbul, Türkiye" },
+      { key: "support_email", value: "destek@kleacore.com" },
+    ];
+    const brand = await loadBrand();
+    expect(brand).toMatchObject({
+      companyName: "KLEAWORK DIGITAL LLC",
+      companyAddress: "30 N Gould St Ste R, Sheridan, WY 82801, USA",
+      companyPhone: "",
+    });
+
+    const rendered = await renderNotification(
+      "billing.payment-received",
+      { invoiceId: "inv-1", invoiceNumber: "F-1", paidAmount: 10, paidAt: new Date("2026-10-08") },
+      { brand, baseUrl: "https://kleacore.com" }
+    );
+    expect(rendered.html).not.toContain("850 000 00 00");
+    expect(rendered.html).not.toContain("İstanbul, Türkiye");
+    expect(rendered.text).toContain("30 N Gould St Ste R");
   });
 });

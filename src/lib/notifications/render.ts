@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { COMPANY_SETTING_KEYS, companyInfoFromSettings } from "@/lib/company-info";
 import { decryptSecret, encryptSecret, isEncryptedValue } from "@/lib/secrets/crypto";
 import { getAppBaseUrl } from "@/lib/stripe";
 import { LOGO_CID, renderEmailLayout, type RenderedEmail } from "./layout";
@@ -8,23 +9,17 @@ import type { NotificationBrand, NotificationTemplate, RenderContext } from "./t
 
 export const REDACTED_PLACEHOLDER = "•••••• (gizli)";
 
-const BRAND_KEYS = [
-  "site_name",
-  "company_name",
-  "company_address",
-  "company_phone",
-  "support_email",
-  "company_email",
-  "site_url",
-] as const;
+const BRAND_KEYS = ["site_name", ...COMPANY_SETTING_KEYS] as const;
+
+const DEFAULT_COMPANY = companyInfoFromSettings({});
 
 export const DEFAULT_BRAND: NotificationBrand = {
   siteName: "KLEACORE",
-  companyName: "KLEACORE",
-  companyAddress: "",
+  companyName: DEFAULT_COMPANY.name,
+  companyAddress: DEFAULT_COMPANY.address,
   companyPhone: "",
-  supportEmail: "destek@kleacore.com",
-  siteUrl: "https://kleacore.com",
+  supportEmail: DEFAULT_COMPANY.email,
+  siteUrl: DEFAULT_COMPANY.website,
 };
 
 export async function loadBrand(): Promise<NotificationBrand> {
@@ -32,14 +27,17 @@ export async function loadBrand(): Promise<NotificationBrand> {
     where: { key: { in: [...BRAND_KEYS] } },
     select: { key: true, value: true },
   });
-  const map = new Map(rows.map((row) => [row.key, row.value?.trim() ?? ""]));
+  const settings = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+  // Same company block as the contracts and the site footer; placeholder
+  // phone/address values are dropped, an unset phone is not rendered.
+  const company = companyInfoFromSettings(settings);
   return {
-    siteName: map.get("site_name") || DEFAULT_BRAND.siteName,
-    companyName: map.get("company_name") || map.get("site_name") || DEFAULT_BRAND.companyName,
-    companyAddress: map.get("company_address") || "",
-    companyPhone: map.get("company_phone") || "",
-    supportEmail: map.get("support_email") || map.get("company_email") || DEFAULT_BRAND.supportEmail,
-    siteUrl: map.get("site_url") || DEFAULT_BRAND.siteUrl,
+    siteName: settings.site_name?.trim() || DEFAULT_BRAND.siteName,
+    companyName: company.name,
+    companyAddress: company.address,
+    companyPhone: company.phone,
+    supportEmail: company.email,
+    siteUrl: company.website,
   };
 }
 

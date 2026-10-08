@@ -135,3 +135,32 @@ describe("recordCheckoutConsents", () => {
     });
   });
 });
+
+describe("seller phone in contracts", () => {
+  const template = "<p>E-posta: {{seller.email}} · Telefon: {{seller.phone}}<br>Web: {{seller.website}}</p>";
+
+  it("omits the Telefon segment when no real phone is configured", () => {
+    const html = renderLegalTemplate(template, context);
+    expect(html).not.toContain("Telefon");
+    expect(html).toContain("E-posta: destek@kleacore.com<br>Web: https://kleacore.com");
+  });
+
+  it("prints a real phone number", () => {
+    const html = renderLegalTemplate(template, {
+      ...context,
+      seller: { ...context.seller, phone: "+90 212 555 00 11" },
+    });
+    expect(html).toContain("Telefon: +90 212 555 00 11<br>");
+  });
+
+  it("never puts the placeholder phone into the seller block", async () => {
+    const { getLegalSeller } = await import("./documents");
+    const findMany = vi.fn().mockResolvedValue([
+      { key: "company_phone", value: "+90 850 000 00 00" },
+      { key: "company_address", value: "İstanbul, Türkiye" },
+    ]);
+    const seller = await getLegalSeller({ setting: { findMany } } as never);
+    expect(seller.phone).toBe("");
+    expect(seller.address).toBe("30 N Gould St Ste R, Sheridan, WY 82801, USA");
+  });
+});

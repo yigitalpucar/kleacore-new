@@ -1,3 +1,4 @@
+import { COMPANY_INFO_DEFAULTS } from "@/lib/company-info";
 import Link from "next/link";
 import { ArrowUpRight, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -215,7 +216,7 @@ export function LegalBoxList({
 
 /** Company / contact card closing each policy. */
 export function LegalContactCard({
-  heading = "KLEAWORK DIGITAL LLC",
+  heading = COMPANY_INFO_DEFAULTS.name,
   emails,
   showEin = true,
 }: {
@@ -230,8 +231,8 @@ export function LegalContactCard({
       </span>
       <div className="min-w-0 text-sm">
         <p className="font-medium text-foreground">{heading}</p>
-        <p className="mt-1 text-muted-foreground">30 N Gould St Ste R, Sheridan, WY 82801, USA</p>
-        {showEin ? <p className="text-muted-foreground">EIN: 36-5157418</p> : null}
+        <p className="mt-1 text-muted-foreground">{COMPANY_INFO_DEFAULTS.address}</p>
+        {showEin ? <p className="text-muted-foreground">{COMPANY_INFO_DEFAULTS.taxId.replace(/^EIN /, "EIN: ")}</p> : null}
         <div className="mt-2 flex flex-wrap gap-x-4">
           {emails.map((email) => (
             <a

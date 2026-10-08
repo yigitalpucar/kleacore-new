@@ -1,3 +1,4 @@
+import { realCompanyValue } from "@/lib/company-info";
 import { getSettingMap, isEnabled } from "../settings";
 import { createDisabledEInvoiceProvider } from "./providers/disabled";
 import { createParasutEInvoiceProvider } from "./providers/parasut";
@@ -76,12 +77,12 @@ export function configFromSettings(settings: Record<string, string>): EInvoiceCo
       name: pick("efatura_company_name", "company_name"),
       vkn: (settings.efatura_company_vkn ?? "").replace(/\D/g, ""),
       taxOffice: pick("efatura_company_tax_office"),
-      street: pick("efatura_company_street", "company_address", "address"),
+      street: pick("efatura_company_street") || realCompanyValue("address", pick("company_address", "address")),
       district: pick("efatura_company_district"),
       city: pick("efatura_company_city") || "İstanbul",
       postalZone: pick("efatura_company_postal_zone"),
       country: "Türkiye",
-      phone: pick("efatura_company_phone", "company_phone"),
+      phone: pick("efatura_company_phone") || realCompanyValue("phone", pick("company_phone")),
       email: pick("efatura_company_email", "company_email"),
       website: pick("efatura_company_website", "site_url"),
       mersisNo: pick("efatura_company_mersis") || undefined,

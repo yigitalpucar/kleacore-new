@@ -1,3 +1,4 @@
+import { loadCompanyInfo } from "@/lib/company-info";
 import { createHash } from "node:crypto";
 import { Prisma, type LegalDocument, type LegalDocumentType } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -91,37 +92,21 @@ export function assertCheckoutConsents(
   }
 }
 
-const SELLER_FALLBACK: LegalSeller = {
-  name: "KLEAWORK DIGITAL LLC",
-  address: "30 N Gould St Ste R, Sheridan, WY 82801, USA",
-  email: "destek@kleacore.com",
-  phone: "",
-  taxId: "EIN 36-5157418",
-  website: "https://kleacore.com",
-};
-
 /**
- * Seller block of the contracts. The address/EIN default to the ones on the
- * published legal pages; admin settings override name, e-mail and phone.
+ * Seller block of the contracts, from the shared company info
+ * (src/lib/company-info.ts): admin settings override the defaults shown on
+ * the site footer; the placeholder phone/address never reach a contract and
+ * an unset phone renders as nothing.
  */
 export async function getLegalSeller(client: Client = db): Promise<LegalSeller> {
-  const rows = await client.setting.findMany({
-    where: {
-      key: {
-        in: ["company_name", "company_email", "support_email", "company_phone", "site_url", "legal_seller_address", "legal_seller_tax_id"],
-      },
-    },
-    select: { key: true, value: true },
-  });
-  const get = (key: string) => rows.find((row) => row.key === key)?.value?.trim() || "";
-
+  const company = await loadCompanyInfo(client);
   return {
-    name: get("company_name") || SELLER_FALLBACK.name,
-    address: get("legal_seller_address") || SELLER_FALLBACK.address,
-    email: get("support_email") || get("company_email") || SELLER_FALLBACK.email,
-    phone: get("company_phone") || SELLER_FALLBACK.phone,
-    taxId: get("legal_seller_tax_id") || SELLER_FALLBACK.taxId,
-    website: get("site_url") || SELLER_FALLBACK.website,
+    name: company.name,
+    address: company.address,
+    email: company.email,
+    phone: company.phone,
+    taxId: company.taxId,
+    website: company.website,
   };
 }
 
