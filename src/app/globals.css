@@ -26,6 +26,9 @@
     --input: 0 0% 88%;
     --ring: 240 5% 34%;
     --radius: 0.5rem;
+    /* site kit: dashed frame lines + background grid */
+    --grid-line: 0 0% 0% / 0.16;
+    --grid-line-soft: 0 0% 0% / 0.05;
   }
 
   .dark {
@@ -48,6 +51,8 @@
     --border: 240 10% 18%;
     --input: 240 10% 18%;
     --ring: 240 5% 65%;
+    --grid-line: 0 0% 100% / 0.16;
+    --grid-line-soft: 0 0% 100% / 0.05;
   }
 }
 
@@ -75,22 +80,46 @@
     @apply text-primary;
   }
 
-  .animate-hero-ken-burns {
-    animation: hero-ken-burns 18s ease-out infinite alternate;
-  }
 }
 
-@keyframes hero-ken-burns {
-  from {
-    transform: scale(1);
+/* ---------------------------------------------------------------
+ * Site kit utilities (src/components/site). See docs/ui-kit.md.
+ * ------------------------------------------------------------- */
+@layer utilities {
+  .line-dashed-x {
+    height: 1px;
+    background-image: linear-gradient(to right, hsl(var(--grid-line)) 50%, transparent 0);
+    background-size: 6px 1px;
   }
-  to {
-    transform: scale(1.06);
+  .line-dashed-y {
+    width: 1px;
+    background-image: linear-gradient(to bottom, hsl(var(--grid-line)) 50%, transparent 0);
+    background-size: 1px 6px;
   }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-hero-ken-burns {
-    animation: none;
+  .mask-fade-x {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  }
+  .mask-fade-y {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--grid-line-soft)) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--grid-line-soft)) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+  .bg-dots {
+    background-image: radial-gradient(hsl(var(--grid-line)) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+  .mask-radial-top {
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 100%);
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 100%);
+  }
+  .mask-radial-center {
+    -webkit-mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, #000 30%, transparent 100%);
+    mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, #000 30%, transparent 100%);
   }
 }
