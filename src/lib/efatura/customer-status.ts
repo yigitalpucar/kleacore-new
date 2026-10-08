@@ -7,6 +7,7 @@ const statusLabels: Record<EInvoiceStatus, string> = {
   ACCEPTED: "Kabul edildi",
   REJECTED: "Reddedildi",
   FAILED: "Gönderilemedi",
+  CANCELLED: "İptal edildi",
 };
 
 export function getCustomerEInvoiceLabel(
@@ -31,7 +32,7 @@ export function getCustomerEInvoiceBadgeClass(status: EInvoiceStatus) {
   if (status === "SENT" || status === "ACCEPTED") {
     return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
   }
-  if (status === "FAILED" || status === "REJECTED") {
+  if (status === "FAILED" || status === "REJECTED" || status === "CANCELLED") {
     return "bg-red-500/10 text-red-600 border-red-500/20";
   }
   return "bg-blue-500/10 text-blue-600 border-blue-500/20";

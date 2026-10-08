@@ -115,6 +115,7 @@ enum EInvoiceStatus {
   ACCEPTED
   REJECTED
   FAILED
+  CANCELLED
 }
 
 enum PaymentMethod {
@@ -871,14 +872,24 @@ model EInvoiceRecord {
   type             String // "e-fatura" | "e-arsiv"
   status           EInvoiceStatus @default(DRAFT)
   documentUuid     String?
-  documentNumber   String?
+  documentNumber   String?        @unique
   ublPayload       Json?
   providerResponse Json?
   errorMessage     String?
   sentAt           DateTime?
+  // "uyumsoft" | "parasut"; null on rows created before the provider split.
+  provider         String?
+  profile          String? // TEMELFATURA | TICARIFATURA | EARSIVFATURA
+  providerStatus   String? // raw entegratör status (e.g. Uyumsoft "Approved")
+  attempts         Int            @default(0)
+  lastAttemptAt    DateTime?
+  statusCheckedAt  DateTime?
+  cancelledAt      DateTime?
+  cancelReason     String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
+  @@index([status])
   @@map("e_invoice_records")
 }
 

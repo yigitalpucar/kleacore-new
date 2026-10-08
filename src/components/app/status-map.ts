@@ -136,6 +136,7 @@ const eInvoice: Map = {
   ACCEPTED: { label: "Kabul edildi", tone: "success" },
   REJECTED: { label: "Reddedildi", tone: "danger" },
   FAILED: { label: "Başarısız", tone: "danger" },
+  CANCELLED: { label: "İptal edildi", tone: "muted" },
 };
 
 const user: Map = {
