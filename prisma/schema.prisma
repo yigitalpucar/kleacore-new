@@ -86,6 +86,8 @@ enum ProvisioningJobStatus {
 enum ProvisioningJobKind {
   PROVISION
   UNSUSPEND
+  /// Remote package change (WHM changepackage / VPS resize) of a paid plan change.
+  PLAN_CHANGE
 }
 
 enum PlanChangeType {
@@ -894,13 +896,18 @@ model EInvoiceRecord {
 }
 
 model InvoiceItem {
-  id          String  @id @default(cuid())
-  invoiceId   String
-  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  description String
-  quantity    Int     @default(1)
-  unitPrice   Decimal @db.Decimal(14, 2)
-  totalPrice  Decimal @db.Decimal(14, 2)
+  id             String  @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description    String
+  quantity       Int     @default(1)
+  /// Net (KDV hariç) birim fiyat, indirim öncesi.
+  unitPrice      Decimal @db.Decimal(14, 2)
+  /// Satır indirimi (promosyon, bayi, dönem indirimi), net.
+  discountAmount Decimal @default(0) @db.Decimal(14, 2)
+  /// Net (KDV hariç) satır toplamı = unitPrice × quantity − discountAmount.
+  /// KDV fatura düzeyinde hesaplanır: Σ totalPrice = invoice.subtotal.
+  totalPrice     Decimal @db.Decimal(14, 2)
 
   @@map("invoice_items")
 }

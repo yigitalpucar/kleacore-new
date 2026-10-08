@@ -33,7 +33,7 @@ const invoice: InvoiceForEInvoice = {
   totalAmount: 120,
   issuedAt: new Date("2026-10-08T10:00:00Z"),
   paidAt: new Date("2026-10-08T10:00:00Z"),
-  items: [{ id: "i", description: "Hosting", quantity: 1, unitPrice: 100, totalPrice: 120 }],
+  items: [{ id: "i", description: "Hosting", quantity: 1, unitPrice: 100, totalPrice: 100 }],
   payments: [{ method: "BANK_TRANSFER", status: "COMPLETED", paidAt: new Date("2026-10-08T10:00:00Z") }],
   customer: {
     name: "Ali",

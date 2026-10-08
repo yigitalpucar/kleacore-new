@@ -37,6 +37,7 @@ export default async function InvoiceDetailPage({
       description: item.description,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
+      discountAmount: Number(item.discountAmount),
       totalPrice: Number(item.totalPrice),
     })),
     payments: invoice.payments.map((p) => ({

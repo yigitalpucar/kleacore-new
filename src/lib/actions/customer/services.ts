@@ -14,6 +14,7 @@ import {
 } from "@/lib/payments/methods";
 import { initiateCreditCardPayment, isStripePaymentMethod } from "@/lib/payments/orchestrator";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
+import { netInvoiceLine } from "@/lib/billing/invoice-lines";
 import { div, mul, percent, roundHalfUp, sub } from "@/lib/money";
 
 interface RenewServiceInput {
@@ -169,12 +170,11 @@ export async function renewService(input: RenewServiceInput) {
             ? `Hizmet yenileme (${input.months} ay) - banka havalesi bekleniyor`
             : `Hizmet yenileme (${input.months} ay)`,
           items: {
-            create: {
+            create: netInvoiceLine({
               description: `${service.product.name} (${input.months} ay yenileme)`,
-              quantity: 1,
-              unitPrice: totalAmount,
-              totalPrice: totalAmount,
-            },
+              unitPrice: subtotal,
+              discountAmount,
+            }),
           },
         },
       });

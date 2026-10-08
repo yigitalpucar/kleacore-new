@@ -63,7 +63,7 @@ const paidInvoice = (taxNumber: string | null = null) => ({
   totalAmount: 120,
   issuedAt: new Date(),
   paidAt: new Date(),
-  items: [{ id: "i", description: "Hosting", quantity: 1, unitPrice: 100, totalPrice: 120 }],
+  items: [{ id: "i", description: "Hosting", quantity: 1, unitPrice: 100, totalPrice: 100 }],
   payments: [],
   customer: {
     name: "Ali",

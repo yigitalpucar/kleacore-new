@@ -77,6 +77,7 @@ export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
       description: item.description,
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
+      discountAmount: Number(item.discountAmount),
       totalPrice: Number(item.totalPrice),
     })),
     payments: invoice.payments.map((p) => ({

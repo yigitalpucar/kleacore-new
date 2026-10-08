@@ -30,7 +30,7 @@ const baseInvoice: InvoiceForEInvoice = {
   issuedAt: new Date("2026-06-17T10:00:00.000Z"),
   paidAt: new Date("2026-06-17T12:30:00.000Z"),
   items: [
-    { id: "item_1", description: "Web Hosting - Yıllık", quantity: 1, unitPrice: 100, totalPrice: 120 },
+    { id: "item_1", description: "Web Hosting - Yıllık", quantity: 1, unitPrice: 100, totalPrice: 100 },
   ],
   payments: [{ method: "CREDIT_CARD", status: "COMPLETED", paidAt: new Date("2026-06-17T12:30:00.000Z") }],
   customer: {
@@ -148,17 +148,16 @@ describe("buildEInvoiceDocument", () => {
     );
   });
 
-  it("distributes header totals over lines so sums match to the kuruş", () => {
-    // Three lines whose stored totals are gross; header is authoritative.
+  it("uses the net line totals and spreads the invoice KDV over them to the kuruş", () => {
     const invoice: InvoiceForEInvoice = {
       ...baseInvoice,
       subtotal: 100,
       taxAmount: 20,
       totalAmount: 120,
       items: [
-        { id: "a", description: "A", quantity: 1, unitPrice: 40, totalPrice: 40 },
-        { id: "b", description: "B", quantity: 3, unitPrice: 10, totalPrice: 40 },
-        { id: "c", description: "C", quantity: 1, unitPrice: 40, totalPrice: 40 },
+        { id: "a", description: "A", quantity: 1, unitPrice: 33.34, totalPrice: 33.34 },
+        { id: "b", description: "B", quantity: 3, unitPrice: 11.11, totalPrice: 33.33 },
+        { id: "c", description: "C", quantity: 1, unitPrice: 33.33, totalPrice: 33.33 },
       ],
     };
     const doc = buildEInvoiceDocument(invoice, { supplier, type: "e-arsiv", now });
@@ -179,9 +178,43 @@ describe("buildEInvoiceDocument", () => {
     });
   });
 
+  it("bills a discounted checkout line at its net total (not the KDV-inclusive amount)", () => {
+    // Checkout: 149.00 net, 10% promo → 134.10 net, 26.82 KDV, 160.92 total.
+    const doc = buildEInvoiceDocument(
+      {
+        ...baseInvoice,
+        subtotal: 134.1,
+        taxAmount: 26.82,
+        totalAmount: 160.92,
+        items: [{ id: "a", description: "emirfeto.com Domain Kaydı", quantity: 1, unitPrice: 149, totalPrice: 134.1 }],
+      },
+      { supplier, type: "e-arsiv", now }
+    );
+    expect(doc.lines[0]).toMatchObject({ netKurus: 13410, taxKurus: 2682, unitPrice: "134.10" });
+    expect(doc.totals.payableKurus).toBe(16092);
+  });
+
+  it("refuses lines that don't add up to the subtotal (legacy KDV-inclusive rows)", () => {
+    expect(() =>
+      buildEInvoiceDocument(
+        {
+          ...baseInvoice,
+          items: [{ id: "a", description: "A", quantity: 1, unitPrice: 100, totalPrice: 120 }],
+        },
+        { supplier, type: "e-arsiv", now }
+      )
+    ).toThrow("EFATURA_LINES_MISMATCH");
+  });
+
   it("keeps awkward rounding (33.33 + %20) consistent with the invoice header", () => {
     const doc = buildEInvoiceDocument(
-      { ...baseInvoice, subtotal: 33.33, taxAmount: 6.67, totalAmount: 40 },
+      {
+        ...baseInvoice,
+        subtotal: 33.33,
+        taxAmount: 6.67,
+        totalAmount: 40,
+        items: [{ id: "a", description: "A", quantity: 1, unitPrice: 33.33, totalPrice: 33.33 }],
+      },
       { supplier, type: "e-arsiv", now }
     );
     expect(doc.lines[0]).toMatchObject({ netKurus: 3333, taxKurus: 667 });

@@ -44,6 +44,8 @@ export function serializeInvoiceSummary(invoice: InvoiceWithRelations) {
       description: item.description,
       quantity: item.quantity,
       unitPrice: toNumber(item.unitPrice),
+      discountAmount: toNumber(item.discountAmount),
+      /** Net (KDV hariç) satır toplamı; KDV fatura düzeyinde (taxAmount). */
       totalPrice: toNumber(item.totalPrice),
     })),
     paymentCount: invoice.payments?.length ?? 0,

@@ -54,7 +54,14 @@ export interface AdminInvoiceDetail {
     country: string | null;
   };
   order: { id: string; orderNumber: string } | null;
-  items: { id: string; description: string; quantity: number; unitPrice: number; totalPrice: number }[];
+  items: {
+    id: string;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    discountAmount: number;
+    totalPrice: number;
+  }[];
   payments: {
     id: string;
     amount: number;
@@ -215,7 +222,7 @@ export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail 
                     <th scope="col" className="h-10 px-4 font-medium md:px-5">Açıklama</th>
                     <th scope="col" className="hidden h-10 px-4 text-right font-medium sm:table-cell">Adet</th>
                     <th scope="col" className="hidden h-10 px-4 text-right font-medium sm:table-cell">Birim fiyat</th>
-                    <th scope="col" className="h-10 px-4 text-right font-medium md:px-5">Tutar</th>
+                    <th scope="col" className="h-10 px-4 text-right font-medium md:px-5">Tutar (KDV hariç)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -226,6 +233,9 @@ export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail 
                         <p className="text-xs text-muted-foreground sm:hidden">
                           {item.quantity} × {money(item.unitPrice)}
                         </p>
+                        {item.discountAmount > 0 ? (
+                          <p className="text-xs text-muted-foreground">İndirim: −{money(item.discountAmount)}</p>
+                        ) : null}
                       </td>
                       <td className="hidden px-4 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">{item.quantity}</td>
                       <td className="hidden px-4 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">

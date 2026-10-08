@@ -155,9 +155,9 @@ export async function GET(
     ...(invoice.items.length > 0
       ? invoice.items.map(
           (item, index) =>
-            `${index + 1}. ${item.description} | ${item.quantity} x ${formatMoney(Number(item.unitPrice))} = ${formatMoney(
-              Number(item.totalPrice)
-            )}`
+            `${index + 1}. ${item.description} | ${item.quantity} x ${formatMoney(Number(item.unitPrice))}${
+              Number(item.discountAmount) > 0 ? ` - indirim ${formatMoney(Number(item.discountAmount))}` : ""
+            } = ${formatMoney(Number(item.totalPrice))} (KDV haric)`
         )
       : ["Kalem bulunamadi"]),
     "",

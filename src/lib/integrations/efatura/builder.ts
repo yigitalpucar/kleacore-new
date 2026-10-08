@@ -108,29 +108,37 @@ function resolveInternetSale(invoice: InvoiceForEInvoice, website: string, now: 
 /**
  * Lines whose net/tax amounts sum exactly to the invoice header.
  *
- * Item `totalPrice` is gross in some flows (checkout, renewals) and net in
- * others (admin invoices), so it is only used as the allocation weight: the
- * invoice's own subtotal and tax are authoritative and get distributed over
- * the items with largest-remainder rounding.
+ * Item `totalPrice` is the net (KDV-exclusive) line total after the line
+ * discount (src/lib/billing/invoice-lines.ts), so the lines must add up to the
+ * invoice subtotal; an invoice whose lines don't is refused rather than
+ * guessed. The invoice KDV is distributed over the lines with
+ * largest-remainder rounding so line taxes sum to the header exactly.
  */
 function buildLines(invoice: InvoiceForEInvoice, subtotal: number, tax: number, rate: number): EInvoiceLine[] {
-  const items = invoice.items.length
-    ? invoice.items
-    : [
-        {
-          id: "invoice",
-          description: `Fatura ${invoice.invoiceNumber}`,
-          quantity: 1,
-          unitPrice: 0,
-          totalPrice: 0,
-        },
-      ];
+  if (invoice.items.length === 0) {
+    return [
+      {
+        id: "1",
+        name: `Fatura ${invoice.invoiceNumber}`,
+        quantity: 1,
+        unitPrice: unitPriceString(subtotal, 1),
+        netKurus: subtotal,
+        taxPercent: rate,
+        taxKurus: tax,
+      },
+    ];
+  }
 
-  const weights = items.map((item) => Math.abs(toKurus(item.totalPrice)));
-  const nets = allocateKurus(subtotal, weights);
+  const nets = invoice.items.map((item) => toKurus(item.totalPrice));
+  const linesTotal = nets.reduce((acc, value) => acc + value, 0);
+  if (linesTotal !== subtotal || nets.some((value) => value < 0)) {
+    throw new EInvoiceBuildError(
+      `EFATURA_LINES_MISMATCH: kalemler toplamı ${formatKurus(linesTotal)} ≠ ara toplam ${formatKurus(subtotal)}`
+    );
+  }
   const taxes = allocateKurus(tax, nets);
 
-  return items.map((item, index) => {
+  return invoice.items.map((item, index) => {
     const quantity = Math.max(1, Math.trunc(item.quantity) || 1);
     return {
       id: String(index + 1),

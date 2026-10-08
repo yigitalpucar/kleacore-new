@@ -6,6 +6,7 @@ import {
 } from "@/lib/utils/number-generators";
 import type { CronJobResult } from "./types";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
+import { netInvoiceLine } from "@/lib/billing/invoice-lines";
 
 const billingPeriodLabels: Record<BillingPeriod, string> = {
   monthly: "1 ay",
@@ -113,12 +114,10 @@ export async function generateRenewalInvoices(): Promise<CronJobResult> {
           dueDate: expiryDate,
           notes: `Hizmet yenileme (${periodLabel})`,
           items: {
-            create: {
+            create: netInvoiceLine({
               description: `${service.product.name} yenileme (${periodLabel})`,
-              quantity: 1,
-              unitPrice: taxed.totalAmount,
-              totalPrice: taxed.totalAmount,
-            },
+              unitPrice: subtotal,
+            }),
           },
         },
         select: { id: true },

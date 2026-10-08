@@ -9,6 +9,7 @@ import {
 import { encryptSecret } from "@/lib/secrets/crypto";
 import { calculateDomainTransferPricing, matchDomainTld } from "@/lib/domains/transfer-pricing";
 import { getTaxRate } from "@/lib/billing/tax";
+import { netInvoiceLine } from "@/lib/billing/invoice-lines";
 
 // Server-only helpers. These take an already-authenticated customer object, so
 // they must never live in a "use server" module: every export there becomes a
@@ -211,12 +212,10 @@ export async function processAutomatedDomainTransfer(
         dueDate,
         notes: "Domain transfer ücreti - ödeme bekleniyor",
         items: {
-          create: {
+          create: netInvoiceLine({
             description: `${normalizedDomain} Domain Transferi`,
-            quantity: 1,
             unitPrice: pricing.subtotal,
-            totalPrice: pricing.totalAmount,
-          },
+          }),
         },
       },
     });
