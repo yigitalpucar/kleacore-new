@@ -14,6 +14,7 @@ import {
   passwordResetSchema,
   registerSchema,
 } from "@/lib/validations/auth";
+import { emitEventAfterCommit } from "@/lib/events/emit";
 import { sendNotification } from "@/lib/notifications/send";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
 import { compare, hash } from "bcryptjs";
@@ -384,11 +385,11 @@ export async function resetPasswordAction(formData: FormData) {
       }),
     ]);
 
-    await sendNotification({
-      userId: resetToken.userId,
-      template: "auth.password-changed",
-      data: { changedAt: new Date(), method: "reset" },
-    });
+    await emitEventAfterCommit(
+      "user.password_changed",
+      { userId: resetToken.userId, changedAt: new Date(), method: "reset" },
+      { actorId: resetToken.userId }
+    );
 
     return { success: true };
   } catch (error) {

@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
+vi.mock("@/lib/events/emit", () => ({ emitEvent: vi.fn().mockResolvedValue({ id: "evt-1", queued: true }) }));
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/auth/email-verification", () => ({ getPurchaseBlock: mocks.getPurchaseBlock }));
 vi.mock("@/lib/legal/documents", async (importOriginal) => ({

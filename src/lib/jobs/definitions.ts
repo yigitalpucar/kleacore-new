@@ -94,9 +94,11 @@ const kleacoreEventSchema = z.object({
 });
 
 /**
- * Side effects of a paid invoice that must not run before the payment
- * committed: outbound webhooks + activity log events and the "ödeme alındı"
- * notification. Queued in the payment transaction.
+ * Legacy (pre-outbox) side effects of a paid invoice: outbound webhooks +
+ * activity log events and the "ödeme alındı" notification. No longer
+ * enqueued — payments emit invoice.paid / order.paid / service.renewed
+ * events instead — but kept registered so jobs queued before the deploy
+ * still run. Remove once the queue holds none.
  */
 export const paymentSettledJob = defineJob({
   name: PAYMENT_SETTLED_JOB,
@@ -143,6 +145,33 @@ export const notificationSendJob = defineJob({
   handler: async ({ notificationLogId }, context) => {
     const { deliverNotificationLog } = await import("@/lib/notifications/deliver");
     return deliverNotificationLog(notificationLogId, context);
+  },
+});
+
+export const EVENTS_DISPATCH_JOB = "events.dispatch";
+
+/**
+ * Delivers one outbox DomainEvent to its subscribers (src/lib/events/dispatch.ts).
+ * Enqueued in the transaction that wrote the event, so it runs only after
+ * commit; the jobs-drain sweep re-enqueues events whose job never existed.
+ * Per-subscriber EventDelivery rows make retries re-run only failed
+ * subscribers. 6 attempts, backoff ≈ 30s, 1, 2, 4, 8 min.
+ */
+export const eventsDispatchJob = defineJob({
+  name: EVENTS_DISPATCH_JOB,
+  label: "Olay dağıtımı (abonelere)",
+  schema: z.object({ eventId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 5,
+    retryDelay: 30,
+    retryBackoff: true,
+    retryDelayMax: 60 * 60,
+    expireInSeconds: 5 * 60,
+  },
+  handler: async ({ eventId }) => {
+    const { dispatchDomainEvent } = await import("@/lib/events/dispatch");
+    return dispatchDomainEvent(eventId);
   },
 });
 
@@ -264,6 +293,7 @@ const definitions = [
   efaturaIssueJob,
   paymentSettledJob,
   notificationSendJob,
+  eventsDispatchJob,
   serverReinstallJob,
   hostingUsageSyncJob,
   dnsServiceSetupJob,

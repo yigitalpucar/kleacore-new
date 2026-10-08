@@ -4,10 +4,9 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { generateInvoiceNumber } from "@/lib/utils/number-generators";
 import { sendNotification } from "@/lib/notifications/send";
+import { emitEvent } from "@/lib/events/emit";
 import {
-  dispatchNotification,
   loadCustomerRecipient,
-  sendInvoiceCreatedEmail,
   sendInvoiceOverdueEmail,
   sendInvoicePaymentReminderEmail,
 } from "@/lib/notifications/email";
@@ -43,7 +42,7 @@ interface InvoiceInput {
 }
 
 export async function createInvoice(data: InvoiceInput) {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   try {
     const customer = await db.user.findUnique({
@@ -73,42 +72,44 @@ export async function createInvoice(data: InvoiceInput) {
 
     const invoiceNumber = await generateInvoiceNumber();
 
-    const invoice = await db.invoice.create({
-      data: {
-        invoiceNumber,
-        customerId: data.customerId,
-        orderId: data.orderId ?? null,
-        subtotal: totals.subtotal,
-        taxRate: totals.taxRate,
-        taxAmount: totals.taxAmount,
-        totalAmount: totals.totalAmount,
-        status: "PENDING",
-        dueDate: new Date(data.dueDate),
-        notes: data.notes ?? null,
-        items: {
-          create: data.items.map((item, index) => ({
-            description: item.description,
-            quantity: item.quantity,
-            unitPrice: totals.lines[index].unitPrice,
-            totalPrice: totals.lines[index].totalPrice,
-          })),
+    // Invoice + invoice.created ("fatura oluştu" via the outbox) commit together.
+    const invoice = await db.$transaction(async (tx) => {
+      const created = await tx.invoice.create({
+        data: {
+          invoiceNumber,
+          customerId: data.customerId,
+          orderId: data.orderId ?? null,
+          subtotal: totals.subtotal,
+          taxRate: totals.taxRate,
+          taxAmount: totals.taxAmount,
+          totalAmount: totals.totalAmount,
+          status: "PENDING",
+          dueDate: new Date(data.dueDate),
+          notes: data.notes ?? null,
+          items: {
+            create: data.items.map((item, index) => ({
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: totals.lines[index].unitPrice,
+              totalPrice: totals.lines[index].totalPrice,
+            })),
+          },
         },
-      },
-    });
-
-    dispatchNotification(async () => {
-      const recipient = await loadCustomerRecipient(data.customerId);
-      if (!recipient) {
-        return;
-      }
-
-      await sendInvoiceCreatedEmail({
-        customer: recipient,
-        invoiceId: invoice.id,
-        invoiceNumber,
-        totalAmount: toNumber(totals.totalAmount),
-        dueDate: new Date(data.dueDate),
       });
+      await emitEvent(
+        tx,
+        "invoice.created",
+        {
+          invoiceId: created.id,
+          invoiceNumber,
+          customerId: data.customerId,
+          totalAmount: totals.totalAmount,
+          dueDate: new Date(data.dueDate),
+          source: "admin",
+        },
+        { actorId: session.user.id }
+      );
+      return created;
     });
 
     revalidatePath("/yonetim/faturalar");
@@ -253,7 +254,7 @@ export async function markInvoicePaid(id: string) {
 }
 
 export async function cancelInvoice(id: string) {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   try {
     const invoice = await db.invoice.findUnique({ where: { id } });
@@ -265,9 +266,17 @@ export async function cancelInvoice(id: string) {
       return { success: false, error: "Ödenmiş fatura iptal edilemez" };
     }
 
-    await db.invoice.update({
-      where: { id },
-      data: { status: "CANCELLED" },
+    await db.$transaction(async (tx) => {
+      await tx.invoice.update({
+        where: { id },
+        data: { status: "CANCELLED" },
+      });
+      await emitEvent(
+        tx,
+        "invoice.cancelled",
+        { invoiceId: id, invoiceNumber: invoice.invoiceNumber, customerId: invoice.customerId },
+        { actorId: session.user.id }
+      );
     });
 
     revalidatePath("/yonetim/faturalar");

@@ -29,54 +29,6 @@ export async function withSavepoint<T>(
   }
 }
 
-export interface PaymentFollowUps {
-  invoiceId: string;
-  userId: string;
-  events: KleacoreEvent[];
-}
-
-/**
- * Queues the after-payment work (e-invoice, webhooks/events, notification)
- * in the payment transaction: it runs only if the payment commits and is
- * never lost once it did. Returns false when the queue is unavailable; the
- * caller then runs `runPaymentFollowUpsWithoutQueue` after commit.
- */
-export async function queuePaymentFollowUps(
-  tx: Prisma.TransactionClient,
-  followUps: PaymentFollowUps
-): Promise<boolean> {
-  const { isJobQueueReady } = await import("@/lib/provisioning/queue");
-  if (!(await isJobQueueReady())) {
-    return false;
-  }
-
-  const { enqueue } = await import("@/lib/jobs/enqueue");
-  const queued = await withSavepoint(tx, async () => {
-    await enqueue(
-      "efatura.issue",
-      { invoiceId: followUps.invoiceId },
-      { singletonKey: followUps.invoiceId, tx }
-    );
-    await enqueue(
-      "payment.settled",
-      {
-        invoiceId: followUps.invoiceId,
-        userId: followUps.userId,
-        events: followUps.events as unknown as Array<{
-          type: KleacoreEvent["type"];
-          payload: Record<string, unknown>;
-        }>,
-      },
-      { singletonKey: followUps.invoiceId, tx }
-    );
-  });
-
-  if (!queued.ok) {
-    log.error("could not queue payment follow-ups", { invoiceId: followUps.invoiceId, error: queued.error });
-  }
-  return queued.ok;
-}
-
 /** Handler of "efatura.issue". Throws only for errors worth retrying. */
 export async function runEInvoiceIssueJob(invoiceId: string) {
   const { issueEInvoiceForInvoice } = await import("@/lib/integrations/efatura");
@@ -98,7 +50,10 @@ export async function runEInvoiceIssueJob(invoiceId: string) {
   throw new Error(outcome.error);
 }
 
-/** Handler of "payment.settled". */
+/**
+ * Handler of the legacy "payment.settled" job (queued before the outbox
+ * deploy). New payments emit invoice.paid / order.paid / service.renewed.
+ */
 export async function runPaymentSettledJob(payload: {
   invoiceId: string;
   userId: string;
@@ -124,50 +79,4 @@ export async function runPaymentSettledJob(payload: {
   }
 
   return { ok: true };
-}
-
-/**
- * Fallback after commit when the follow-ups could not be queued with the
- * payment: try the queue again, else run them inline. Never throws.
- */
-export async function runPaymentFollowUpsWithoutQueue(followUps: PaymentFollowUps) {
-  try {
-    const { enqueue } = await import("@/lib/jobs/enqueue");
-    await enqueue("efatura.issue", { invoiceId: followUps.invoiceId }, { singletonKey: followUps.invoiceId });
-    await enqueue(
-      "payment.settled",
-      {
-        invoiceId: followUps.invoiceId,
-        userId: followUps.userId,
-        events: followUps.events as unknown as Array<{
-          type: KleacoreEvent["type"];
-          payload: Record<string, unknown>;
-        }>,
-      },
-      { singletonKey: followUps.invoiceId }
-    );
-    return;
-  } catch (error) {
-    log.error("job queue unavailable after payment; running follow-ups inline", {
-      invoiceId: followUps.invoiceId,
-      error,
-    });
-  }
-
-  const results = await Promise.allSettled([
-    runEInvoiceIssueJob(followUps.invoiceId),
-    (async () => {
-      const { notifyInvoicePaymentReceived } = await import("@/lib/payments/fulfillment");
-      await notifyInvoicePaymentReceived(followUps.invoiceId);
-      const { dispatchEvent } = await import("@/lib/events/dispatcher");
-      for (const event of followUps.events) {
-        await dispatchEvent(event, { userId: followUps.userId });
-      }
-    })(),
-  ]);
-  for (const result of results) {
-    if (result.status === "rejected") {
-      log.error("inline payment follow-up failed", { invoiceId: followUps.invoiceId, error: result.reason });
-    }
-  }
 }

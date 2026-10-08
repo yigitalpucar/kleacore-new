@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PageHeader, SectionCard } from "@/components/app";
+import { PageHeader, SectionCard, StatusBadge, appButton } from "@/components/app";
+import { db } from "@/lib/db";
 import { loadRenderContext, renderNotification } from "@/lib/notifications/render";
+import { getActiveOverrideKeys, getTemplateEditorState } from "@/lib/notifications/template-admin";
 import { listTemplates } from "@/lib/notifications/templates";
 import { cn } from "@/lib/utils";
-import { EmailPreview } from "../email-preview";
+import { TemplateEditor } from "./template-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +21,35 @@ export default async function SablonlarPage({
   const templates = listTemplates();
   const selectedKey = typeof sp.t === "string" ? sp.t : templates[0]?.key;
   const selected = templates.find((template) => template.key === selectedKey) ?? templates[0];
-  const rendered = renderNotification(selected.key, selected.sample, await loadRenderContext(), { logo: "inline" });
+  const channel = sp.c === "SMS" && selected.sms ? "SMS" : "EMAIL";
+
+  const ctx = await loadRenderContext();
+  const [state, active] = await Promise.all([getTemplateEditorState(selected.key, ctx), getActiveOverrideKeys()]);
+  const row = channel === "SMS" ? state.sms : state.email;
+  const userIds = [...new Set((row?.versions ?? []).map((version) => version.updatedBy).filter((id): id is string => Boolean(id)))];
+  const users = userIds.length
+    ? await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, surname: true, email: true } })
+    : [];
+  const userName = (id: string | null) => {
+    const user = users.find((item) => item.id === id);
+    return user ? `${user.name ?? ""} ${user.surname ?? ""}`.trim() || user.email : "—";
+  };
+
+  // Editor starts from the active override, else from the code default.
+  const defaults = state.defaults;
+  const initial =
+    row?.isActive
+      ? { subject: row.subject, bodyHtml: row.bodyHtml, bodyText: row.bodyText }
+      : channel === "SMS"
+        ? { subject: "", bodyHtml: "", bodyText: defaults.sms ?? "" }
+        : { subject: defaults.subject, bodyHtml: defaults.bodyHtml, bodyText: defaults.bodyText };
+  const defaultDraft =
+    channel === "SMS"
+      ? { subject: "", bodyHtml: "", bodyText: defaults.sms ?? "" }
+      : { subject: defaults.subject, bodyHtml: defaults.bodyHtml, bodyText: defaults.bodyText };
+
+  const current = renderNotification(selected.key, selected.sample, ctx, { logo: "inline" });
+  const activeKeys = new Set(active.map((item) => item.key));
 
   const groups = new Map<string, typeof templates>();
   for (const template of templates) {
@@ -31,7 +61,12 @@ export default async function SablonlarPage({
       <PageHeader
         back={{ href: "/yonetim/bildirimler", label: "Bildirimler" }}
         title="Bildirim şablonları"
-        description="Her şablon örnek veriyle işlenir. Firma bilgileri ve destek adresi Ayarlar'dan gelir; e-postalarda dış kaynaklı görsel veya izleme pikseli yoktur."
+        description="Her bildirimin konusu ve metni buradan düzenlenebilir. Kayıtlı bir düzenleme yoksa koddaki varsayılan şablon kullanılır; değişkenler gönderimde güvenli biçimde doldurulur."
+        actions={
+          <Link href="/yonetim/bildirimler/hatirlatmalar" className={appButton({ variant: "outline" })}>
+            Hatırlatma takvimi
+          </Link>
+        }
       />
 
       <div className="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -50,7 +85,10 @@ export default async function SablonlarPage({
                       template.key === selected.key && "bg-muted font-medium"
                     )}
                   >
-                    {template.label}
+                    <span className="flex items-center justify-between gap-2">
+                      {template.label}
+                      {activeKeys.has(template.key) ? <StatusBadge tone="info" label="Düzenlendi" /> : null}
+                    </span>
                     <span className="block font-mono text-[11px] text-muted-foreground">{template.key}</span>
                   </Link>
                 ))}
@@ -60,19 +98,28 @@ export default async function SablonlarPage({
         </SectionCard>
 
         <div className="min-w-0 space-y-6">
-          <SectionCard title={selected.label} description={`${selected.key} · ${selected.audience === "admin" ? "yönetime" : "müşteriye"}`}>
-            <dl className="grid gap-2 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-xs text-muted-foreground">Konu</dt>
-                <dd>{rendered.subject}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Gizli alanlar</dt>
-                <dd className="font-mono text-xs">{selected.sensitive?.join(", ") || "—"}</dd>
-              </div>
-            </dl>
-          </SectionCard>
-          <EmailPreview subject={rendered.subject} html={rendered.html} text={rendered.text} sms={rendered.sms} />
+          <TemplateEditor
+            key={`${selected.key}:${channel}:${row?.version ?? 0}`}
+            templateKey={selected.key}
+            label={selected.label}
+            audience={selected.audience}
+            channel={channel}
+            hasSms={Boolean(selected.sms)}
+            sensitive={[...(selected.sensitive ?? [])]}
+            variables={state.variables}
+            initial={initial}
+            defaults={defaultDraft}
+            override={row ? { isActive: row.isActive, version: row.version, updatedAt: row.updatedAt.toISOString() } : null}
+            versions={(row?.versions ?? []).map((version) => ({
+              id: version.id,
+              version: version.version,
+              action: version.action,
+              isActive: version.isActive,
+              createdAt: version.createdAt.toISOString(),
+              by: userName(version.updatedBy),
+            }))}
+            initialPreview={{ subject: current.subject, html: current.html, text: current.text, sms: current.sms }}
+          />
         </div>
       </div>
     </>

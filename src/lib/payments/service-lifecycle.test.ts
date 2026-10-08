@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   unsuspendRemoteService: vi.fn(),
   queueProvisioningAttempt: vi.fn(),
+  emitEvent: vi.fn(),
   db: {
     provisioningJob: {
       findMany: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
+vi.mock("@/lib/events/emit", () => ({ emitEvent: mocks.emitEvent }));
 vi.mock("@/lib/provisioning/queue", () => ({
   queueProvisioningAttempt: mocks.queueProvisioningAttempt,
   dismissFailedQueueEntries: vi.fn(),
@@ -74,6 +76,12 @@ describe("unsuspendServiceIfNeeded", () => {
     );
 
     expect(result).toEqual({ unsuspended: true });
+    // "Yeniden aktif" notice: outbox event in the same transaction.
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      tx,
+      "service.unsuspended",
+      expect.objectContaining({ serviceId: "svc-1" })
+    );
     expect(tx.service.updateMany).toHaveBeenCalledWith({
       where: { id: "svc-1", status: "SUSPENDED", suspendReason: NON_PAYMENT_SUSPEND_REASON },
       data: { status: "ACTIVE", suspendedAt: null, suspendReason: null },

@@ -189,6 +189,79 @@ export const billingInvoiceOverdue = defineTemplate({
     `${brand.siteName}: ${data.invoiceNumber} numaralı faturanızın ödeme tarihi geçti. Hizmet kesintisi yaşamamak için lütfen ödeme yapın.`,
 });
 
+/** "Son uyarı": sent the day before the grace period ends and services are suspended (reminder schedule, 3.3). */
+export const billingInvoiceFinalWarning = defineTemplate({
+  key: "billing.invoice-final-warning",
+  label: "Askıya alma öncesi son uyarı",
+  group: "Sipariş ve fatura",
+  audience: "customer",
+  inbox: "BILLING",
+  schema: templateSchema({ ...invoiceShape, suspendAt: dateField }),
+  sample: { ...invoiceSample, dueDate: "2026-10-05T00:00:00.000Z", suspendAt: "2026-10-08T00:00:00.000Z" },
+  render: (data, { baseUrl }) => ({
+    subject: `Son uyarı: ${data.invoiceNumber} numaralı fatura ödenmezse hizmetiniz askıya alınacak`,
+    heading: "Hizmetiniz askıya alınmak üzere",
+    greetingName: data.recipientName,
+    intro: [
+      `${data.invoiceNumber} numaralı faturanızın son ödeme tarihi (${date(data.dueDate)}) geçti ve ödeme henüz alınmadı.`,
+      `Ödeme yapılmazsa ilgili hizmetiniz ${date(data.suspendAt)} tarihinde askıya alınacaktır.`,
+    ],
+    details: [
+      { label: "Fatura", value: data.invoiceNumber, mono: true },
+      { label: "Tutar", value: money(data.totalAmount) },
+      { label: "Son ödeme tarihi", value: date(data.dueDate) },
+      { label: "Askıya alma", value: date(data.suspendAt) },
+    ],
+    action: { label: "Faturayı öde", url: `${baseUrl}${panelPaths.invoice(data.invoiceId)}` },
+    note: "Ödemenizi yaptıysanız bu e-postayı dikkate almayın.",
+  }),
+  sms: (data, { brand }) =>
+    `${brand.siteName}: ${data.invoiceNumber} numaralı faturanız ödenmezse hizmetiniz ${date(data.suspendAt)} tarihinde askıya alınacak.`,
+});
+
+/** Failed payment attempt / automatic card charge (payment.failed event). */
+export const billingPaymentFailed = defineTemplate({
+  key: "billing.payment-failed",
+  label: "Ödeme alınamadı",
+  group: "Sipariş ve fatura",
+  audience: "customer",
+  inbox: "BILLING",
+  schema: templateSchema({
+    invoiceId: z.string(),
+    invoiceNumber: z.string().optional(),
+    amount: moneyField.optional(),
+    reason: z.string().optional(),
+    automatic: z.boolean().optional(),
+  }),
+  sample: {
+    recipientName: "Ayşe Yılmaz",
+    invoiceId: "ornek",
+    invoiceNumber: "F-2026-000456",
+    amount: "599.94",
+    reason: "Kart limiti yetersiz",
+    automatic: true,
+  },
+  render: (data, { baseUrl }) => ({
+    subject: data.invoiceNumber ? `Ödeme alınamadı: ${data.invoiceNumber}` : "Ödemeniz alınamadı",
+    heading: "Ödemeniz alınamadı",
+    greetingName: data.recipientName,
+    intro: [
+      data.automatic
+        ? "Kayıtlı kartınızdan otomatik tahsilat denemesi başarısız oldu."
+        : "Ödeme denemeniz tamamlanamadı.",
+      "Hizmet kesintisi yaşamamak için faturanızı panelinizden ödeyebilirsiniz.",
+    ],
+    details: [
+      ...(data.invoiceNumber ? [{ label: "Fatura", value: data.invoiceNumber, mono: true }] : []),
+      ...(data.amount ? [{ label: "Tutar", value: money(data.amount) }] : []),
+      ...(data.reason ? [{ label: "Sebep", value: data.reason }] : []),
+    ],
+    action: { label: "Faturayı öde", url: `${baseUrl}${panelPaths.invoice(data.invoiceId)}` },
+  }),
+  sms: (data, { brand }) =>
+    `${brand.siteName}: ${data.invoiceNumber ?? "Faturanızın"} ödemesi alınamadı. Lütfen panelinizden ödeme yapın.`,
+});
+
 export const billingBankTransferApproved = defineTemplate({
   key: "billing.bank-transfer-approved",
   label: "Havale bildirimi onaylandı",

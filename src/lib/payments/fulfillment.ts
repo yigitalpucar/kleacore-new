@@ -1,10 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import { applyAffiliateCommission } from "@/lib/affiliate";
 import { db } from "@/lib/db";
-import type {
-  KleacoreEvent,
-  PaymentCompletedContext,
-} from "@/lib/events/types";
+import { emitEvent } from "@/lib/events/emit";
+import type { EventInput, EventType } from "@/lib/events/catalog";
+import type { PaymentCompletedContext } from "@/lib/events/types";
 import { sendNotification } from "@/lib/notifications/send";
 import { applyServiceRenewalFromOrder } from "@/lib/payments/renewal-fulfillment";
 import { applyPlanChangeFromOrder } from "@/lib/services/plan-change";
@@ -13,12 +12,7 @@ import {
   prepareOrderProvisioning,
   type PreparedProvisioning,
 } from "@/lib/provisioning/internal";
-import {
-  queuePaymentFollowUps,
-  runPaymentFollowUpsWithoutQueue,
-  withSavepoint,
-  type PaymentFollowUps,
-} from "@/lib/payments/follow-ups";
+import { withSavepoint } from "@/lib/payments/follow-ups";
 import { createLogger } from "@/lib/logger";
 import { max as maxMoney, toNumber, type MoneyInput } from "@/lib/money";
 
@@ -58,7 +52,15 @@ function parseRenewalMonths(configuration: unknown): number | null {
   return Math.round(renewalMonths);
 }
 
-function buildFulfillmentEvents(
+/** A catalogue event waiting to be emitted (outbox) for a paid invoice. */
+export type PendingEvent = { [T in EventType]: { type: T; payload: EventInput<T> } }[EventType];
+
+/**
+ * Events of a paid invoice: invoice.paid always (notification, e-invoice,
+ * "payment.completed" webhook), plus service.renewed for a renewal, or
+ * order.paid for a completed new order, or service.plan_changed.
+ */
+export function buildFulfillmentEvents(
   invoice: {
     id: string;
     invoiceNumber: string;
@@ -74,9 +76,11 @@ function buildFulfillmentEvents(
   },
   input: FulfillInvoicePaymentInput,
   renewal: RenewalResult | null,
-  orderCompleted: boolean
-): KleacoreEvent[] {
-  const events: KleacoreEvent[] = [];
+  orderCompleted: boolean,
+  paidAt: Date,
+  planChange: PlanChangeResult | null = null
+): PendingEvent[] {
+  const events: PendingEvent[] = [];
 
   let context: PaymentCompletedContext = "invoice";
   if (renewal?.applied) {
@@ -86,12 +90,13 @@ function buildFulfillmentEvents(
   }
 
   events.push({
-    type: "payment.completed",
+    type: "invoice.paid",
     payload: {
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       customerId: invoice.customerId,
       amount: toNumber(invoice.totalAmount),
+      paidAt,
       paymentReference: input.paymentReference,
       context,
     },
@@ -105,8 +110,9 @@ function buildFulfillmentEvents(
         payload: {
           serviceId: renewal.serviceId,
           customerId: invoice.customerId,
-          newExpiryDate: renewal.newExpiryDate.toISOString(),
+          newExpiryDate: renewal.newExpiryDate,
           renewalMonths,
+          invoiceId: invoice.id,
         },
       });
     }
@@ -118,11 +124,39 @@ function buildFulfillmentEvents(
         orderNumber: invoice.order.orderNumber,
         customerId: invoice.customerId,
         totalAmount: toNumber(invoice.order.totalAmount),
+        invoiceId: invoice.id,
       },
     });
+    if (planChange?.applied && planChange.serviceId && planChange.planChangeId && planChange.changeType) {
+      events.push({
+        type: "service.plan_changed",
+        payload: {
+          serviceId: planChange.serviceId,
+          customerId: invoice.customerId,
+          planChangeId: planChange.planChangeId,
+          changeType: planChange.changeType,
+          invoiceId: invoice.id,
+        },
+      });
+    }
   }
 
   return events;
+}
+
+function eventActor(performedBy: string) {
+  return performedBy && performedBy !== "system" ? performedBy : null;
+}
+
+/** Writes the events through `client` (the payment transaction, or db after commit). */
+async function emitPendingEvents(
+  client: Parameters<typeof emitEvent>[0],
+  events: PendingEvent[],
+  actorId: string | null
+) {
+  for (const event of events) {
+    await emitEvent(client, event.type, event.payload as never, { actorId });
+  }
 }
 
 const SUPERSEDED_PAYMENT_NOTE = "Fatura başka bir ödeme ile kapandı";
@@ -219,8 +253,13 @@ export type FulfillInvoicePaymentResult =
       fulfilled: true;
       invoice: { id: string };
       /** False when the queue was down: run `finalizeFulfilledInvoices` after commit. */
-      followUpsQueued: boolean;
-      followUps: PaymentFollowUps;
+      /**
+       * False when the events could not be written with the payment (their
+       * savepoint failed): `finalizeFulfilledInvoices` writes them after commit.
+       */
+      eventsRecorded: boolean;
+      events: PendingEvent[];
+      actorId: string | null;
       /** Set when the order's activation failed and was parked for the admin. */
       fulfilmentError?: string;
     }
@@ -439,6 +478,7 @@ export async function fulfillInvoicePayment(
   }
 
   let renewal: RenewalResult | null = null;
+  let planChange: PlanChangeResult | null = null;
   let orderCompleted = false;
   let fulfilmentError: string | undefined;
 
@@ -454,6 +494,7 @@ export async function fulfillInvoicePayment(
     if (effects.ok) {
       orderCompleted = true;
       renewal = effects.value.renewal;
+      planChange = effects.value.planChange;
     } else {
       log.error("order activation failed after payment; parked for admin", {
         invoiceId: invoice.id,
@@ -469,20 +510,26 @@ export async function fulfillInvoicePayment(
     orderTotal: invoice.totalAmount,
   });
 
-  const followUps: PaymentFollowUps = {
-    invoiceId: invoice.id,
-    userId: input.performedBy,
-    events: buildFulfillmentEvents(invoice, input, renewal, orderCompleted),
-  };
-  const followUpsQueued = await queuePaymentFollowUps(tx, followUps);
+  // Outbox: the events commit with the payment and drive the follow-ups
+  // (e-invoice, "ödeme alındı", webhooks, activity log) after commit. In a
+  // savepoint so a failure here can never roll back the recorded payment.
+  const events = buildFulfillmentEvents(invoice, input, renewal, orderCompleted, invoice.paidAt ?? now, planChange);
+  const actorId = eventActor(input.performedBy);
+  const recorded = await withSavepoint(tx, () => emitPendingEvents(tx, events, actorId));
+  if (!recorded.ok) {
+    log.error("payment events could not be written with the payment; retrying after commit", {
+      invoiceId: invoice.id,
+      error: recorded.error,
+    });
+  }
 
-  return { fulfilled: true, invoice, followUpsQueued, followUps, fulfilmentError };
+  return { fulfilled: true, invoice, eventsRecorded: recorded.ok, events, actorId, fulfilmentError };
 }
 
 /**
  * After the payment transaction committed: runs the inline unsuspend fast
- * path (queue job is the backstop) and, only if the queue was down during the
- * transaction, the follow-ups. Never throws.
+ * path (queue job is the backstop) and, only if the events could not be
+ * written with the payment, writes them now. Never throws.
  */
 export async function finalizeFulfilledInvoices(results: FulfillInvoicePaymentResult[]) {
   const fulfilled = results.filter(
@@ -495,20 +542,26 @@ export async function finalizeFulfilledInvoices(results: FulfillInvoicePaymentRe
   const { runUnsuspendJobsForInvoices } = await import("@/lib/payments/service-lifecycle");
   await runUnsuspendJobsForInvoices(fulfilled.map((result) => result.invoice.id));
 
-  await Promise.allSettled(
-    fulfilled
-      .filter((result) => !result.followUpsQueued)
-      .map((result) => runPaymentFollowUpsWithoutQueue(result.followUps))
-  );
+  for (const result of fulfilled.filter((item) => !item.eventsRecorded)) {
+    try {
+      await emitPendingEvents(db, result.events, result.actorId);
+    } catch (error) {
+      log.error("payment events lost: could not be written after commit either", {
+        invoiceId: result.invoice.id,
+        events: result.events.map((event) => event.type),
+        error,
+      });
+    }
+  }
 }
 
 /**
- * Queues "ödeme alındı" (e-posta + SMS when configured) for a PAID invoice.
- * Idempotent per invoice through the NotificationLog dedupe key, so the
- * payment.settled job, its retries and the inline fallback send it once.
- * Throws when the notification could not be queued (the job retries).
+ * "Ödeme alındı" (e-posta + SMS when configured) for a PAID invoice, as the
+ * outbox notifications subscriber sends it for invoice.paid. Null when the
+ * invoice is gone or no longer PAID (refunded/cancelled before delivery).
+ * Idempotent per invoice through the dedupe key.
  */
-export async function queuePaymentReceivedNotice(invoiceId: string) {
+export async function buildPaymentReceivedNotice(invoiceId: string) {
   const invoice = await db.invoice.findUnique({
     where: { id: invoiceId },
     select: {
@@ -524,12 +577,12 @@ export async function queuePaymentReceivedNotice(invoiceId: string) {
   });
 
   if (!invoice || invoice.status !== "PAID") {
-    return { skipped: true as const };
+    return null;
   }
 
-  await sendNotification({
+  return {
     userId: invoice.customerId,
-    template: "billing.payment-received",
+    template: "billing.payment-received" as const,
     data: {
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
@@ -537,7 +590,23 @@ export async function queuePaymentReceivedNotice(invoiceId: string) {
       paidAt: invoice.paidAt ?? invoice.updatedAt,
     },
     dedupeKey: `payment.received:${invoice.id}`,
-  });
+  };
+}
+
+/**
+ * Queues "ödeme alındı" directly (legacy payment.settled jobs queued before
+ * the outbox deploy). Throws when it could not be queued (the job retries).
+ */
+export async function queuePaymentReceivedNotice(invoiceId: string) {
+  const notice = await buildPaymentReceivedNotice(invoiceId);
+  if (!notice) {
+    return { skipped: true as const };
+  }
+
+  const result = await sendNotification(notice);
+  if (!result.ok) {
+    throw new Error(result.error ?? "NOTIFICATION_NOT_QUEUED");
+  }
   return { skipped: false as const };
 }
 

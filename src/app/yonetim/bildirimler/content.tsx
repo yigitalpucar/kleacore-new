@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { Eye, LayoutTemplate, Lock, Mail, MessageSquare, X } from "lucide-react";
+import { CalendarClock, Eye, LayoutTemplate, Lock, Mail, MessageSquare, X } from "lucide-react";
 import {
   DataTable,
   EmptyState,
@@ -173,10 +173,16 @@ export function BildirimlerContent({ rows, total, page, totalPages, stats, templ
         title="Bildirimler"
         description="Gönderilen e-posta ve SMS bildirimlerinin kaydı. Gizli içerikli bildirimlerde (şifre, tek kullanımlık bağlantı) değerler kayıtta şifreli tutulur."
         actions={
-          <Link href="/yonetim/bildirimler/sablonlar" className={appButton({ variant: "outline" })}>
-            <LayoutTemplate aria-hidden />
-            Şablon önizleme
-          </Link>
+          <>
+            <Link href="/yonetim/bildirimler/hatirlatmalar" className={appButton({ variant: "outline" })}>
+              <CalendarClock aria-hidden />
+              Hatırlatma takvimi
+            </Link>
+            <Link href="/yonetim/bildirimler/sablonlar" className={appButton({ variant: "outline" })}>
+              <LayoutTemplate aria-hidden />
+              Şablonlar
+            </Link>
+          </>
         }
       />
 

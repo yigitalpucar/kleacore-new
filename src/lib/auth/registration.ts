@@ -3,6 +3,7 @@ import { createCustomerUser } from "@/lib/affiliate";
 import { findUserByEmail } from "@/lib/auth/email";
 import { sendVerificationEmail } from "@/lib/auth/email-verification";
 import { db } from "@/lib/db";
+import { emitEvent } from "@/lib/events/emit";
 import { getCurrentLegalDocument, recordKvkkAcknowledgement } from "@/lib/legal/documents";
 import { TURNSTILE_ERROR_MESSAGE, verifyTurnstileToken } from "@/lib/security/turnstile";
 
@@ -71,6 +72,12 @@ export async function registerCustomerAccount(input: RegisterCustomerInput): Pro
         ipAddress: input.ipAddress,
         userAgent: input.userAgent,
       });
+      await emitEvent(
+        tx,
+        "user.registered",
+        { userId: created.id, email: input.email, name: `${input.name} ${input.surname}`.trim(), source: "signup" },
+        { actorId: created.id }
+      );
       return created;
     });
 

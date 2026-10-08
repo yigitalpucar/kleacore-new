@@ -6,14 +6,18 @@ const mocks = vi.hoisted(() => ({
   serviceUpdate: vi.fn(),
   getSettingValue: vi.fn(),
   suspendRemoteService: vi.fn(),
+  emitEvent: vi.fn(),
 }));
 
-vi.mock("@/lib/db", () => ({
-  db: {
+vi.mock("@/lib/db", () => {
+  const db = {
     invoice: { findMany: mocks.invoiceFindMany },
     service: { findMany: mocks.serviceFindMany, update: mocks.serviceUpdate },
-  },
-}));
+    $transaction: (fn: (tx: unknown) => unknown) => fn(db),
+  };
+  return { db };
+});
+vi.mock("@/lib/events/emit", () => ({ emitEvent: mocks.emitEvent }));
 vi.mock("@/lib/integrations/settings", () => ({ getSettingValue: mocks.getSettingValue }));
 vi.mock("@/lib/integrations/provisioning-provider", () => ({
   suspendRemoteService: mocks.suspendRemoteService,
@@ -88,6 +92,11 @@ describe("suspendOverdueServices", () => {
       data: { status: "SUSPENDED", suspendedAt: NOW, suspendReason: NON_PAYMENT_SUSPEND_REASON },
     });
     expect(mocks.suspendRemoteService).toHaveBeenCalledTimes(1);
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "service.suspended",
+      expect.objectContaining({ reason: NON_PAYMENT_SUSPEND_REASON })
+    );
     expect(result).toEqual({ processed: 1, skipped: 0, ids: ["svc-linked"] });
   });
 

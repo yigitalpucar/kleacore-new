@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
+vi.mock("@/lib/events/emit", () => ({ emitEvent: vi.fn().mockResolvedValue({ id: "evt-1", queued: true }) }));
 vi.mock("@/lib/notifications/send", () => ({ sendNotification: mocks.sendNotification }));
 
 import {

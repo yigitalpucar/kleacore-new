@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { queueProvisioningAttempt } from "@/lib/provisioning/queue";
-import { sendNotification } from "@/lib/notifications/send";
+import { emitEvent } from "@/lib/events/emit";
 
 /** The inline unsuspend normally finishes long before the queued backstop runs. */
 const UNSUSPEND_QUEUE_DELAY_SECONDS = 60;
@@ -93,14 +93,11 @@ export async function unsuspendServiceIfNeeded(
   // process dies first, the queue retries the unsuspend (with backoff).
   await queueProvisioningAttempt(tx, job, { startAfter: UNSUSPEND_QUEUE_DELAY_SECONDS });
 
-  await sendNotification({
-    userId: service.customerId,
-    template: "service.unsuspended",
-    data: {
-      serviceId: service.id,
-      serviceLabel: service.label || service.domain || service.product?.name || "Hizmetiniz",
-    },
-    tx,
+  // "Hizmetiniz yeniden aktif" via the notifications subscriber, after commit.
+  await emitEvent(tx, "service.unsuspended", {
+    serviceId: service.id,
+    customerId: service.customerId,
+    serviceLabel: service.label || service.domain || service.product?.name || "Hizmetiniz",
   });
 
   return { unsuspended: true };

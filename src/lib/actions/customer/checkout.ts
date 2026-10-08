@@ -2,6 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { emitEvent } from "@/lib/events/emit";
 import {
   generateInvoiceNumber,
   generateOrderNumber,
@@ -662,6 +663,20 @@ export async function checkoutCart(input: CheckoutInput) {
             paidAt: isPaid ? now : undefined,
           },
         });
+
+        await emitEvent(
+          tx,
+          "order.created",
+          {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            customerId,
+            totalAmount: taxed.totalAmount,
+            invoiceId: invoice.id,
+            paymentMethod: methodId,
+          },
+          { actorId: customerId }
+        );
 
         await tx.orderActivity.create({
           data: {

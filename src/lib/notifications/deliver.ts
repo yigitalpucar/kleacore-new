@@ -55,7 +55,12 @@ export async function deliverNotificationLog(notificationLogId: string, context:
   try {
     const template = getTemplate(row.template);
     const data = revealSensitive(template, (row.data ?? {}) as Record<string, unknown>);
-    const rendered = renderNotification(row.template, data, await loadRenderContext());
+    // Admin-edited template (if active) is read at send time, so an edit
+    // applies to everything still in the queue.
+    const { loadTemplateOverride } = await import("./overrides");
+    const rendered = renderNotification(row.template, data, await loadRenderContext(), {
+      override: await loadTemplateOverride(row.template),
+    });
 
     const outcome = row.channel === "SMS" ? await deliverSms(row.to, rendered.sms) : await deliverEmail(row.to, rendered);
 

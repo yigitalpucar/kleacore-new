@@ -6,18 +6,20 @@ const mocks = vi.hoisted(() => ({
   noticeCreate: vi.fn(),
   noticeDelete: vi.fn(),
   eventCreate: vi.fn(),
-  sendNotification: vi.fn(),
+  emitEvent: vi.fn(),
   getSettingMap: vi.fn(),
 }));
 
-vi.mock("@/lib/db", () => ({
-  db: {
+vi.mock("@/lib/db", () => {
+  const db = {
     domain: { findMany: mocks.domainFindMany, updateMany: mocks.domainUpdateMany },
     domainNotice: { create: mocks.noticeCreate, delete: mocks.noticeDelete },
     domainLifecycleEvent: { create: mocks.eventCreate },
-  },
-}));
-vi.mock("@/lib/notifications/send", () => ({ sendNotification: mocks.sendNotification }));
+    $transaction: (fn: (tx: unknown) => unknown) => fn(db),
+  };
+  return { db };
+});
+vi.mock("@/lib/events/emit", () => ({ emitEvent: mocks.emitEvent }));
 vi.mock("@/lib/stripe", () => ({ getAppBaseUrl: () => "https://kleacore.test" }));
 vi.mock("@/lib/integrations/settings", () => ({ getSettingMap: mocks.getSettingMap }));
 
@@ -57,7 +59,7 @@ describe("sendDomainExpiryNotices", () => {
     mocks.domainUpdateMany.mockResolvedValue({ count: 0 });
     mocks.eventCreate.mockResolvedValue({});
     mocks.noticeCreate.mockResolvedValue({ id: "notice-1" });
-    mocks.sendNotification.mockResolvedValue({ ok: true, logIds: ["log-1"], deduplicated: false });
+    mocks.emitEvent.mockResolvedValue({ id: "evt-1", type: "domain.expiring", queued: true });
   });
 
   it("sends the due notice once per domain + kind + period", async () => {
@@ -70,13 +72,12 @@ describe("sendDomainExpiryNotices", () => {
       data: { domainId: "dom-1", kind: "expiring_7", periodStart: domain.expiresAt },
       select: { id: true },
     });
-    expect(mocks.sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "cust-1",
-        template: "domain.expiry-notice",
-        data: expect.objectContaining({ domain: "ornek.com", daysLeft: 7, stage: "expiring", autoRenew: false }),
-        dedupeKey: `domain.notice:dom-1:expiring_7:${domain.expiresAt.toISOString().slice(0, 10)}`,
-      })
+    // Marker and outbox event in one transaction; the notice (same template
+    // and dedupe key as before) is planned by the notifications subscriber.
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "domain.expiring",
+      expect.objectContaining({ domainId: "dom-1", customerId: "cust-1", kind: "expiring_7", daysLeft: 7, autoRenew: false })
     );
   });
 
@@ -87,17 +88,16 @@ describe("sendDomainExpiryNotices", () => {
     const result = await sendDomainExpiryNotices(now);
 
     expect(result).toMatchObject({ processed: 0, skipped: 1 });
-    expect(mocks.sendNotification).not.toHaveBeenCalled();
+    expect(mocks.emitEvent).not.toHaveBeenCalled();
   });
 
-  it("drops the marker when the notification can't be queued, so the next run retries", async () => {
+  it("counts a failed event write as skipped (the marker rolls back with it), so the next run retries", async () => {
     mocks.domainFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([domain]);
-    mocks.sendNotification.mockResolvedValue({ ok: false, logIds: [], deduplicated: false, error: "queue down" });
+    mocks.emitEvent.mockRejectedValue(new Error("db down"));
 
     const result = await sendDomainExpiryNotices(now);
 
     expect(result).toMatchObject({ processed: 0, skipped: 1 });
-    expect(mocks.noticeDelete).toHaveBeenCalledWith({ where: { id: "notice-1" } });
   });
 
   it("does not warn about expiry while the period's renewal is already paid", async () => {

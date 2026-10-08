@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { finalizeFulfilledInvoices, fulfillInvoicePayment } from "@/lib/payments/fulfillment";
-import { sendNotification } from "@/lib/notifications/send";
+import { emitEvent } from "@/lib/events/emit";
 import { isPositive, parseMoney, roundHalfUp, toFixed2, toNumber } from "@/lib/money";
 
 export class BankTransferError extends Error {}
@@ -114,6 +114,21 @@ export async function submitBankTransferNotice(input: SubmitNoticeInput) {
       });
     }
 
+    // Staff alert (admin-alert subscriber) once the notice committed.
+    await emitEvent(
+      tx,
+      "bank_transfer.submitted",
+      {
+        noticeId: notice.id,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        customerId: input.customerId,
+        amount: toFixed2(parsed.amount),
+        senderName: parsed.senderName,
+      },
+      { actorId: input.customerId }
+    );
+
     return { id: notice.id, invoiceNumber: invoice.invoiceNumber };
   });
 }
@@ -195,18 +210,20 @@ export async function approveBankTransferNotice(noticeId: string, adminId: strin
       notes,
     });
 
-    // Commits with the approval; "ödeme alındı" follows from payment.settled.
-    await sendNotification({
-      userId: claimed.customerId,
-      template: "billing.bank-transfer-approved",
-      data: {
+    // Commits with the approval ("havale onaylandı"); "ödeme alındı"
+    // follows from the invoice.paid event written by fulfillInvoicePayment.
+    await emitEvent(
+      tx,
+      "bank_transfer.approved",
+      {
+        noticeId: claimed.id,
         invoiceId: claimed.invoiceId,
         invoiceNumber: claimed.invoice.invoiceNumber,
+        customerId: claimed.customerId,
         amount: toFixed2(claimed.amount),
       },
-      dedupeKey: `bank-transfer.approved:${claimed.id}`,
-      tx,
-    });
+      { actorId: adminId }
+    );
 
     return { ...claimed, fulfilment };
   });
@@ -233,19 +250,21 @@ export async function rejectBankTransferNotice(noticeId: string, adminId: string
       data: { status: "FAILED", notes: `Havale bildirimi reddedildi: ${trimmed.slice(0, 200)}` },
     });
 
-    return claimed;
-  });
+    await emitEvent(
+      tx,
+      "bank_transfer.rejected",
+      {
+        noticeId: claimed.id,
+        invoiceId: claimed.invoiceId,
+        invoiceNumber: claimed.invoice.invoiceNumber,
+        customerId: claimed.customerId,
+        amount: toFixed2(claimed.amount),
+        reason: trimmed,
+      },
+      { actorId: adminId }
+    );
 
-  await sendNotification({
-    userId: notice.customerId,
-    template: "billing.bank-transfer-rejected",
-    data: {
-      invoiceId: notice.invoiceId,
-      invoiceNumber: notice.invoice.invoiceNumber,
-      amount: toFixed2(notice.amount),
-      reason: trimmed,
-    },
-    dedupeKey: `bank-transfer.rejected:${notice.id}`,
+    return claimed;
   });
 
   return { invoiceId: notice.invoiceId, invoiceNumber: notice.invoice.invoiceNumber };

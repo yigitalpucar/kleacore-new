@@ -12,7 +12,7 @@ import {
 import type { CronJobResult } from "@/lib/cron/jobs/types";
 import type { JobContext } from "@/lib/jobs/registry";
 import { dismissFailedQueueEntries, queueProvisioningAttempt } from "@/lib/provisioning/queue";
-import { sendNotification } from "@/lib/notifications/send";
+import { emitEvent } from "@/lib/events/emit";
 
 const RETRY_DELAYS_MS = [
   5 * 60 * 1000,
@@ -125,19 +125,21 @@ async function retryDomainProvisioning(
 
   if (registrarResult.ok && !registrarResult.skipped) {
     const { DEFAULT_NAMESERVERS } = await import("@/lib/provisioning/internal");
-    const domain = await db.domain.findUnique({ where: { name: resolved.domain }, select: { expiresAt: true } });
+    const domain = await db.domain.findUnique({ where: { name: resolved.domain }, select: { id: true, expiresAt: true } });
     const config = order.items[0]?.configuration as Record<string, unknown> | null | undefined;
-    await sendNotification({
-      userId: order.customerId,
-      template: "domain.registered",
-      data: {
+    // "Alan adınız kaydedildi / transfer edildi" via the outbox (deduped per order).
+    try {
+      await emitEvent(db, config?.type === "domain_transfer" ? "domain.transferred" : "domain.registered", {
+        domainId: domain?.id,
         domain: resolved.domain,
+        customerId: order.customerId,
+        orderId: order.id,
         expiresAt: domain?.expiresAt ?? undefined,
         nameservers: DEFAULT_NAMESERVERS,
-        transfer: config?.type === "domain_transfer",
-      },
-      dedupeKey: `domain.registered:${order.id}`,
-    });
+      });
+    } catch (error) {
+      console.error("[Provisioning] domain.registered could not be recorded:", error);
+    }
     return { ok: true as const };
   }
 
@@ -505,6 +507,36 @@ async function onProvisioningGivenUp(job: { kind: string; serviceId: string | nu
   }
 }
 
+/**
+ * service.provisioning_failed (outbox): staff alert + activity log once the
+ * automatic retries are exhausted. Never throws.
+ */
+async function recordProvisioningFailed(
+  job: { id: string; orderId: string | null; serviceId: string | null },
+  error: string
+) {
+  try {
+    const order = job.orderId
+      ? await db.order.findUnique({
+          where: { id: job.orderId },
+          select: { orderNumber: true, customerId: true, serviceId: true },
+        })
+      : null;
+    const serviceId = job.serviceId ?? order?.serviceId ?? undefined;
+    await emitEvent(db, "service.provisioning_failed", {
+      aggregateId: serviceId ?? job.orderId ?? job.id,
+      serviceId,
+      orderId: job.orderId ?? undefined,
+      orderNumber: order?.orderNumber,
+      customerId: order?.customerId,
+      provisioningJobId: job.id,
+      error,
+    });
+  } catch (cause) {
+    console.error("[Provisioning] service.provisioning_failed could not be recorded:", cause);
+  }
+}
+
 export async function recoverStaleProcessingJobs(
   staleAfterMs = STALE_PROCESSING_MS,
   client: DbClient = db
@@ -707,6 +739,7 @@ export async function runQueuedProvisioningJob(provisioningJobId: string, contex
       data: { status: "FAILED", attempts: job.attempts + 1, lastError: error },
     });
     await onProvisioningGivenUp(job);
+    await recordProvisioningFailed(job, error);
     return { ok: false, orderId: job.orderId, needsAction: error };
   }
 
@@ -719,7 +752,10 @@ export async function runQueuedProvisioningJob(provisioningJobId: string, contex
       nextRetryAt: context.isFinalAttempt ? job.nextRetryAt : estimateQueueRetryAt(context.retryCount + 1),
     },
   });
-  if (context.isFinalAttempt) await onProvisioningGivenUp(job);
+  if (context.isFinalAttempt) {
+    await onProvisioningGivenUp(job);
+    await recordProvisioningFailed(job, error);
+  }
 
   throw new Error(error);
 }

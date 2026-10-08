@@ -5,8 +5,7 @@ import { matchDomainTld } from "@/lib/domains/transfer-pricing";
 import { isPositive, roundHalfUp, type MoneyInput } from "@/lib/money";
 import { generateInvoiceNumber } from "@/lib/utils/number-generators";
 import { formatDate } from "@/lib/format/date";
-import { sendNotification } from "@/lib/notifications/send";
-import { invoiceNoticeKey } from "@/lib/notifications/billing-notices";
+import { emitEvent } from "@/lib/events/emit";
 import { netInvoiceLine } from "@/lib/billing/invoice-lines";
 import type { CronJobResult } from "@/lib/cron/jobs/types";
 import {
@@ -200,6 +199,24 @@ export async function createDomainRenewalInvoice(
         tx
       );
 
+      // "Fatura oluştu" (cron renewals) through the outbox, same dedupe key as
+      // the hourly invoice sweep. Customer/admin-started renewals are paid on
+      // the spot; the sweep still announces them if they stay unpaid.
+      await emitEvent(
+        tx,
+        "invoice.created",
+        {
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          customerId: domain.customerId,
+          totalAmount: taxed.totalAmount,
+          dueDate,
+          source: "domain_renewal",
+          notify: options.source === "cron",
+        },
+        { actorId: options.actorId ?? null }
+      );
+
       return { invoiceId: invoice.id, renewalId: renewal.id, invoiceNumber: invoice.invoiceNumber };
     });
 
@@ -215,33 +232,6 @@ export async function createDomainRenewalInvoice(
       return { status: "existing", invoiceId: winner.invoice.id, renewalId: winner.id };
     }
     return { status: "skipped", reason: "CONCURRENT", renewalId: winner?.id };
-  }
-}
-
-/**
- * "Fatura oluştu" for a new renewal invoice, with the same dedupe key as the
- * hourly invoice-notice sweep (which would otherwise announce it again).
- */
-async function notifyRenewalInvoice(domain: RenewableDomain, invoiceId: string) {
-  const invoice = await db.invoice.findUnique({
-    where: { id: invoiceId },
-    select: { id: true, invoiceNumber: true, totalAmount: true, dueDate: true },
-  });
-  if (!invoice) return;
-
-  const result = await sendNotification({
-    userId: domain.customerId,
-    template: "billing.invoice-created",
-    data: {
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.invoiceNumber,
-      totalAmount: invoice.totalAmount.toString(),
-      dueDate: invoice.dueDate,
-    },
-    dedupeKey: invoiceNoticeKey.created(invoice.id),
-  });
-  if (!result.ok) {
-    domainLog.error("renewal invoice notification could not be queued", { domainId: domain.id, error: result.error });
   }
 }
 
@@ -280,7 +270,6 @@ export async function generateDomainRenewalInvoices(now = new Date()): Promise<C
       const result = await createDomainRenewalInvoice(domain, { source: "cron", taxRate, tlds, now });
       if (result.status === "created") {
         ids.push(result.invoiceId);
-        await notifyRenewalInvoice(domain, result.invoiceId);
       } else if (result.status === "existing") {
         existing += 1;
       } else {

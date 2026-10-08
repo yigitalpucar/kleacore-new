@@ -126,10 +126,14 @@ export async function consumeEmailVerificationToken(
     });
     if (claimed.count !== 1) return { ok: false as const, reason: "used" as const };
 
-    await tx.user.updateMany({
+    const verified = await tx.user.updateMany({
       where: { id: record.userId, emailVerifiedAt: null },
       data: { emailVerifiedAt: now },
     });
+    if (verified.count === 1) {
+      const { emitEvent } = await import("@/lib/events/emit");
+      await emitEvent(tx, "user.verified", { userId: record.userId }, { actorId: record.userId });
+    }
     await tx.emailVerificationToken.deleteMany({
       where: { userId: record.userId, usedAt: null },
     });

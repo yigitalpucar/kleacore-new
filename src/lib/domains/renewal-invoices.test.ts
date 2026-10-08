@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   renewalUpdate: vi.fn(),
   eventCreate: vi.fn(),
   generateInvoiceNumber: vi.fn(),
-  sendNotification: vi.fn(),
+  emitEvent: vi.fn(),
   invoiceFindUnique: vi.fn(),
   getSettingMap: vi.fn(),
 }));
@@ -36,7 +36,7 @@ vi.mock("@/lib/billing/tax", async (importOriginal) => ({
   getTaxRate: vi.fn().mockResolvedValue(20),
 }));
 vi.mock("@/lib/utils/number-generators", () => ({ generateInvoiceNumber: mocks.generateInvoiceNumber }));
-vi.mock("@/lib/notifications/send", () => ({ sendNotification: mocks.sendNotification }));
+vi.mock("@/lib/events/emit", () => ({ emitEvent: mocks.emitEvent }));
 vi.mock("@/lib/integrations/settings", () => ({ getSettingMap: mocks.getSettingMap }));
 
 import {
@@ -228,19 +228,18 @@ describe("generateDomainRenewalInvoices", () => {
       totalAmount: 238.8,
       dueDate: domain.expiresAt,
     });
-    mocks.sendNotification.mockResolvedValue({ ok: true, logIds: ["log-1"], deduplicated: false });
     mocks.domainFindMany.mockResolvedValue([domain]);
     mocks.renewalFindUnique.mockResolvedValueOnce(null);
 
     const first = await generateDomainRenewalInvoices(now);
     expect(first).toMatchObject({ processed: 1, ids: ["inv-new"] });
-    // Same dedupe key as the hourly "fatura oluştu" sweep: announced once.
-    expect(mocks.sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "cust-1",
-        template: "billing.invoice-created",
-        dedupeKey: "invoice.created:inv-new",
-      })
+    // invoice.created in the creating transaction; the notifications
+    // subscriber uses the sweep's dedupe key, so it is announced once.
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      "invoice.created",
+      expect.objectContaining({ customerId: "cust-1", source: "domain_renewal", notify: true }),
+      expect.anything()
     );
 
     mocks.renewalFindUnique.mockResolvedValue(renewalRow({ invoiceId: "inv-new", invoice: { id: "inv-new", status: "PENDING" } }));
