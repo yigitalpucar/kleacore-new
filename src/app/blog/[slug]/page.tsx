@@ -14,12 +14,27 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const post = await getPostBySlug(slug);
 
   if (!post || post.status !== "PUBLISHED") {
-    return { title: "Yazı Bulunamadı" };
+    return { title: "Yazı Bulunamadı", robots: { index: false } };
   }
 
+  const title = post.metaTitle || post.title;
+  const description = (post.metaDescription || post.excerpt || undefined)?.slice(0, 160);
+  const path = `/blog/${post.slug}`;
+
   return {
-    title: post.metaTitle || post.title,
-    description: post.metaDescription || post.excerpt || undefined,
+    title,
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      type: "article",
+      title: `${title} | KLEACORE`,
+      description,
+      url: path,
+      publishedTime: post.publishedAt?.toISOString(),
+      modifiedTime: post.updatedAt.toISOString(),
+      tags: post.tags as string[],
+      ...(post.coverImage ? { images: [post.coverImage] } : {}),
+    },
   };
 }
 
@@ -43,6 +58,7 @@ export default async function BlogPostPage({ params }: PageProps) {
     viewCount: post.viewCount,
     publishedAt: post.publishedAt?.toISOString() ?? null,
     createdAt: post.createdAt.toISOString(),
+    updatedAt: post.updatedAt.toISOString(),
     category: post.category
       ? { id: post.category.id, name: post.category.name, slug: post.category.slug }
       : null,
@@ -54,6 +70,9 @@ export default async function BlogPostPage({ params }: PageProps) {
     slug: p.slug,
     excerpt: p.excerpt,
     coverImage: p.coverImage,
+    author: p.author,
+    tags: [] as string[],
+    viewCount: p.viewCount,
     publishedAt: p.publishedAt?.toISOString() ?? null,
     category: p.category
       ? { id: p.category.id, name: p.category.name, slug: p.category.slug }

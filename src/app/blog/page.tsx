@@ -1,8 +1,21 @@
-import { getPublishedPosts, getBlogCategories } from "@/lib/dal/blog";
+import type { Metadata } from "next";
+import { getBlogCategories, getPosts, getPublishedPosts } from "@/lib/dal/blog";
 import { parsePagination } from "@/lib/utils/pagination";
 import { BlogContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Blog",
+  description:
+    "Alan adı, web hosting, SSL, sunucu ve e-posta üzerine Türkçe rehberler. Doğru paketi seçmek ve sitenizi güvenle yönetmek için ipuçları.",
+  alternates: { canonical: "/blog" },
+  openGraph: {
+    title: "Blog | KLEACORE",
+    description: "Alan adı, hosting, SSL ve sunucu üzerine Türkçe rehberler ve ipuçları.",
+    url: "/blog",
+  },
+};
 
 export default async function BlogPage({
   searchParams,
@@ -11,11 +24,20 @@ export default async function BlogPage({
 }) {
   const sp = await searchParams;
   const params = parsePagination(sp);
+  const categorySlug = typeof sp.kategori === "string" ? sp.kategori : "";
 
-  const [result, categories] = await Promise.all([
-    getPublishedPosts(params),
-    getBlogCategories(),
-  ]);
+  const categories = await getBlogCategories();
+  const activeCategory = categories.find((cat) => cat.slug === categorySlug) ?? null;
+
+  // Category filter uses the existing DAL (published posts in that category).
+  const result = activeCategory
+    ? await getPosts({
+        ...params,
+        status: "PUBLISHED",
+        categoryId: activeCategory.id,
+        sortBy: params.sortBy || "publishedAt",
+      })
+    : await getPublishedPosts(params);
 
   const serializedPosts = result.data.map((post) => ({
     id: post.id,
@@ -43,6 +65,7 @@ export default async function BlogPage({
     <BlogContent
       posts={serializedPosts}
       categories={serializedCategories}
+      activeCategory={activeCategory?.slug ?? ""}
       page={result.page}
       totalPages={result.totalPages}
       total={result.total}

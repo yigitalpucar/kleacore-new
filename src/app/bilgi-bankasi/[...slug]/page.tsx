@@ -9,24 +9,50 @@ interface PageProps {
   params: Promise<{ slug: string[] }>;
 }
 
+function plainExcerpt(content: string, length = 160) {
+  const text = content
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^#+\s.*$/gm, " ")
+    .replace(/[#*`>|_]/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > length ? `${text.slice(0, length - 1).trimEnd()}…` : text;
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
 
   if (slug.length === 1) {
     const category = await getCategoryBySlug(slug[0]);
-    if (!category) return { title: "Kategori Bulunamadı" };
+    if (!category) return { title: "Kategori Bulunamadı", robots: { index: false } };
+    const path = `/bilgi-bankasi/${category.slug}`;
     return {
       title: `${category.name} - Bilgi Bankası`,
-      description: category.description,
+      description: `${category.description}. KLEACORE bilgi bankasında ${category.name} rehberleri.`.slice(0, 160),
+      alternates: { canonical: path },
+      openGraph: { title: `${category.name} - Bilgi Bankası | KLEACORE`, description: category.description, url: path },
     };
   }
 
   if (slug.length === 2) {
     const article = await getArticleBySlug(slug[1]);
-    if (!article) return { title: "Makale Bulunamadı" };
+    if (!article || article.category.slug !== slug[0]) {
+      return { title: "Makale Bulunamadı", robots: { index: false } };
+    }
+    const path = `/bilgi-bankasi/${article.category.slug}/${article.slug}`;
+    const description = plainExcerpt(article.content);
     return {
       title: `${article.title} - Bilgi Bankası`,
-      description: article.content.substring(0, 160).replace(/[#*`\n]/g, ""),
+      description,
+      alternates: { canonical: path },
+      openGraph: {
+        type: "article",
+        title: `${article.title} | KLEACORE`,
+        description,
+        url: path,
+        modifiedTime: article.updatedAt.toISOString(),
+      },
     };
   }
 
@@ -54,7 +80,7 @@ export default async function BilgiBankasiSlugPage({ params }: PageProps) {
       id: article.id,
       title: article.title,
       slug: article.slug,
-      content: article.content.substring(0, 120).replace(/[#*`\n]/g, ""),
+      content: plainExcerpt(article.content, 140),
       categorySlug: category.slug,
     }));
 

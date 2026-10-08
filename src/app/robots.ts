@@ -13,7 +13,15 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/", "/musteri/panel/", "/yonetim/", "/sepet"],
+        disallow: [
+          "/yonetim",
+          "/musteri/panel",
+          "/api",
+          "/sepet",
+          // carried over from the former public/robots.txt
+          "/musteri/giris",
+          "/musteri/sifremi-unuttum",
+        ],
       },
     ],
     sitemap: `${baseUrl()}/sitemap.xml`,

@@ -1,363 +1,160 @@
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { PageHero } from "@/components/sections/page-hero";
-import {
-  Briefcase,
-  MapPin,
-  Clock,
-  Users,
-  Heart,
-  Zap,
-  Coffee,
-  GraduationCap,
-  Plane,
-  Dumbbell,
-  ArrowRight,
-  Building2,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight, Briefcase, FileText, Github, Mail, MessageSquare, Users } from "lucide-react";
+import { PageHeader } from "@/components/site/page-header";
+import { Section } from "@/components/site/section";
+import { SectionHeading } from "@/components/site/section-heading";
+import { FeatureGrid, type FeatureItem } from "@/components/site/feature-grid";
+import { buttonClasses } from "@/components/site/button-classes";
+import { Eyebrow } from "@/components/site/eyebrow";
+import { SiteShell } from "@/components/site/kurumsal/site-shell";
+import { GridPattern } from "@/components/site/kurumsal/grid-pattern";
 
-const openPositions = [
+export const metadata: Metadata = {
+  title: "Kariyer",
+  description:
+    "KLEACORE'da şu anda açık pozisyon bulunmuyor. Genel başvurunuzu careers@kleacore.com adresine veya iletişim formundan gönderebilirsiniz.",
+  alternates: { canonical: "/kurumsal/kariyer" },
+  openGraph: {
+    title: "Kariyer | KLEACORE",
+    description: "Açık pozisyonlar ve genel başvuru bilgileri.",
+    url: "/kurumsal/kariyer",
+  },
+};
+
+const CAREERS_EMAIL = "careers@kleacore.com";
+const generalApplicationHref = `/iletisim?konu=${encodeURIComponent("Açık Kariyer Başvurusu")}`;
+
+const applicationItems: FeatureItem[] = [
   {
-    title: "Senior Backend Developer",
-    department: "Yazılım",
-    location: "İstanbul (Hibrit)",
-    type: "Tam Zamanlı",
-    experience: "5+ yıl",
-    slug: "senior-backend-developer",
+    icon: FileText,
+    title: "Özgeçmiş",
+    description: "Güncel özgeçmişinizi PDF olarak ekleyin.",
   },
   {
-    title: "DevOps Engineer",
-    department: "Altyapı",
-    location: "İstanbul (Uzaktan)",
-    type: "Tam Zamanlı",
-    experience: "3+ yıl",
-    slug: "devops-engineer",
+    icon: Github,
+    title: "Çalışma örnekleri",
+    description: "Varsa portfolyo, GitHub profili veya üzerinde çalıştığınız projelerin bağlantıları.",
   },
   {
-    title: "Müşteri Temsilcisi",
-    department: "Destek",
-    location: "İstanbul (Ofis)",
-    type: "Tam Zamanlı",
-    experience: "1+ yıl",
-    slug: "musteri-temsilcisi",
-  },
-  {
-    title: "Linux Sistem Yöneticisi",
-    department: "Altyapı",
-    location: "İstanbul (Hibrit)",
-    type: "Tam Zamanlı",
-    experience: "3+ yıl",
-    slug: "linux-sistem-yoneticisi",
-  },
-  {
-    title: "Frontend Developer",
-    department: "Yazılım",
-    location: "İstanbul (Uzaktan)",
-    type: "Tam Zamanlı",
-    experience: "2+ yıl",
-    slug: "frontend-developer",
-  },
-  {
-    title: "Satış Uzmanı",
-    department: "Satış",
-    location: "İstanbul (Ofis)",
-    type: "Tam Zamanlı",
-    experience: "2+ yıl",
-    slug: "satis-uzmani",
+    icon: Briefcase,
+    title: "İlgi alanınız",
+    description: "Yazılım, altyapı, destek veya satış gibi hangi alanda çalışmak istediğinizi belirtin.",
   },
 ];
 
-const benefits = [
+const culture: FeatureItem[] = [
   {
-    icon: Heart,
-    title: "Sağlık Sigortası",
-    description: "Özel sağlık sigortası sana ve ailene",
+    icon: MessageSquare,
+    title: "Açık iletişim",
+    description: "Fikirlerin özgürce paylaşıldığı, doğrudan ve sade bir çalışma ortamı.",
   },
   {
-    icon: Coffee,
-    title: "Esnek Çalışma",
-    description: "Hibrit ve uzaktan çalışma imkanı",
-  },
-  {
-    icon: GraduationCap,
-    title: "Eğitim Desteği",
-    description: "Konferans, kurs ve sertifika desteği",
-  },
-  {
-    icon: Plane,
-    title: "Yıllık İzin",
-    description: "Yılda 20 gün ücretli izin",
-  },
-  {
-    icon: Dumbbell,
-    title: "Spor Üyeliği",
-    description: "Spor salonu üyelik desteği",
-  },
-  {
-    icon: Zap,
-    title: "Yemek Kartı",
-    description: "Günlük yemek kartı hakki",
+    icon: Users,
+    title: "Birlikte öğrenme",
+    description: "Teknolojiye ve kişisel gelişime yatırım yapan, birbirinden öğrenen bir ekip.",
   },
 ];
 
-const culture = [
-  {
-    title: "Açık İletişim",
-    description: "Fikirlerinizi özgürce paylaşabileceğiniz bir ortam",
-  },
-  {
-    title: "Sürekli Öğrenme",
-    description: "Teknoloji ve kişisel gelişime yatırım",
-  },
-  {
-    title: "Takım Ruhu",
-    description: "Birlikte başaran, birlikte kutlayan ekip",
-  },
-  {
-    title: "İnovasyon",
-    description: "Yeni fikirlere açık, deneyime teşvik eden kültür",
-  },
-];
-
-const departments = [
-  { name: "Yazılım", positions: 2 },
-  { name: "Altyapı", positions: 2 },
-  { name: "Destek", positions: 1 },
-  { name: "Satış", positions: 1 },
-];
+/** Skeleton rows behind the empty state (decorative). */
+function GhostRow({ className }: { className?: string }) {
+  return (
+    <div aria-hidden className={`flex items-center gap-4 rounded-lg border bg-background p-4 ${className ?? ""}`}>
+      <span className="size-9 shrink-0 rounded-md border bg-muted/60" />
+      <span className="flex-1 space-y-2">
+        <span className="block h-2.5 w-2/5 rounded-full bg-muted" />
+        <span className="block h-2 w-3/5 rounded-full bg-muted/70" />
+      </span>
+      <span className="hidden h-7 w-20 rounded-md border bg-muted/40 sm:block" />
+    </div>
+  );
+}
 
 export default function KariyerPage() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-      <main className="flex-1">
-        <PageHero
-          badge={`${openPositions.length} Açık Pozisyon`}
-          title="Kariyer"
-          description="2026'da kurulan yenilikçi hosting ekibimize katılın. Hibrit ve uzaktan çalışma imkanıyla birlikte büyüyoruz."
-          accent="sky"
+    <SiteShell>
+      <PageHeader
+        eyebrow="Kariyer"
+        title="KLEACORE'da çalışmak"
+        description="2026'da kurulan ekibimizle hosting, sunucu ve alan adı hizmetleri geliştiriyoruz. Açık pozisyonlarımızı bu sayfada duyururuz."
+        breadcrumbs={[{ label: "Kurumsal" }, { label: "Kariyer" }]}
+      />
+
+      {/* Open positions — honest empty state */}
+      <Section aria-labelledby="acik-pozisyonlar">
+        <SectionHeading
+          id="acik-pozisyonlar"
+          eyebrow="Açık pozisyonlar"
+          title="Şu anda açık pozisyon yok"
+          description="Şu an aktif bir işe alım sürecimiz bulunmuyor. Yine de bizimle çalışmak isterseniz genel başvurunuzu memnuniyetle değerlendiririz."
+          className="mb-10"
         />
 
-        <section className="border-b bg-muted/30 py-12">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="grid grid-cols-2 gap-6 md:grid-cols-4 max-w-3xl mx-auto">
-                <div className="text-center p-4 rounded-xl bg-card border">
-                  <p className="text-3xl font-bold text-primary">15+</p>
-                  <p className="text-sm text-muted-foreground">Ekip Üyesi</p>
-                </div>
-                <div className="text-center p-4 rounded-xl bg-card border">
-                  <p className="text-3xl font-bold text-primary">4</p>
-                  <p className="text-sm text-muted-foreground">Departman</p>
-                </div>
-                <div className="text-center p-4 rounded-xl bg-card border">
-                  <p className="text-3xl font-bold text-primary">2026</p>
-                  <p className="text-sm text-muted-foreground">Kuruluş Yılı</p>
-                </div>
-                <div className="text-center p-4 rounded-xl bg-card border">
-                  <p className="text-3xl font-bold text-primary">{openPositions.length}</p>
-                  <p className="text-sm text-muted-foreground">Açık Pozisyon</p>
-                </div>
+        <div className="relative overflow-hidden rounded-2xl border bg-muted/30">
+          <GridPattern />
+          <div className="relative grid gap-10 p-6 sm:p-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center lg:p-14">
+            <div>
+              <span className="flex size-12 items-center justify-center rounded-lg border bg-background shadow-sm">
+                <Briefcase aria-hidden className="size-5 text-foreground/80" />
+              </span>
+              <h3 className="mt-6 text-2xl font-semibold tracking-tight">Genel başvuru</h3>
+              <p className="mt-3 max-w-md leading-relaxed text-muted-foreground">
+                Özgeçmişinizi ve ilgilendiğiniz alanı e-posta ile gönderin ya da iletişim formunu
+                kullanın. Uygun bir pozisyon açıldığında sizinle iletişime geçeriz.
+              </p>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <a href={`mailto:${CAREERS_EMAIL}`} className={buttonClasses()}>
+                  <Mail aria-hidden className="size-4" />
+                  {CAREERS_EMAIL}
+                </a>
+                <Link href={generalApplicationHref} className={buttonClasses({ variant: "outline" })}>
+                  İletişim formu
+                  <ArrowRight aria-hidden className="size-4" />
+                </Link>
               </div>
-            </BlurFade>
-          </div>
-        </section>
+            </div>
 
-        {/* Open Positions */}
-        <section className="py-16 md:py-24">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                  Açık Pozisyonlar
-                </h2>
-                <p className="mt-4 text-muted-foreground">
-                  Size uygun pozisyonu bulun ve başvurun
-                </p>
+            <div aria-hidden className="relative hidden sm:block">
+              <div className="space-y-3 [mask-image:linear-gradient(to_bottom,black_40%,transparent)]">
+                <GhostRow />
+                <GhostRow className="opacity-80" />
+                <GhostRow className="opacity-60" />
               </div>
-            </BlurFade>
-
-            {/* Department Filter */}
-            <BlurFade delay={0.15} inView>
-              <div className="flex flex-wrap justify-center gap-2 mb-8">
-                <Button variant="default" size="sm">
-                  Tümü ({openPositions.length})
-                </Button>
-                {departments.slice(0, 4).map((dept) => (
-                  <Button key={dept.name} variant="outline" size="sm">
-                    {dept.name} ({dept.positions})
-                  </Button>
-                ))}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="rounded-full border bg-background px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground shadow-sm">
+                  0 açık pozisyon
+                </span>
               </div>
-            </BlurFade>
-
-            <BlurFade delay={0.2} inView>
-              <div className="grid gap-4 max-w-4xl mx-auto">
-                {openPositions.map((position) => (
-                  <Card
-                    key={position.slug}
-                    className="hover:border-primary/50 transition-colors"
-                  >
-                    <CardContent className="p-6">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div>
-                          <h3 className="font-semibold text-lg mb-2">
-                            <Link
-                              href={`/iletisim?konu=Kariyer Başvurusu: ${position.title}`}
-                              className="hover:text-primary transition-colors"
-                            >
-                              {position.title}
-                            </Link>
-                          </h3>
-                          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Building2 className="h-4 w-4" />
-                              {position.department}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <MapPin className="h-4 w-4" />
-                              {position.location}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-4 w-4" />
-                              {position.type}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Users className="h-4 w-4" />
-                              {position.experience}
-                            </span>
-                          </div>
-                        </div>
-                        <Button asChild>
-                          <Link href={`/iletisim?konu=Kariyer Başvurusu: ${position.title}`}>
-                            Başvur
-                            <ArrowRight className="ml-2 h-4 w-4" />
-                          </Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </BlurFade>
-          </div>
-        </section>
-
-        {/* Benefits */}
-        <section className="py-16 md:py-24 bg-muted/30">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                  Yan Haklar
-                </h2>
-                <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                  Çalışanlarımızın mutluluğu ve refahı önceliğimiz
-                </p>
-              </div>
-            </BlurFade>
-
-            <BlurFade delay={0.2} inView>
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
-                {benefits.map((benefit) => (
-                  <Card key={benefit.title} className="text-center">
-                    <CardContent className="p-6">
-                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-4">
-                        <benefit.icon className="h-6 w-6 text-primary" />
-                      </div>
-                      <h3 className="font-semibold mb-2">{benefit.title}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {benefit.description}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </BlurFade>
-          </div>
-        </section>
-
-        {/* Culture */}
-        <section className="py-16 md:py-24">
-          <div className="container">
-            <div className="grid gap-12 lg:grid-cols-2 items-center max-w-6xl mx-auto">
-              <BlurFade delay={0.1} inView>
-                <div>
-                  <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-6">
-                    Kültürümüz
-                  </h2>
-                  <p className="text-muted-foreground mb-8">
-                    Açık iletişim, sürekli öğrenme ve takım ruhu ile birlikte
-                    büyüyoruz. Her fikir değerlidir ve herkes katkıda bulunabilir.
-                  </p>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {culture.map((item) => (
-                      <div key={item.title} className="p-4 bg-muted/50 rounded-lg">
-                        <h4 className="font-semibold mb-1">{item.title}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {item.description}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </BlurFade>
-
-              <BlurFade delay={0.2} inView>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="aspect-square rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                    <span className="text-6xl">🚀</span>
-                  </div>
-                  <div className="aspect-square rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mt-8">
-                    <span className="text-6xl">💡</span>
-                  </div>
-                  <div className="aspect-square rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center -mt-8">
-                    <span className="text-6xl">🤝</span>
-                  </div>
-                  <div className="aspect-square rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                    <span className="text-6xl">🎯</span>
-                  </div>
-                </div>
-              </BlurFade>
             </div>
           </div>
-        </section>
+        </div>
+      </Section>
 
-        {/* CTA */}
-        <section className="py-16 md:py-24 bg-primary/5">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="max-w-3xl mx-auto text-center">
-                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">
-                  Uygun Pozisyon Bulamadınız mı?
-                </h2>
-                <p className="text-muted-foreground mb-8">
-                  Yeteneklerinizi bizimle paylaşın. Açık pozisyonlar için
-                  sizi arayalım.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Button size="lg" className="px-8" asChild>
-                    <Link href="/iletisim?konu=Açık Kariyer Başvurusu">
-                      Açık Başvuru Yap
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Link>
-                  </Button>
-                  <Button size="lg" variant="outline" className="px-8" asChild>
-                    <a href="mailto:careers@kleacore.com">careers@kleacore.com</a>
-                  </Button>
-                </div>
-              </div>
-            </BlurFade>
+      <Section tone="muted" divider aria-labelledby="basvuru-icerigi">
+        <SectionHeading
+          id="basvuru-icerigi"
+          eyebrow="Başvuru"
+          title="Başvurunuzda neler olsun?"
+          className="mb-12"
+        />
+        <FeatureGrid items={applicationItems} columns={3} />
+      </Section>
+
+      <Section divider aria-labelledby="kulturumuz">
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:gap-16">
+          <div>
+            <Eyebrow>Kültürümüz</Eyebrow>
+            <h2 id="kulturumuz" className="mt-4 text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+              Küçük, odaklı bir ekip
+            </h2>
+            <p className="mt-4 leading-relaxed text-muted-foreground">
+              Açık iletişim ve sürekli öğrenmeyle birlikte büyüyoruz. Her fikir değerlidir ve
+              herkes katkıda bulunabilir.
+            </p>
           </div>
-        </section>
-      </main>
-      <Footer />
-    </div>
+          <FeatureGrid items={culture} columns={2} />
+        </div>
+      </Section>
+    </SiteShell>
   );
 }
