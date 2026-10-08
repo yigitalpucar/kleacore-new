@@ -132,7 +132,11 @@ async function fetchRdapDomain(domain: string): Promise<RdapDomainResponse | nul
 
   try {
     const response = await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`, {
-      headers: { accept: "application/rdap+json, application/json" },
+      // rdap.org answers 403 to requests without a User-Agent, which made every domain look available.
+      headers: {
+        accept: "application/rdap+json, application/json",
+        "user-agent": "KLEACORE/1.0 (+https://kleacore.com)",
+      },
       next: { revalidate: 300 },
       signal: controller.signal,
     });
