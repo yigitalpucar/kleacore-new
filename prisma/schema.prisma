@@ -395,6 +395,7 @@ model User {
   planChanges             ServicePlanChange[]
   notificationLogs        NotificationLog[]
   bankTransferNotices     BankTransferNotice[]
+  importRuns              ImportRun[]
 
   // Affiliate relations
   affiliateReferrals AffiliateReferral[] @relation("AffiliateReferrals")
@@ -739,6 +740,10 @@ model Service {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// One service per remote account: imports (2.7) and provisioning can never
+  /// bind two services to the same WHM user / VMID on an instance. Legacy rows
+  /// (NULL instance or remoteId) are not constrained.
+  @@unique([moduleInstanceId, remoteId])
   @@index([moduleInstanceId])
   @@map("services")
 }
@@ -834,6 +839,11 @@ model Domain {
   /// Last successful registrar status sync (daily domain-sync cron).
   lastSyncedAt   DateTime?
 
+  /// Registrar module instance the domain was imported from (2.7); the
+  /// domain name itself is the remote id. NULL = Settings-backed registrar.
+  moduleInstanceId String?
+  moduleInstance   ModuleInstance? @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
+
   // WHOIS
   whoisName    String?
   whoisEmail   String?
@@ -852,6 +862,7 @@ model Domain {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([moduleInstanceId])
   @@map("domains")
 }
 
@@ -1857,10 +1868,12 @@ model ModuleInstance {
   lastHealthStatus ModuleHealthStatus @default(UNKNOWN)
   lastHealthError  String?
 
-  products Product[]
-  services Service[]
-  servers  Server[]
-  ipPools  IpPool[]
+  products   Product[]
+  services   Service[]
+  servers    Server[]
+  ipPools    IpPool[]
+  domains    Domain[]
+  importRuns ImportRun[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1925,4 +1938,101 @@ model IpAddress {
   @@index([poolId, status, sortKey])
   @@index([serviceId])
   @@map("ip_addresses")
+}
+
+// =====================
+// IMPORTS (Faz 2.7)
+// =====================
+
+enum ImportSourceKind {
+  WHM
+  PROXMOX
+  REGISTRAR
+}
+
+enum ImportRunStatus {
+  /// Created, waiting for the import.fetch job.
+  QUEUED
+  FETCHING
+  /// Rows written; admin reviews the preview.
+  READY
+  /// import.apply job running.
+  IMPORTING
+  COMPLETED
+  FAILED
+}
+
+enum ImportRowStatus {
+  PENDING
+  IMPORTED
+  /// Existing legacy service bound to the instance (no new row).
+  LINKED
+  SKIPPED
+  FAILED
+}
+
+/// One import of existing infrastructure (WHM accounts, Proxmox VMs,
+/// registrar domains) into KLEACORE: who started it, the source instance,
+/// counts. Nothing is ever written to the remote system.
+model ImportRun {
+  id               String           @id @default(cuid())
+  source           ImportSourceKind
+  moduleInstanceId String?
+  moduleInstance   ModuleInstance?  @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
+  /// Instance label at creation (kept when the instance is deleted).
+  instanceLabel    String           @default("")
+  status           ImportRunStatus  @default(QUEUED)
+  createdById      String?
+  createdBy        User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  appliedById      String?
+  /// Send "account.invite" to customers created by this run.
+  sendInvites      Boolean          @default(true)
+  error            String?
+  totalCount       Int              @default(0)
+  importedCount    Int              @default(0)
+  linkedCount      Int              @default(0)
+  skippedCount     Int              @default(0)
+  failedCount      Int              @default(0)
+  createdCustomers Int              @default(0)
+  fetchedAt        DateTime?
+  appliedAt        DateTime?
+  rows             ImportRow[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([createdAt])
+  @@map("import_runs")
+}
+
+/// One remote record of an ImportRun: the fetched data, the proposed
+/// (admin-editable) mapping and the per-row result. Ids of created rows are
+/// plain strings so the audit survives deletions.
+model ImportRow {
+  id              String          @id @default(cuid())
+  runId           String
+  run             ImportRun       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  /// WHM username / VMID / domain name.
+  remoteId        String
+  /// Display label (domain, VM name).
+  label           String          @default("")
+  /// Normalised remote record (src/lib/imports/types.ts).
+  data            Json
+  /// Proposed mapping, edited by the admin before importing.
+  proposal        Json
+  selected        Boolean         @default(false)
+  status          ImportRowStatus @default(PENDING)
+  error           String?
+  /// Warnings of the last apply (IP left untouched, …).
+  warnings        String[]        @default([])
+  serviceId       String?
+  domainId        String?
+  customerId      String?
+  createdCustomer Boolean         @default(false)
+  importedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([runId, remoteId])
+  @@index([runId, status])
+  @@map("import_rows")
 }

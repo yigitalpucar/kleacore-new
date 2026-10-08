@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { authPasswordChanged, authPasswordReset, authVerifyEmail } from "./auth";
+import { accountInvite, authPasswordChanged, authPasswordReset, authVerifyEmail } from "./auth";
 import {
   affiliatePayoutCompleted,
   billingBankTransferApproved,
@@ -32,6 +32,7 @@ const definitions = [
   authVerifyEmail,
   authPasswordReset,
   authPasswordChanged,
+  accountInvite,
   billingOrderReceived,
   billingPaymentReceived,
   billingInvoiceCreated,
