@@ -43,3 +43,7 @@ next-env.d.ts
 # Windows
 nul
 Thumbs.db
+
+# background worker bundle (scripts/build-worker.mjs)
+/.worker/
+/.scratch/

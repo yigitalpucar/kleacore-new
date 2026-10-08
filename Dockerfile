@@ -47,6 +47,9 @@ COPY --from=builder /app/prisma ./migrate/prisma
 COPY --from=builder /app/prisma.config.ts ./migrate/prisma.config.ts
 COPY --from=builder /app/scripts/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY --from=builder /app/scripts/cron-run.sh ./cron-run.sh
+# Background job worker (optional 2nd service: `./docker-entrypoint.sh worker`).
+# Its npm imports resolve from the standalone node_modules above.
+COPY --from=builder --chown=nextjs:nodejs /app/.worker/worker.mjs ./worker.mjs
 RUN chmod +x ./docker-entrypoint.sh ./cron-run.sh
 
 USER nextjs

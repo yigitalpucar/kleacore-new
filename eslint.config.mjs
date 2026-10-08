@@ -3,7 +3,7 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 const config = [
   ...nextVitals,
   {
-    ignores: ["static-export/**", "wisecp/**", "prisma/migrations/**"],
+    ignores: ["static-export/**", "wisecp/**", "prisma/migrations/**", ".worker/**", ".scratch/**"],
   },
   {
     rules: {

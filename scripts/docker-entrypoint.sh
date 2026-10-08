@@ -1,6 +1,20 @@
 #!/bin/sh
 set -eu
 
+# Same image, two roles (docs/ops-jobs.md):
+#   (no args)  web app: migrate, then `node server.js`
+#   worker     background job worker: `node worker.mjs` (no migrations; the
+#              web service owns them, the worker only needs pg-boss's schema,
+#              which pg-boss installs/migrates itself)
+if [ "${1:-}" = "worker" ]; then
+  if [ -z "${DATABASE_URL:-}" ]; then
+    echo "[entrypoint] DATABASE_URL is not set — refusing to start" >&2
+    exit 1
+  fi
+  echo "[entrypoint] starting background job worker"
+  exec node worker.mjs
+fi
+
 # Apply pending migrations before serving traffic. If this fails the container
 # must exit non-zero so the deploy is marked failed (and the previous
 # container keeps running) instead of serving a schema the code doesn't match.
