@@ -1,69 +1,35 @@
 "use client";
 
-import { useState } from "react";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
-  Mail,
-  Search,
-  Inbox,
-  FileText,
+  AlertCircle,
+  ArrowLeft,
   Bell,
   CreditCard,
   Headphones,
-  Clock,
-  Eye,
-  Calendar,
-  ChevronRight,
+  Inbox,
+  Loader2,
+  Mail,
+  MailOpen,
+  Search,
   Server,
   Shield,
-  AlertCircle,
-  Loader2,
 } from "lucide-react";
+import { EmptyState, IconTile, PageHeader, StatCard, StatGrid, ToneDot } from "@/components/app";
+import { formatDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 import { markEmailAsRead } from "@/lib/actions/customer/emails";
 import { toast } from "@/lib/toast";
 
 const categoryConfig = {
-  billing: {
-    label: "Fatura",
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
-    icon: CreditCard,
-  },
-  support: {
-    label: "Destek",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-    icon: Headphones,
-  },
-  system: {
-    label: "Sistem",
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
-    icon: Bell,
-  },
-  service: {
-    label: "Hizmet",
-    color: "text-purple-500",
-    bgColor: "bg-purple-500/10",
-    icon: Server,
-  },
-  security: {
-    label: "Güvenlik",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
-    icon: Shield,
-  },
-  promotion: {
-    label: "Kampanya",
-    color: "text-pink-500",
-    bgColor: "bg-pink-500/10",
-    icon: AlertCircle,
-  },
-};
+  billing: { label: "Fatura", icon: CreditCard },
+  support: { label: "Destek", icon: Headphones },
+  system: { label: "Sistem", icon: Bell },
+  service: { label: "Hizmet", icon: Server },
+  security: { label: "Güvenlik", icon: Shield },
+  promotion: { label: "Kampanya", icon: AlertCircle },
+} as const;
 
 const filterOptions = [
   { value: "all", label: "Tümü" },
@@ -78,9 +44,12 @@ interface EmailItem {
   subject: string;
   category: string;
   preview: string;
+  content: string;
   sentAt: string;
   date: string;
+  sentAtIso: string;
   isRead: boolean;
+  source: "email" | "notification";
 }
 
 interface EPostaContentProps {
@@ -92,26 +61,47 @@ interface EPostaContentProps {
   };
 }
 
+function getCategory(category: string) {
+  return categoryConfig[category as keyof typeof categoryConfig] ?? { label: "Sistem", icon: Mail };
+}
+
+const trLower = (s: string) => s.toLocaleLowerCase("tr-TR");
+
 export function EPostaContent({ emails, stats }: EPostaContentProps) {
   const [emailItems, setEmailItems] = useState(emails);
   const [statsState, setStatsState] = useState(stats);
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [openingEmailId, setOpeningEmailId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const inboxRef = useRef<HTMLElement>(null);
+  const isPhone = () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+  const showInboxTop = () => {
+    if (isPhone()) inboxRef.current?.scrollIntoView({ block: "start" });
+  };
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: emailItems.length, unread: emailItems.filter((e) => !e.isRead).length };
+    for (const e of emailItems) c[e.category] = (c[e.category] ?? 0) + 1;
+    return c;
+  }, [emailItems]);
 
   const filteredEmails = emailItems.filter((email) => {
+    const q = trLower(searchQuery.trim());
     const matchesSearch =
-      email.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      email.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      email.preview.toLowerCase().includes(searchQuery.toLowerCase());
-
+      !q || trLower(email.id).includes(q) || trLower(email.subject).includes(q) || trLower(email.preview).includes(q);
     if (filter === "all") return matchesSearch;
     if (filter === "unread") return matchesSearch && !email.isRead;
     return matchesSearch && email.category === filter;
   });
 
+  const selected = emailItems.find((e) => e.id === selectedId) ?? null;
+
   const handleOpenEmail = async (email: EmailItem) => {
-    if (email.isRead || openingEmailId) return;
+    setSelectedId(email.id);
+    showInboxTop();
+    // Notification fallback items aren't email records; there is nothing to mark on the server.
+    if (email.isRead || openingEmailId || email.source !== "email") return;
 
     setOpeningEmailId(email.id);
     try {
@@ -121,222 +111,200 @@ export function EPostaContent({ emails, stats }: EPostaContentProps) {
         return;
       }
 
-      setEmailItems((prev) =>
-        prev.map((item) =>
-          item.id === email.id ? { ...item, isRead: true } : item
-        )
-      );
-      setStatsState((prev) => ({
-        ...prev,
-        unread: Math.max(0, prev.unread - 1),
-      }));
+      setEmailItems((prev) => prev.map((item) => (item.id === email.id ? { ...item, isRead: true } : item)));
+      setStatsState((prev) => ({ ...prev, unread: Math.max(0, prev.unread - 1) }));
     } finally {
       setOpeningEmailId(null);
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <BlurFade delay={0.1} inView>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">E-Postalarım</h1>
-            <p className="text-muted-foreground">
-              Kleacore&apos;dan size gönderilen tüm e-postaları görüntüleyin.
-            </p>
-          </div>
-        </div>
-      </BlurFade>
+    <>
+      <PageHeader
+        title="E-postalarım"
+        description="KLEACORE'un hesabınıza gönderdiği fatura, destek ve sistem e-postalarının kopyaları."
+      />
 
-      {/* Stats */}
-      <BlurFade delay={0.15} inView>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Inbox className="h-5 w-5 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Toplam E-posta</p>
-                  <p className="text-2xl font-bold">{statsState.total}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-500/10">
-                  <Mail className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Okunmamış</p>
-                  <p className="text-2xl font-bold">{statsState.unread}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <Calendar className="h-5 w-5 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Bu Ay</p>
-                  <p className="text-2xl font-bold">{statsState.thisMonth}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </BlurFade>
+      <StatGrid columns={3} className="grid-cols-3">
+        <StatCard label="Toplam" value={statsState.total} />
+        <StatCard label="Okunmamış" value={statsState.unread} tone={statsState.unread ? "info" : undefined} hint={statsState.unread ? "Yeni" : undefined} />
+        <StatCard label="Bu ay" value={statsState.thisMonth} />
+      </StatGrid>
 
-      {/* Filters */}
-      <BlurFade delay={0.2} inView>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex gap-2 flex-wrap">
-                {filterOptions.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={filter === option.value ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilter(option.value)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
+      {emailItems.length === 0 ? (
+        <EmptyState
+          icon={Inbox}
+          title="Henüz e-posta yok"
+          description="Fatura, destek ve hizmet bildirimleri gönderildikçe burada listelenir."
+        />
+      ) : (
+        <section
+          ref={inboxRef}
+          aria-label="Gelen kutusu"
+          className="flex min-w-0 scroll-mt-20 overflow-hidden rounded-lg border bg-card shadow-sm md:h-[640px]"
+        >
+          {/* Message list */}
+          <div
+            className={cn(
+              "flex w-full min-w-0 flex-col md:w-[360px] md:shrink-0 md:border-r lg:w-[400px]",
+              selected && "hidden md:flex"
+            )}
+          >
+            <div className="space-y-3 border-b p-3 md:p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold tracking-tight">Gelen kutusu</h2>
+                <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                  {filteredEmails.length} e-posta
+                </span>
               </div>
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="E-posta ara..."
+              <div className="relative">
+                <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="search"
+                  aria-label="E-posta ara"
+                  placeholder="Konu veya içerik ara…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="h-11 w-full rounded-md border bg-background pl-9 pr-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9"
                 />
               </div>
+              <div role="group" aria-label="Filtre" className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] md:flex-wrap md:overflow-visible">
+                {filterOptions.map((option) => {
+                  const active = filter === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setFilter(option.value)}
+                      className={cn(
+                        "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-8",
+                        active ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      {option.label}
+                      <span className={cn("font-mono text-[10px]", active ? "text-background/70" : "text-muted-foreground/70")}>
+                        {counts[option.value] ?? 0}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
 
-      {/* Emails List */}
-      <BlurFade delay={0.25} inView>
-        <Card>
-          <CardHeader>
-            <CardTitle>Gelen Kutusu ({filteredEmails.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
+            <ul className="min-h-0 flex-1 divide-y overflow-y-auto">
               {filteredEmails.map((email) => {
-                const category = categoryConfig[email.category as keyof typeof categoryConfig];
-                const CategoryIcon = category?.icon || Mail;
-                const isOpening = openingEmailId === email.id;
-
+                const category = getCategory(email.category);
+                const Icon = category.icon;
+                const isSelected = selected?.id === email.id;
                 return (
-                  <div
-                    key={email.id}
-                    onClick={() => void handleOpenEmail(email)}
-                    className={cn(
-                      "flex items-center gap-4 p-4 rounded-lg border hover:shadow-sm transition-shadow cursor-pointer group",
-                      !email.isRead && "bg-primary/5 border-primary/20"
-                    )}
-                  >
-                    <div className={cn("p-3 rounded-lg", category?.bgColor || "bg-muted")}>
-                      <CategoryIcon className={cn("h-5 w-5", category?.color || "text-muted-foreground")} />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {!email.isRead && (
-                          <span className="w-2 h-2 rounded-full bg-primary" />
-                        )}
-                        <p className={cn(
-                          "font-medium truncate",
-                          !email.isRead && "font-semibold"
-                        )}>
-                          {email.subject}
-                        </p>
-                      </div>
-                      <p className="text-sm text-muted-foreground truncate mt-0.5">
-                        {email.preview}
-                      </p>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                        {category && (
-                          <span className={cn("px-2 py-0.5 rounded-full", category.bgColor, category.color)}>
-                            {category.label}
+                  <li key={email.id}>
+                    <button
+                      type="button"
+                      onClick={() => void handleOpenEmail(email)}
+                      aria-current={isSelected ? "true" : undefined}
+                      className={cn(
+                        "relative flex w-full gap-3 px-3 py-3.5 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none md:px-4",
+                        isSelected && "bg-muted before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
+                      )}
+                    >
+                      <IconTile size="sm" className="mt-0.5">
+                        <Icon />
+                      </IconTile>
+                      <span className="min-w-0 flex-1 space-y-0.5">
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            {!email.isRead ? <ToneDot tone="info" /> : null}
+                            <span className={cn("truncate text-sm", email.isRead ? "text-foreground/90" : "font-semibold")}>
+                              {email.subject}
+                            </span>
                           </span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {email.sentAt}
+                          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{email.sentAt}</span>
                         </span>
-                      </div>
-                    </div>
-
-                    <div className="hidden md:flex items-center gap-3">
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">{email.date}</p>
-                        <p className="text-xs text-muted-foreground">{email.id}</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleOpenEmail(email);
-                        }}
-                      >
-                        {isOpening ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-
-                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  </div>
+                        <span className="line-clamp-2 block text-[13px] text-muted-foreground">{email.preview}</span>
+                        <span className="block font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          {category.label}
+                          {!email.isRead ? <span className="sr-only"> · okunmamış</span> : null}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
                 );
               })}
+              {filteredEmails.length === 0 ? (
+                <li className="px-6 py-12 text-center text-sm text-muted-foreground">Aramanızla eşleşen e-posta bulunamadı.</li>
+              ) : null}
+            </ul>
+          </div>
 
-              {filteredEmails.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Aramanızla eşleşen e-posta bulunamadı.</p>
+          {/* Reading pane */}
+          <div className={cn("min-w-0 flex-1 flex-col", selected ? "flex" : "hidden md:flex")}>
+            {selected ? (
+              <article className="flex min-h-0 flex-1 flex-col" aria-labelledby="eposta-konu">
+                <header className="space-y-3 border-b p-4 md:p-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedId(null);
+                      showInboxTop();
+                    }}
+                    className="-ml-1 inline-flex h-10 items-center gap-1.5 rounded-md px-1 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+                  >
+                    <ArrowLeft aria-hidden className="size-4" />
+                    Gelen kutusu
+                  </button>
+                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    {getCategory(selected.category).label}
+                  </p>
+                  <h2 id="eposta-konu" className="text-balance text-lg font-semibold tracking-tight md:text-xl">
+                    {selected.subject}
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
+                    <span>
+                      Gönderen <span className="font-medium text-foreground">KLEACORE</span>
+                    </span>
+                    <time dateTime={selected.sentAtIso} className="tabular-nums">
+                      {formatDateTime(selected.sentAtIso)}
+                    </time>
+                    {openingEmailId === selected.id ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Loader2 aria-hidden className="size-3.5 animate-spin" />
+                        İşaretleniyor…
+                      </span>
+                    ) : selected.isRead ? (
+                      <span className="inline-flex items-center gap-1">
+                        <MailOpen aria-hidden className="size-3.5" />
+                        Okundu
+                      </span>
+                    ) : null}
+                  </div>
+                </header>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+                  <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed">{selected.content || selected.preview}</p>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
+              </article>
+            ) : (
+              <div className="flex flex-1 items-center justify-center p-6">
+                <EmptyState
+                  compact
+                  icon={Mail}
+                  title="Okumak için bir e-posta seçin"
+                  description="Seçtiğiniz e-posta okundu olarak işaretlenir."
+                  className="w-full max-w-sm border-0"
+                />
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
-      {/* Info Note */}
-      <BlurFade delay={0.3} inView>
-        <Card className="border-dashed">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-muted">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div className="text-sm text-muted-foreground">
-                <p className="font-medium text-foreground mb-1">E-posta Bildirimleri Hakkında</p>
-                <p>
-                  Bu sayfada Kleacore sisteminden hesabınıza gönderilen tüm e-postaları görüntüleyebilirsiniz.
-                  Fatura, destek, sistem bildirimleri ve kampanya e-postaları bu listede yer almaktadır.
-                  E-posta bildirim tercihlerinizi <span className="text-primary">Ayarlar</span> sayfasından düzenleyebilirsiniz.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+      <p className="text-[13px] text-muted-foreground">
+        Hangi konularda e-posta alacağınızı{" "}
+        <Link href="/musteri/panel/ayarlar" className="font-medium text-foreground underline-offset-4 hover:underline">
+          Ayarlar
+        </Link>{" "}
+        sayfasındaki bildirim tercihlerinden değiştirebilirsiniz.
+      </p>
+    </>
   );
 }

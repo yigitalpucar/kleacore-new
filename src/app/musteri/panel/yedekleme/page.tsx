@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getBackupsByCustomer, getSchedulesByCustomer } from "@/lib/dal/backups";
 import { YedeklemeContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Yedekler" };
 
 export default async function YedeklemePage() {
   const session = await auth();
@@ -15,6 +18,7 @@ export default async function YedeklemePage() {
 
   const serializedBackups = backups.map((b) => ({
     id: b.id,
+    serviceId: b.serviceId,
     serviceName: b.service.label || b.service.domain || "Bilinmeyen",
     serviceType: b.service.product?.category?.slug ?? "hosting",
     type: b.type,

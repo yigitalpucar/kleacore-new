@@ -1,261 +1,183 @@
-"use client";
-
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Activity, ArrowUpRight, HardDrive, Package, Wallet, Wifi } from "lucide-react";
 import {
-  HardDrive,
-  Cpu,
-  Wifi,
-  Activity,
-  Database,
-  RefreshCw,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+  ChartCard,
+  EmptyState,
+  PageHeader,
+  SectionCard,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  UsageMeter,
+  appButton,
+} from "@/components/app";
+import { formatTRY } from "@/lib/format/price";
+import { RefreshButton } from "./refresh-button";
 
-interface OverviewStats {
-  totalBandwidth: number;
-  totalDisk: number;
-  avgCpu: number;
-}
+type Pair = { used: number | null; total: number | null };
 
 interface ServiceUsageItem {
   id: string;
   name: string;
-  label: string;
-  categorySlug: string;
-  disk: { used: number; total: number };
-  bandwidth: { used: number; total: number };
-  cpu: number;
-  ram: number;
+  label: string | null;
+  domain: string | null;
+  disk: Pair;
+  bandwidth: Pair;
+  cpu: number | null;
+  ram: number | null;
   status: string;
 }
 
 interface IstatistiklerContentProps {
-  overviewStats: OverviewStats;
   serviceUsage: ServiceUsageItem[];
-  serviceCount: number;
+  totals: {
+    services: number;
+    activeServices: number;
+    disk: { used: number; total: number; count: number };
+    bandwidth: { used: number; total: number; count: number };
+    paidTotal: number;
+    paidCount: number;
+  };
+  monthlyPayments: { label: string; longLabel: string; value: number }[];
 }
 
-function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
-  const percentage = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+const gb = (n: number) => `${n.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} GB`;
+const pct = (used: number, total: number) => (total > 0 ? Math.round((used / total) * 100) : 0);
+const hasPair = (p: Pair) => p.used !== null && p.total !== null && p.total > 0;
+const hasMetrics = (s: ServiceUsageItem) => hasPair(s.disk) || hasPair(s.bandwidth) || s.cpu !== null || s.ram !== null;
+
+export function IstatistiklerContent({ serviceUsage, totals, monthlyPayments }: IstatistiklerContentProps) {
+  const withMetrics = serviceUsage.filter(hasMetrics);
+  const withoutMetrics = serviceUsage.length - withMetrics.length;
+  const diskPct = pct(totals.disk.used, totals.disk.total);
+  const bwPct = pct(totals.bandwidth.used, totals.bandwidth.total);
+  const tone = (p: number) => (p >= 90 ? "danger" : p >= 70 ? "warning" : undefined);
+
   return (
-    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-      <div
-        className={cn("h-full rounded-full transition-all", color)}
-        style={{ width: `${percentage}%` }}
+    <>
+      <PageHeader
+        title="İstatistikler"
+        description="Hizmetlerinizin kaynak kullanımı ve son 12 aydaki ödemeleriniz."
+        actions={<RefreshButton />}
       />
-    </div>
-  );
-}
 
-export function IstatistiklerContent({
-  overviewStats,
-  serviceUsage,
-  serviceCount,
-}: IstatistiklerContentProps) {
-  const statCards = [
-    {
-      title: "Toplam Bandwidth",
-      value: `${overviewStats.totalBandwidth} GB`,
-      period: "Toplam",
-      icon: Wifi,
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-    },
-    {
-      title: "Disk Kullanimi",
-      value: `${overviewStats.totalDisk} GB`,
-      period: "Toplam",
-      icon: HardDrive,
-      color: "text-purple-500",
-      bgColor: "bg-purple-500/10",
-    },
-    {
-      title: "Ortalama CPU",
-      value: `${overviewStats.avgCpu}%`,
-      period: "Anlik",
-      icon: Cpu,
-      color: "text-green-500",
-      bgColor: "bg-green-500/10",
-    },
-    {
-      title: "Toplam Hizmet",
-      value: serviceCount.toString(),
-      period: "Aktif",
-      icon: Database,
-      color: "text-orange-500",
-      bgColor: "bg-orange-500/10",
-    },
-  ];
+      <StatGrid columns={4}>
+        <StatCard
+          label="Aktif hizmet"
+          icon={Package}
+          value={totals.activeServices}
+          hint={totals.services ? `Toplam ${totals.services} hizmet` : "Henüz hizmetiniz yok"}
+        />
+        <StatCard
+          label="Disk"
+          icon={HardDrive}
+          value={totals.disk.count ? gb(totals.disk.used) : "—"}
+          hint={totals.disk.count ? `${gb(totals.disk.total)} kotanın %${diskPct}'i` : "Kullanım verisi yok"}
+          tone={totals.disk.count ? tone(diskPct) : undefined}
+        />
+        <StatCard
+          label="Bant genişliği"
+          icon={Wifi}
+          value={totals.bandwidth.count ? gb(totals.bandwidth.used) : "—"}
+          hint={totals.bandwidth.count ? `${gb(totals.bandwidth.total)} kotanın %${bwPct}'i` : "Kullanım verisi yok"}
+          tone={totals.bandwidth.count ? tone(bwPct) : undefined}
+        />
+        <StatCard
+          label="Ödenen · 12 ay"
+          icon={Wallet}
+          value={formatTRY(totals.paidTotal, { keepDecimals: true })}
+          hint={totals.paidCount ? `${totals.paidCount} ödenmiş fatura` : "Bu dönemde ödeme yok"}
+          href="/musteri/panel/faturalar"
+        />
+      </StatGrid>
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <BlurFade delay={0.1} inView>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">İstatistikler</h1>
-          <p className="text-muted-foreground">
-            Hizmetlerinizin anlık kaynak kullanımını görüntüleyin.
-          </p>
-        </div>
-      </BlurFade>
+      <ChartCard
+        title="Aylık ödemeler"
+        description="Son 12 ayda ödenen faturaların ödeme ayına göre toplamı."
+        data={monthlyPayments.map((m) => ({ label: m.label, value: m.value }))}
+        formatValue={(n) => formatTRY(n, { keepDecimals: true })}
+        emptyText="Son 12 ayda ödenmiş faturanız yok."
+        actions={
+          <Link href="/musteri/panel/faturalar" className={appButton({ variant: "ghost", size: "sm" })}>
+            Faturalar
+            <ArrowUpRight aria-hidden />
+          </Link>
+        }
+      />
 
-      {/* Overview Stats */}
-      <BlurFade delay={0.15} inView>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {statCards.map((stat) => (
-            <Card key={stat.title}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{stat.title}</p>
-                    <p className="text-2xl font-bold mt-1">{stat.value}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="text-xs text-muted-foreground">
-                        {stat.period}
-                      </span>
-                    </div>
-                  </div>
-                  <div className={cn("p-3 rounded-lg", stat.bgColor)}>
-                    <stat.icon className={cn("h-6 w-6", stat.color)} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </BlurFade>
-
-      {/* Service usage from database */}
-      <BlurFade delay={0.5} inView>
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5 text-indigo-500" />
-                  Hizmet Bazli Kullanim
-                </CardTitle>
-                <CardDescription>
-                  Her hizmetin kaynak kullanim detaylari
-                </CardDescription>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Yenile
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {serviceUsage.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Henüz aktif hizmetiniz bulunmuyor.
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {serviceUsage.map((service) => (
-                  <div key={service.id} className="p-4 rounded-lg border">
-                    <p className="font-semibold mb-4">
-                      {service.label || service.name}
+      <SectionCard
+        title="Hizmet bazında kaynak kullanımı"
+        description="Değerler hizmet kayıtlarındaki son ölçümlerdir; anlık olmayabilir."
+        flush
+      >
+        {serviceUsage.length === 0 ? (
+          <div className="p-4 md:p-5">
+            <EmptyState
+              compact
+              icon={Activity}
+              title="Henüz hizmetiniz yok"
+              description="Hizmet satın aldığınızda kaynak kullanımı burada görünür."
+              action={
+                <Link href="/hosting" className={appButton({ variant: "outline", size: "sm" })}>
+                  Hizmetlere göz at
+                </Link>
+              }
+            />
+          </div>
+        ) : withMetrics.length === 0 ? (
+          <div className="p-4 md:p-5">
+            <EmptyState
+              compact
+              icon={Activity}
+              title="Kullanım verisi yok"
+              description="Hizmetleriniz için henüz disk, trafik veya işlemci ölçümü kaydedilmedi."
+            />
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {withMetrics.map((s) => (
+              <li key={s.id} className="space-y-4 px-4 py-4 md:px-5">
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/musteri/panel/hizmetlerim/${s.id}`}
+                      className="text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {s.label || s.name}
+                    </Link>
+                    <p className="truncate text-[13px] text-muted-foreground">
+                      {s.label ? s.name : null}
+                      {s.label && s.domain ? " · " : null}
+                      {s.domain ? <span className="font-mono text-xs">{s.domain}</span> : null}
                     </p>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-1 text-muted-foreground">
-                            <HardDrive className="h-4 w-4" />
-                            Disk
-                          </span>
-                          <span>
-                            {service.disk.used} / {service.disk.total} GB
-                          </span>
-                        </div>
-                        <ProgressBar
-                          value={service.disk.used}
-                          max={service.disk.total}
-                          color={
-                            service.disk.total > 0 &&
-                            (service.disk.used / service.disk.total) * 100 > 80
-                              ? "bg-red-500"
-                              : service.disk.total > 0 &&
-                                (service.disk.used / service.disk.total) * 100 > 60
-                              ? "bg-orange-500"
-                              : "bg-green-500"
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-1 text-muted-foreground">
-                            <Wifi className="h-4 w-4" />
-                            Bandwidth
-                          </span>
-                          <span>
-                            {service.bandwidth.used} / {service.bandwidth.total} GB
-                          </span>
-                        </div>
-                        <ProgressBar
-                          value={service.bandwidth.used}
-                          max={service.bandwidth.total}
-                          color={
-                            service.bandwidth.total > 0 &&
-                            (service.bandwidth.used / service.bandwidth.total) * 100 > 80
-                              ? "bg-red-500"
-                              : service.bandwidth.total > 0 &&
-                                (service.bandwidth.used / service.bandwidth.total) * 100 > 60
-                              ? "bg-orange-500"
-                              : "bg-blue-500"
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-1 text-muted-foreground">
-                            <Cpu className="h-4 w-4" />
-                            CPU
-                          </span>
-                          <span>{service.cpu}%</span>
-                        </div>
-                        <ProgressBar
-                          value={service.cpu}
-                          max={100}
-                          color={
-                            service.cpu > 80
-                              ? "bg-red-500"
-                              : service.cpu > 60
-                              ? "bg-orange-500"
-                              : "bg-purple-500"
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-1 text-muted-foreground">
-                            <Activity className="h-4 w-4" />
-                            RAM
-                          </span>
-                          <span>{service.ram}%</span>
-                        </div>
-                        <ProgressBar
-                          value={service.ram}
-                          max={100}
-                          color={
-                            service.ram > 80
-                              ? "bg-red-500"
-                              : service.ram > 60
-                              ? "bg-orange-500"
-                              : "bg-cyan-500"
-                          }
-                        />
-                      </div>
-                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+                  <StatusBadge kind="service" status={s.status} />
+                </div>
+                <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {hasPair(s.disk) ? (
+                    <UsageMeter label="Disk" used={s.disk.used} limit={s.disk.total} unit="GB" />
+                  ) : null}
+                  {hasPair(s.bandwidth) ? (
+                    <UsageMeter
+                      label="Bant genişliği"
+                      used={s.bandwidth.used}
+                      limit={s.bandwidth.total}
+                      unit="GB"
+                    />
+                  ) : null}
+                  {s.cpu !== null ? <UsageMeter label="İşlemci" percent={s.cpu} /> : null}
+                  {s.ram !== null ? <UsageMeter label="Bellek" percent={s.ram} /> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {withMetrics.length > 0 && withoutMetrics > 0 ? (
+          <p className="border-t border-dashed px-4 py-3 text-[13px] text-muted-foreground md:px-5">
+            {withoutMetrics} hizmet için kullanım verisi bulunmuyor.
+          </p>
+        ) : null}
+      </SectionCard>
+    </>
   );
 }

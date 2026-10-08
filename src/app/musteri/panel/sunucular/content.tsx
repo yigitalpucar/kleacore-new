@@ -2,81 +2,27 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Camera, Cloud, HardDrive, Loader2, Play, Plus, Power, RotateCcw, Server, Settings, Terminal } from "lucide-react";
 import {
-  Server,
-  Cloud,
-  Search,
-  MoreVertical,
-  Power,
-  RotateCcw,
-  Terminal,
-  HardDrive,
-  Cpu,
-  Activity,
-  CheckCircle2,
-  XCircle,
-  Pause,
-  Play,
-  Camera,
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  CopyButton,
+  DataTable,
+  EmptyState,
+  IconTile,
+  ListRow,
+  PageHeader,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  UnavailableAction,
+  appButton,
+  getStatusOptions,
+  type ColumnDef,
+  type RowAction,
+} from "@/components/app";
+import { formatDate } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 import { restartServer, stopServer, startServer } from "@/lib/actions/customer/servers";
 import { toast } from "@/lib/toast";
-
-const statusConfig: Record<string, {
-  label: string;
-  color: string;
-  bgColor: string;
-  icon: typeof CheckCircle2;
-}> = {
-  ACTIVE: {
-    label: "Aktif",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-    icon: CheckCircle2,
-  },
-  SUSPENDED: {
-    label: "Durduruldu",
-    color: "text-gray-500",
-    bgColor: "bg-gray-500/10",
-    icon: Pause,
-  },
-  CANCELLED: {
-    label: "İptal",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
-    icon: XCircle,
-  },
-  EXPIRED: {
-    label: "Süresi Doldu",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
-    icon: XCircle,
-  },
-};
-
-function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
-  const percentage = (value / max) * 100;
-  return (
-    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-      <div
-        className={cn("h-full rounded-full transition-all", color)}
-        style={{ width: `${percentage}%` }}
-      />
-    </div>
-  );
-}
 
 interface ServerServiceItem {
   id: string;
@@ -103,8 +49,58 @@ interface SunucularContentProps {
   };
 }
 
+const SERVICE_PATH = "/musteri/panel/hizmetlerim";
+const fmt = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+
+function ServerIcon({ slug }: { slug: string }) {
+  return <IconTile size="sm">{slug === "cloud" ? <Cloud /> : <Server />}</IconTile>;
+}
+
+function hasUsage(s: ServerServiceItem) {
+  return s.status === "ACTIVE" && (s.cpuUsage > 0 || s.ramUsage > 0 || s.diskLimit > 0);
+}
+
+/** Compact usage bar: monochrome fill, amber ≥70 %, red ≥90 % (same thresholds as UsageMeter). */
+function MiniMeter({ label, percent, value }: { label: string; percent: number; value: string }) {
+  const clamped = Math.max(0, Math.min(100, percent));
+  const fill = clamped >= 90 ? "bg-red-500" : clamped >= 70 ? "bg-amber-500" : "bg-foreground";
+  return (
+    <div className="min-w-0 space-y-1">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+        <span className="whitespace-nowrap tabular-nums">{value}</span>
+      </div>
+      <div
+        role="meter"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(clamped)}
+        className="h-1 overflow-hidden rounded-full bg-muted"
+      >
+        <div className={cn("h-full rounded-full", fill)} style={{ width: `${clamped}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function UsageCell({ s }: { s: ServerServiceItem }) {
+  if (!hasUsage(s)) return <span className="text-xs text-muted-foreground">—</span>;
+  const diskPct = s.diskLimit > 0 ? (s.diskUsed / s.diskLimit) * 100 : 0;
+  return (
+    <div className="grid w-full min-w-[300px] max-w-[360px] grid-cols-3 gap-3">
+      <MiniMeter label="CPU" percent={s.cpuUsage} value={`%${Math.round(s.cpuUsage)}`} />
+      <MiniMeter label="RAM" percent={s.ramUsage} value={`%${Math.round(s.ramUsage)}`} />
+      <MiniMeter
+        label="Disk"
+        percent={diskPct}
+        value={s.diskLimit > 0 ? `${fmt(s.diskUsed)}/${fmt(s.diskLimit)} GB` : `${fmt(s.diskUsed)} GB`}
+      />
+    </div>
+  );
+}
+
 export function SunucularContent({ servers, stats }: SunucularContentProps) {
-  const [searchQuery, setSearchQuery] = useState("");
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [localServers, setLocalServers] = useState(servers);
 
@@ -112,23 +108,22 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
     setActionInProgress(serviceId);
     const result = await restartServer(serviceId);
     if (result.success) {
-      toast.success("Sunucu yeniden baslatildi");
+      toast.success("Sunucu yeniden başlatıldı");
     } else {
-      toast.error(result.error || "Islem basarisiz");
+      toast.error(result.error || "İşlem başarısız");
     }
     setActionInProgress(null);
   };
 
   const handleStop = async (serviceId: string) => {
+    if (!window.confirm("Sunucu durdurulacak. Üzerindeki tüm uygulamalar erişilemez olur. Devam edilsin mi?")) return;
     setActionInProgress(serviceId);
     const result = await stopServer(serviceId);
     if (result.success) {
-      setLocalServers((prev) =>
-        prev.map((s) => (s.id === serviceId ? { ...s, status: "SUSPENDED" } : s))
-      );
+      setLocalServers((prev) => prev.map((s) => (s.id === serviceId ? { ...s, status: "SUSPENDED" } : s)));
       toast.success("Sunucu durduruldu");
     } else {
-      toast.error(result.error || "Islem basarisiz");
+      toast.error(result.error || "İşlem başarısız");
     }
     setActionInProgress(null);
   };
@@ -137,256 +132,213 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
     setActionInProgress(serviceId);
     const result = await startServer(serviceId);
     if (result.success) {
-      setLocalServers((prev) =>
-        prev.map((s) => (s.id === serviceId ? { ...s, status: "ACTIVE" } : s))
-      );
-      toast.success("Sunucu baslatildi");
+      setLocalServers((prev) => prev.map((s) => (s.id === serviceId ? { ...s, status: "ACTIVE" } : s)));
+      toast.success("Sunucu başlatıldı");
     } else {
-      toast.error(result.error || "Islem basarisiz");
+      toast.error(result.error || "İşlem başarısız");
     }
     setActionInProgress(null);
   };
 
-  const filteredServers = localServers.filter(
-    (server) =>
-      server.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      server.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (server.ipAddress || "").includes(searchQuery)
+  const rowActions = (s: ServerServiceItem): RowAction[] => {
+    const isActive = s.status === "ACTIVE";
+    const busy = actionInProgress === s.id ? "İşlem sürüyor" : undefined;
+    return [
+      { label: "Hizmeti yönet", href: `${SERVICE_PATH}/${s.id}`, icon: <Settings aria-hidden /> },
+      {
+        label: "Yeniden başlat",
+        icon: <RotateCcw aria-hidden />,
+        onSelect: () => void handleRestart(s.id),
+        disabledReason: busy ?? (isActive ? undefined : "Sunucu çalışmıyor"),
+        separator: true,
+      },
+      isActive
+        ? { label: "Durdur", icon: <Power aria-hidden />, onSelect: () => void handleStop(s.id), disabledReason: busy, destructive: true }
+        : {
+            label: "Başlat",
+            icon: <Play aria-hidden />,
+            onSelect: () => void handleStart(s.id),
+            disabledReason: busy ?? (s.status === "CANCELLED" ? "İptal edilmiş sunucu" : undefined),
+          },
+      { label: "Snapshot al", icon: <Camera aria-hidden />, disabledReason: "Yakında", separator: true },
+      { label: "İşletim sistemini yeniden kur", icon: <HardDrive aria-hidden />, disabledReason: "Yakında" },
+    ];
+  };
+
+  const PrimaryAction = ({ s }: { s: ServerServiceItem }) => {
+    const busy = actionInProgress === s.id;
+    if (s.status === "ACTIVE") {
+      return <UnavailableAction label="Konsol" icon={<Terminal aria-hidden />} size="sm" />;
+    }
+    return (
+      <button
+        type="button"
+        className={appButton({ variant: "outline", size: "sm" })}
+        disabled={busy || s.status === "CANCELLED"}
+        onClick={() => void handleStart(s.id)}
+      >
+        {busy ? <Loader2 aria-hidden className="animate-spin" /> : <Play aria-hidden />}
+        Başlat
+      </button>
+    );
+  };
+
+  const columns: ColumnDef<ServerServiceItem>[] = [
+    {
+      id: "name",
+      accessorFn: (s) => s.label || s.productName,
+      header: "Sunucu",
+      cell: ({ row }) => {
+        const s = row.original;
+        return (
+          <div className="flex min-w-0 items-center gap-3">
+            <ServerIcon slug={s.categorySlug} />
+            <div className="min-w-0">
+              <Link href={`${SERVICE_PATH}/${s.id}`} className="font-medium hover:underline">
+                {s.label || s.productName}
+              </Link>
+              <p className="truncate text-xs text-muted-foreground">
+                {s.productName}
+                <span className="font-mono"> · {s.categorySlug.toLocaleUpperCase("tr-TR")}</span>
+              </p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "ip",
+      accessorFn: (s) => s.ipAddress ?? "",
+      header: "IP adresi",
+      cell: ({ row }) =>
+        row.original.ipAddress ? (
+          <span className="inline-flex items-center gap-1 font-mono text-[13px]">
+            {row.original.ipAddress}
+            <CopyButton value={row.original.ipAddress} label="IP adresini kopyala" />
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "usage",
+      header: "Kaynak kullanımı",
+      enableSorting: false,
+      cell: ({ row }) => <UsageCell s={row.original} />,
+    },
+    {
+      accessorKey: "status",
+      header: "Durum",
+      enableSorting: false,
+      cell: ({ row }) => <StatusBadge kind="service" status={row.original.status} />,
+    },
+    {
+      id: "primary",
+      header: () => <span className="sr-only">İşlem</span>,
+      enableSorting: false,
+      meta: { align: "right", className: "w-px" },
+      cell: ({ row }) => <PrimaryAction s={row.original} />,
+    },
+  ];
+
+  const newServer = (
+    <Link href="/sunucu/vds" className={appButton()}>
+      <Plus aria-hidden />
+      Yeni sunucu
+    </Link>
   );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <BlurFade delay={0.1} inView>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Sunucularım</h1>
-            <p className="text-muted-foreground">
-              VPS, VDS ve Bulut sunucularınızı yönetin.
-            </p>
-          </div>
-          <Button asChild>
-            <Link href="/sunucu/vds">Yeni Sunucu</Link>
-          </Button>
-        </div>
-      </BlurFade>
+    <>
+      <PageHeader title="Sunucularım" description="VDS, VPS ve bulut sunucularınızı izleyin ve yönetin." actions={newServer} />
 
-      {/* Stats */}
-      <BlurFade delay={0.15} inView>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Server className="h-5 w-5 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Toplam Sunucu</p>
-                  <p className="text-2xl font-bold">{stats.total}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <Activity className="h-5 w-5 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Aktif</p>
-                  <p className="text-2xl font-bold">{stats.active}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-gray-500/10">
-                  <Pause className="h-5 w-5 text-gray-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Durduruldu</p>
-                  <p className="text-2xl font-bold">{stats.suspended}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </BlurFade>
+      <StatGrid columns={3} className="grid-cols-1 sm:grid-cols-3">
+        <StatCard label="Toplam" value={stats.total} hint="Tüm sunucularınız" />
+        <StatCard
+          label="Aktif"
+          value={stats.active}
+          tone={stats.active ? "success" : undefined}
+          hint={stats.active ? "Çalışan sunucular" : "Çalışan sunucu yok"}
+        />
+        <StatCard
+          label="Askıda"
+          value={stats.suspended}
+          tone={stats.suspended ? "warning" : undefined}
+          hint={stats.suspended ? "Başlatılmayı bekliyor" : "Durdurulan sunucu yok"}
+        />
+      </StatGrid>
 
-      {/* Search */}
-      <BlurFade delay={0.2} inView>
-        <Card>
-          <CardContent className="p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Sunucu adı veya IP ara..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+      <DataTable
+        caption="Sunucular"
+        columns={columns}
+        data={localServers}
+        getRowId={(s) => s.id}
+        searchFn={(s, q) =>
+          s.label.toLocaleLowerCase("tr-TR").includes(q) ||
+          s.productName.toLocaleLowerCase("tr-TR").includes(q) ||
+          (s.ipAddress || "").includes(q)
+        }
+        searchPlaceholder="Sunucu adı veya IP ara…"
+        filters={
+          localServers.length > 1
+            ? [
+                {
+                  id: "status",
+                  label: "Durum",
+                  options: getStatusOptions("service").filter((o) => localServers.some((s) => s.status === o.value)),
+                  getValue: (s) => s.status,
+                },
+              ]
+            : undefined
+        }
+        rowActions={rowActions}
+        mobileCard={(s) => {
+          const diskPct = s.diskLimit > 0 ? (s.diskUsed / s.diskLimit) * 100 : 0;
+          return (
+            <div className="space-y-3">
+              <ListRow
+                leading={<ServerIcon slug={s.categorySlug} />}
+                title={s.label || s.productName}
+                subtitle={
+                  <span>
+                    {s.productName}
+                    {s.ipAddress ? <span className="font-mono"> · {s.ipAddress}</span> : null}
+                  </span>
+                }
+                trailing={<StatusBadge kind="service" status={s.status} />}
+                meta={s.expiresAt ? <span>Bitiş {formatDate(s.expiresAt)}</span> : undefined}
               />
+              {hasUsage(s) ? (
+                <div className="grid grid-cols-3 gap-3 pl-11">
+                  <MiniMeter label="CPU" percent={s.cpuUsage} value={`%${Math.round(s.cpuUsage)}`} />
+                  <MiniMeter label="RAM" percent={s.ramUsage} value={`%${Math.round(s.ramUsage)}`} />
+                  <MiniMeter label="Disk" percent={diskPct} value={`${fmt(s.diskUsed)} GB`} />
+                </div>
+              ) : null}
+              <div className="flex items-center gap-2 pl-11">
+                <PrimaryAction s={s} />
+                <Link href={`${SERVICE_PATH}/${s.id}`} className={appButton({ variant: "ghost", size: "sm" })}>
+                  Yönet
+                </Link>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-
-      {/* Servers List */}
-      <BlurFade delay={0.25} inView>
-        <div className="grid gap-4">
-          {filteredServers.map((server) => {
-            const status = statusConfig[server.status] || statusConfig.ACTIVE;
-            const StatusIcon = status.icon;
-            const isActive = server.status === "ACTIVE";
-            const isCloud = server.categorySlug === "cloud";
-
-            return (
-              <Card key={server.id} className="hover:shadow-sm transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-                    {/* Server Info */}
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className={cn("p-3 rounded-lg", status.bgColor)}>
-                        {isCloud ? (
-                          <Cloud className={cn("h-6 w-6", status.color)} />
-                        ) : (
-                          <Server className={cn("h-6 w-6", status.color)} />
-                        )}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold">{server.label || server.productName}</p>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-muted">
-                            {server.categorySlug.toUpperCase()}
-                          </span>
-                          <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", status.bgColor, status.color)}>
-                            <StatusIcon className="h-3 w-3" />
-                            {status.label}
-                          </div>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {server.ipAddress || "-"}{server.domain ? ` - ${server.domain}` : ""}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Resources */}
-                    {isActive && (server.cpuUsage > 0 || server.ramUsage > 0 || server.diskLimit > 0) && (
-                      <div className="grid grid-cols-3 gap-6 flex-1">
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="flex items-center gap-1 text-muted-foreground">
-                              <Cpu className="h-3 w-3" /> CPU
-                            </span>
-                            <span>{Math.round(Number(server.cpuUsage))}%</span>
-                          </div>
-                          <ProgressBar
-                            value={Number(server.cpuUsage)}
-                            max={100}
-                            color={Number(server.cpuUsage) > 80 ? "bg-red-500" : Number(server.cpuUsage) > 60 ? "bg-orange-500" : "bg-green-500"}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="flex items-center gap-1 text-muted-foreground">
-                              <Activity className="h-3 w-3" /> RAM
-                            </span>
-                            <span>{Math.round(Number(server.ramUsage))}%</span>
-                          </div>
-                          <ProgressBar
-                            value={Number(server.ramUsage)}
-                            max={100}
-                            color={Number(server.ramUsage) > 80 ? "bg-red-500" : Number(server.ramUsage) > 60 ? "bg-orange-500" : "bg-green-500"}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="flex items-center gap-1 text-muted-foreground">
-                              <HardDrive className="h-3 w-3" /> Disk
-                            </span>
-                            <span>{Math.round(Number(server.diskUsed))} GB</span>
-                          </div>
-                          <ProgressBar
-                            value={Number(server.diskUsed)}
-                            max={Number(server.diskLimit) || 1}
-                            color={server.diskLimit > 0 && (Number(server.diskUsed) / Number(server.diskLimit)) * 100 > 80 ? "bg-red-500" : "bg-green-500"}
-                          />
-                          {server.diskLimit > 0 && (
-                            <p className="text-xs text-muted-foreground">{Math.round(Number(server.diskLimit))} GB</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2">
-                      {isActive ? (
-                        <Button variant="outline" size="sm" disabled={actionInProgress === server.id}>
-                          <Terminal className="mr-2 h-4 w-4" />
-                          Konsol
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={actionInProgress === server.id || server.status === "CANCELLED"}
-                          onClick={() => handleStart(server.id)}
-                        >
-                          <Play className="mr-2 h-4 w-4" />
-                          Başlat
-                        </Button>
-                      )}
-
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" disabled={actionInProgress === server.id}>
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            disabled={!isActive}
-                            onClick={() => handleRestart(server.id)}
-                          >
-                            <RotateCcw className="mr-2 h-4 w-4" />
-                            Yeniden Başlat
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => isActive ? handleStop(server.id) : handleStart(server.id)}
-                            disabled={server.status === "CANCELLED"}
-                          >
-                            <Power className="mr-2 h-4 w-4" />
-                            {isActive ? "Durdur" : "Başlat"}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem>
-                            <Camera className="mr-2 h-4 w-4" />
-                            Snapshot Al
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <HardDrive className="mr-2 h-4 w-4" />
-                            OS Yeniden Kur
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-
-          {filteredServers.length === 0 && (
-            <Card>
-              <CardContent className="p-8 text-center text-muted-foreground">
-                Aramanızla eşleşen sunucu bulunamadı.
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </BlurFade>
-    </div>
+          );
+        }}
+        emptyState={
+          <EmptyState
+            icon={Server}
+            title="Henüz sunucunuz yok"
+            description="VDS veya VPS paketlerinden birini seçerek dakikalar içinde sunucunuzu açabilirsiniz."
+            action={
+              <Link href="/sunucu/vds" className={appButton()}>
+                Sunucu paketlerini incele
+              </Link>
+            }
+          />
+        }
+        noResultsText="Aramanızla eşleşen sunucu bulunamadı."
+      />
+    </>
   );
 }
+

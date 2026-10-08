@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getCertificatesByCustomer } from "@/lib/dal/ssl";
 import { SSLContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "SSL sertifikaları" };
 
 export default async function SSLPage() {
   const session = await auth();

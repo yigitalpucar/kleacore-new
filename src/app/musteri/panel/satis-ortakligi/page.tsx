@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getAffiliateBalance } from "@/lib/affiliate/payouts";
 import { getReferrals, getPayments, getAffiliateStats } from "@/lib/dal/affiliate";
@@ -6,6 +7,8 @@ import { getAppBaseUrl } from "@/lib/stripe";
 import { SatisOrtakligiContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Satış ortaklığı" };
 
 export default async function SatisOrtakligiPage() {
   const session = await auth();
