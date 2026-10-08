@@ -3,29 +3,32 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { buttonClasses } from "@/components/site/button-classes";
+import { CornerTicks } from "@/components/site/grid-lines";
+import { Section } from "@/components/site/section";
+import { CheckoutHeader } from "@/components/site/hosting/checkout-header";
+import { formatTRY } from "@/lib/format/price";
+import { cn } from "@/lib/utils";
 import { useCartStore } from "@/store/cart-store";
 import { checkoutCart } from "@/lib/actions/customer/checkout";
-import { ShoppingCart, Trash2, ArrowRight, Globe, Package, WalletCards } from "lucide-react";
+import {
+  ArrowRight,
+  CreditCard,
+  Globe,
+  Landmark,
+  Loader2,
+  Lock,
+  Package,
+  Server,
+  ShoppingCart,
+  Trash2,
+  WalletCards,
+} from "lucide-react";
 import { toast } from "@/lib/toast";
 import { redirectToCheckoutUrl } from "@/lib/utils/safe-redirect";
 
 function formatPrice(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(value);
+  return formatTRY(value, { keepDecimals: true });
 }
 
 export function SepetContent() {
@@ -90,187 +93,270 @@ export function SepetContent() {
     });
   };
 
+  const paymentOptions: {
+    value: "CREDIT_CARD" | "BANK_TRANSFER";
+    label: string;
+    description: string;
+    icon: typeof CreditCard;
+  }[] = [
+    {
+      value: "CREDIT_CARD",
+      label: "Kredi kartı",
+      description: "Güvenli ödeme sayfasına yönlendirilirsiniz.",
+      icon: CreditCard,
+    },
+    {
+      value: "BANK_TRANSFER",
+      label: "Banka havalesi",
+      description: "Sipariş oluşturulur, havale onayından sonra işleme alınır.",
+      icon: Landmark,
+    },
+  ];
+
   return (
-    <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
-      <div className="container">
-        <BlurFade delay={0.1} inView>
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center gap-2 rounded-full border bg-background px-4 py-1.5 text-sm font-medium mb-4">
-              <ShoppingCart className="h-4 w-4 text-primary" />
-              Sepet
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Alışveriş Sepeti
-            </h1>
-            <p className="mt-4 text-muted-foreground">
-              {hasHydrated
-                ? `${totalItems} ürün sepetinizde`
-                : "Sepet yükleniyor..."}
-            </p>
+    <>
+      <CheckoutHeader
+        breadcrumbs={[{ label: "Sepet" }]}
+        eyebrow="Sipariş"
+        title="Sepetiniz"
+        description={
+          hasHydrated
+            ? items.length > 0
+              ? `Sepetinizde ${totalItems} ürün var. Ödeme yöntemini seçip siparişinizi tamamlayın.`
+              : "Sepetinizde henüz ürün yok."
+            : "Sepet yükleniyor…"
+        }
+      />
+
+      <Section spacing="sm">
+        {!hasHydrated ? (
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]" aria-hidden>
+            <div className="h-48 animate-pulse rounded-2xl border bg-muted/40" />
+            <div className="h-72 animate-pulse rounded-2xl border bg-muted/40" />
           </div>
-        </BlurFade>
-
-        {!hasHydrated ? null : items.length === 0 ? (
-          <BlurFade delay={0.2} inView>
-            <Card className="max-w-2xl mx-auto">
-              <CardContent className="p-8 text-center">
-                <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h2 className="text-xl font-semibold mb-2">Sepetiniz boş</h2>
-                <p className="text-muted-foreground mb-6">
-                  Domain araması yaparak ürün ekleyebilirsiniz.
-                </p>
-                <Button asChild>
-                  <Link href="/domain/kayit">
-                    Domain Ara
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </BlurFade>
+        ) : items.length === 0 ? (
+          <div className="relative mx-auto max-w-2xl overflow-hidden rounded-2xl border bg-background px-6 py-14 text-center">
+            <CornerTicks />
+            <span className="mx-auto flex size-12 items-center justify-center rounded-xl border bg-muted/40">
+              <ShoppingCart aria-hidden className="size-5 text-foreground/80" />
+            </span>
+            <h2 className="mt-5 text-xl font-semibold tracking-tight">Sepetiniz boş</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+              Bir alan adı sorgulayarak veya hosting paketi seçerek başlayabilirsiniz.
+            </p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+              <Link href="/domain/kayit" className={buttonClasses()}>
+                Alan adı sorgula
+                <ArrowRight aria-hidden className="size-4" />
+              </Link>
+              <Link href="/hosting/linux" className={buttonClasses({ variant: "outline" })}>
+                Hosting paketleri
+              </Link>
+            </div>
+          </div>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-3">
-            <BlurFade delay={0.2} inView className="lg:col-span-2">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>Sepet Ürünleri</CardTitle>
-                  <Button variant="outline" size="sm" onClick={handleClear}>
-                    Sepeti Temizle
-                  </Button>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-lg border p-4 flex items-start justify-between gap-4"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold">{item.title}</p>
-                        {item.metadata?.billingPeriod && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {item.metadata.billingPeriod === "yearly" ? "Yıllık" : "Aylık"} faturalandırma
-                          </p>
-                        )}
-                        {item.type === "domain" && item.metadata?.renewPrice ? (
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Yenileme: {formatPrice(item.metadata.renewPrice)}/yıl
-                          </p>
-                        ) : null}
-                        {item.type === "hosting" && item.metadata?.domainChoice && (
-                          <div className="mt-2 space-y-1">
-                            {item.metadata.domainChoice.type === "new" && item.metadata.domainChoice.domain && (
-                              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                                <Globe className="h-3.5 w-3.5" />
-                                Yeni domain: {item.metadata.domainChoice.domain}
-                              </p>
-                            )}
-                            {item.metadata.domainChoice.type === "existing" && item.metadata.domainChoice.domain && (
-                              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                                <Globe className="h-3.5 w-3.5" />
-                                Mevcut domain: {item.metadata.domainChoice.domain}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {item.type === "hosting" && item.metadata?.addons && item.metadata.addons.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {item.metadata.addons.map((addon) => (
-                              <span
-                                key={addon.sku}
-                                className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full"
-                              >
-                                <Package className="h-3 w-3" />
-                                {addon.name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold">
-                          {formatPrice(item.unitPrice * item.quantity)}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
+            <section aria-labelledby="sepet-urunleri" className="min-w-0">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 id="sepet-urunleri" className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  Sepetteki ürünler
+                </h2>
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className={buttonClasses({ variant: "ghost", size: "sm", className: "min-h-11 text-muted-foreground" })}
+                >
+                  Sepeti temizle
+                </button>
+              </div>
+              <ul className="space-y-3">
+                {items.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-start gap-4 rounded-2xl border bg-background p-4 sm:p-5"
+                  >
+                    <span className="hidden size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40 sm:flex">
+                      {item.type === "domain" ? (
+                        <Globe aria-hidden className="size-4 text-foreground/80" />
+                      ) : (
+                        <Server aria-hidden className="size-4 text-foreground/80" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="break-words font-medium">{item.title}</h3>
+                      {item.metadata?.billingPeriod && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {item.metadata.billingPeriod === "yearly" ? "Yıllık" : "Aylık"} faturalandırma
                         </p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="mt-2 text-red-500 hover:text-red-500"
-                          onClick={() => handleRemove(item.id, item.title)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      )}
+                      {item.type === "domain" && item.metadata?.renewPrice ? (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Yenileme: {formatPrice(item.metadata.renewPrice)}/yıl
+                        </p>
+                      ) : null}
+                      {item.type === "hosting" && item.metadata?.domainChoice && (
+                        <div className="mt-2 space-y-1">
+                          {item.metadata.domainChoice.type === "new" && item.metadata.domainChoice.domain && (
+                            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                              <Globe aria-hidden className="size-3.5" />
+                              Yeni alan adı: {item.metadata.domainChoice.domain}
+                            </p>
+                          )}
+                          {item.metadata.domainChoice.type === "existing" && item.metadata.domainChoice.domain && (
+                            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                              <Globe aria-hidden className="size-3.5" />
+                              Mevcut alan adı: {item.metadata.domainChoice.domain}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {item.type === "hosting" && item.metadata?.addons && item.metadata.addons.length > 0 && (
+                        <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Ek hizmetler">
+                          {item.metadata.addons.map((addon) => (
+                            <li
+                              key={addon.sku}
+                              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
+                            >
+                              <Package aria-hidden className="size-3" />
+                              {addon.name}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </BlurFade>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <p className="font-semibold tabular-nums">
+                        {formatPrice(item.unitPrice * item.quantity)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleRemove(item.id, item.title)}
+                        aria-label={`${item.title} ürününü sepetten kaldır`}
+                        className="-mr-2 inline-flex size-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Trash2 aria-hidden className="size-4" />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
 
-            <BlurFade delay={0.25} inView>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Özet</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Ürün Sayısı</span>
-                    <span>{totalItems}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Ara Toplam</span>
-                    <span>{formatPrice(subtotal)}</span>
-                  </div>
-                  <div className="border-t pt-4 flex items-center justify-between font-semibold">
-                    <span>Toplam</span>
-                    <span>{formatPrice(subtotal)}</span>
-                  </div>
-                  <div className="space-y-2">
+            <aside aria-labelledby="sepet-ozet" className="lg:sticky lg:top-24 lg:self-start">
+              <div className="rounded-2xl bg-muted/60 p-1.5 ring-1 ring-border dark:bg-muted/30">
+                <div className="rounded-xl bg-background p-5 shadow-[0_6px_10px_-6px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.05)]">
+                  <h2 id="sepet-ozet" className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                    Sipariş özeti
+                  </h2>
+                  <dl className="mt-4 space-y-2 text-sm">
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">Ürün sayısı</dt>
+                      <dd className="tabular-nums">{totalItems}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">Ara toplam</dt>
+                      <dd className="tabular-nums">{formatPrice(subtotal)}</dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4 border-t border-dashed pt-3">
+                      <dt className="font-medium">Toplam</dt>
+                      <dd className="text-2xl font-semibold tabular-nums tracking-tight">
+                        {formatPrice(subtotal)}
+                      </dd>
+                    </div>
+                  </dl>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    KDV hariç. %20 KDV ve kupon indirimi ödeme adımında hesaplanır.
+                  </p>
+                </div>
+
+                <div className="space-y-5 p-5">
+                  <div>
                     <label className="text-sm font-medium" htmlFor="promo-code">
-                      Promosyon Kodu
+                      Promosyon kodu
                     </label>
-                    <Input
+                    <input
                       id="promo-code"
                       value={promoCode}
                       onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
                       placeholder="Kupon kodu"
+                      autoComplete="off"
+                      className="mt-2 h-11 w-full rounded-lg border bg-background px-3 text-sm uppercase shadow-sm placeholder:normal-case placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Kupon ödeme sırasında doğrulanır.
-                    </p>
+                    <p className="mt-1.5 text-xs text-muted-foreground">Kupon ödeme sırasında doğrulanır.</p>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Ödeme Yöntemi</label>
-                    <Select
-                      value={paymentMethod}
-                      onValueChange={(value) =>
-                        setPaymentMethod(value as "BANK_TRANSFER" | "CREDIT_CARD")
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="CREDIT_CARD">Kredi Kartı</SelectItem>
-                        <SelectItem value="BANK_TRANSFER">Banka Havalesi</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button className="w-full" onClick={handleCheckout} disabled={isPending}>
+
+                  <fieldset>
+                    <legend className="text-sm font-medium">Ödeme yöntemi</legend>
+                    <div className="mt-2 space-y-2">
+                      {paymentOptions.map((option) => {
+                        const selected = paymentMethod === option.value;
+                        return (
+                          <label
+                            key={option.value}
+                            className={cn(
+                              "flex cursor-pointer items-start gap-3 rounded-xl border bg-background p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                              selected ? "border-foreground ring-1 ring-foreground" : "hover:bg-muted/40"
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name="payment-method"
+                              value={option.value}
+                              checked={selected}
+                              onChange={() => setPaymentMethod(option.value)}
+                              className="sr-only"
+                            />
+                            <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40">
+                              <option.icon aria-hidden className="size-4 text-foreground/80" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium">{option.label}</span>
+                              <span className="block text-xs text-muted-foreground">{option.description}</span>
+                            </span>
+                            <span
+                              aria-hidden
+                              className={cn(
+                                "mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border",
+                                selected && "border-foreground"
+                              )}
+                            >
+                              {selected ? <span className="size-2 rounded-full bg-foreground" /> : null}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+
+                  <button
+                    type="button"
+                    onClick={handleCheckout}
+                    disabled={isPending}
+                    className={buttonClasses({ size: "lg", className: "w-full disabled:opacity-60" })}
+                  >
                     {isPending ? (
-                      "Sipariş oluşturuluyor..."
+                      <>
+                        <Loader2 aria-hidden className="size-4 animate-spin" />
+                        Sipariş oluşturuluyor…
+                      </>
                     ) : (
                       <>
-                        <WalletCards className="mr-2 h-4 w-4" />
-                        Ödemeye Geç
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                        <WalletCards aria-hidden className="size-4" />
+                        Ödemeye geç
+                        <ArrowRight aria-hidden className="size-4" />
                       </>
                     )}
-                  </Button>
-                </CardContent>
-              </Card>
-            </BlurFade>
+                  </button>
+                  <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                    <Lock aria-hidden className="size-3" />
+                    Ödeme için müşteri hesabınızla giriş yapmanız gerekir.
+                  </p>
+                </div>
+              </div>
+            </aside>
           </div>
         )}
-      </div>
-    </section>
+      </Section>
+    </>
   );
 }

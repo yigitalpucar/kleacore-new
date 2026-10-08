@@ -1,19 +1,25 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { FileText, ShoppingCart, XCircle } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Topbar } from "@/components/layout/topbar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { buttonClasses } from "@/components/site/button-classes";
+import { Section } from "@/components/site/section";
+import { StatusDot } from "@/components/site/status-pill";
+import { CheckoutHeader } from "@/components/site/hosting/checkout-header";
+import { formatTRY } from "@/lib/format/price";
 import { db } from "@/lib/db";
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-  }).format(price);
+const formatPrice = (price: number | string | { toString(): string }) =>
+  formatTRY(Number(price), { keepDecimals: true });
+
+export const metadata: Metadata = {
+  title: "Ödeme Tamamlanmadı",
+  description: "Ödemeniz tamamlanmadı; sepetinize dönerek yeniden deneyebilirsiniz.",
+  alternates: { canonical: "/sepet/iptal" },
+  robots: { index: false, follow: false },
+};
 
 interface CheckoutCancelPageProps {
   searchParams: Promise<{ invoice_ids?: string }>;
@@ -65,67 +71,65 @@ export default async function CheckoutCancelPage({ searchParams }: CheckoutCance
     <div className="flex min-h-screen flex-col">
       <Topbar />
       <Header />
-      <main className="flex-1 bg-background py-16">
-        <div className="container max-w-2xl">
-          <Card>
-            <CardHeader className="text-center">
-              <XCircle className="mx-auto mb-2 h-14 w-14 text-destructive" />
-              <CardTitle className="text-2xl">Ödeme tamamlanmadı</CardTitle>
-              <CardDescription>
-                Stripe ödeme oturumu iptal edildi. Sepetinize dönerek tekrar deneyebilir veya
-                farklı bir ödeme yöntemi seçebilirsiniz.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {summary ? (
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <div className="mb-4 flex items-center gap-2 text-sm font-medium">
-                    <FileText className="h-4 w-4 text-destructive" />
-                    Bekleyen Kayıtlar
-                  </div>
-                  <div className="space-y-3 text-sm">
-                    {summary.invoices.map((invoice) => (
-                      <div key={invoice.id} className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="font-medium">{invoice.invoiceNumber}</p>
-                          {invoice.order && (
-                            <p className="text-muted-foreground">
-                              Sipariş: {invoice.order.orderNumber}
-                            </p>
-                          )}
-                          <p className="text-muted-foreground">Durum: Ödeme bekleniyor</p>
-                        </div>
-                        <p className="font-medium">{formatPrice(invoice.totalAmount)}</p>
+      <main id="main" className="flex-1">
+        <CheckoutHeader
+          align="center"
+          icon={<XCircle aria-hidden className="size-6 text-muted-foreground" />}
+          eyebrow="Ödeme"
+          title="Ödeme tamamlanmadı"
+          description="Ödeme oturumu iptal edildi. Sepetinize dönerek tekrar deneyebilir veya farklı bir ödeme yöntemi seçebilirsiniz."
+        />
+        <Section spacing="sm" container="narrow">
+          <div className="mx-auto max-w-2xl space-y-8">
+            {summary ? (
+              <section aria-labelledby="bekleyen-kayitlar" className="overflow-hidden rounded-2xl border bg-background">
+                <div className="flex items-center gap-2 border-b px-5 py-4">
+                  <FileText aria-hidden className="size-4 text-muted-foreground" />
+                  <h2 id="bekleyen-kayitlar" className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                    Bekleyen kayıtlar
+                  </h2>
+                </div>
+                <ul className="divide-y divide-dashed px-5 text-sm">
+                  {summary.invoices.map((invoice) => (
+                    <li key={invoice.id} className="flex items-start justify-between gap-4 py-3">
+                      <div className="min-w-0">
+                        <p className="font-medium">{invoice.invoiceNumber}</p>
+                        {invoice.order && (
+                          <p className="text-muted-foreground">Sipariş: {invoice.order.orderNumber}</p>
+                        )}
+                        <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <StatusDot tone="neutral" />
+                          Ödeme bekleniyor
+                        </p>
                       </div>
-                    ))}
-                    <Separator />
-                    <div className="flex items-center justify-between font-semibold">
-                      <span>Toplam</span>
-                      <span>{formatPrice(summary.totalAmount)}</span>
-                    </div>
-                  </div>
+                      <p className="shrink-0 font-medium tabular-nums">{formatPrice(invoice.totalAmount)}</p>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex items-baseline justify-between gap-4 border-t bg-muted/30 px-5 py-4">
+                  <span className="font-medium">Toplam</span>
+                  <span className="text-xl font-semibold tabular-nums tracking-tight">
+                    {formatPrice(summary.totalAmount)}
+                  </span>
                 </div>
-              ) : (
-                <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-                  İptal edilen ödeme için kayıt bulunamadı. Sepetinizden yeniden ödeme
-                  başlatabilirsiniz.
-                </div>
-              )}
+              </section>
+            ) : (
+              <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                İptal edilen ödeme için kayıt bulunamadı. Sepetinizden yeniden ödeme başlatabilirsiniz.
+              </p>
+            )}
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button asChild>
-                  <Link href="/sepet">
-                    <ShoppingCart className="mr-2 h-4 w-4" />
-                    Sepete Dön
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link href="/musteri/panel/faturalar">Faturalarım</Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <Link href="/sepet" className={buttonClasses()}>
+                <ShoppingCart aria-hidden className="size-4" />
+                Sepete dön
+              </Link>
+              <Link href="/musteri/panel/faturalar" className={buttonClasses({ variant: "outline" })}>
+                Faturalarım
+              </Link>
+            </div>
+          </div>
+        </Section>
       </main>
       <Footer />
     </div>

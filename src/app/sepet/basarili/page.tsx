@@ -1,19 +1,24 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2, FileText, Package, Receipt } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Topbar } from "@/components/layout/topbar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { buttonClasses } from "@/components/site/button-classes";
+import { Section } from "@/components/site/section";
+import { CheckoutHeader } from "@/components/site/hosting/checkout-header";
+import { formatTRY } from "@/lib/format/price";
 import { db } from "@/lib/db";
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-  }).format(price);
+const formatPrice = (price: number | string | { toString(): string }) =>
+  formatTRY(Number(price), { keepDecimals: true });
+
+export const metadata: Metadata = {
+  title: "Ödeme Alındı",
+  description: "Ödemenizin durumu ve fatura özeti.",
+  alternates: { canonical: "/sepet/basarili" },
+  robots: { index: false, follow: false },
+};
 
 interface CheckoutSuccessPageProps {
   searchParams: Promise<{ session_id?: string }>;
@@ -67,72 +72,66 @@ export default async function CheckoutSuccessPage({ searchParams }: CheckoutSucc
     <div className="flex min-h-screen flex-col">
       <Topbar />
       <Header />
-      <main className="flex-1 bg-background py-16">
-        <div className="container max-w-2xl">
-          <Card>
-            <CardHeader className="text-center">
-              <CheckCircle2 className="mx-auto mb-2 h-14 w-14 text-primary" />
-              <CardTitle className="text-2xl">Ödeme alındı</CardTitle>
-              <CardDescription>
-                Stripe ödemeniz tamamlandı. Fatura ve hizmet durumunuz birkaç saniye içinde
-                güncellenir.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {summary ? (
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <div className="mb-4 flex items-center gap-2 text-sm font-medium">
-                    <Receipt className="h-4 w-4 text-primary" />
-                    Ödeme Özeti
-                  </div>
-                  <div className="space-y-3 text-sm">
-                    {summary.invoices.map((invoice) => (
-                      <div key={invoice.id} className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="font-medium">{invoice.invoiceNumber}</p>
-                          {invoice.order && (
-                            <p className="text-muted-foreground">
-                              Sipariş: {invoice.order.orderNumber}
-                            </p>
-                          )}
-                        </div>
-                        <p className="font-medium">{formatPrice(invoice.totalAmount)}</p>
+      <main id="main" className="flex-1">
+        <CheckoutHeader
+          align="center"
+          icon={<CheckCircle2 aria-hidden className="size-6 text-foreground" />}
+          eyebrow="Ödeme"
+          title="Ödemeniz alındı"
+          description="Teşekkürler. Fatura ve hizmet durumunuz birkaç saniye içinde güncellenir; hizmetlerinizi müşteri panelinden takip edebilirsiniz."
+        />
+        <Section spacing="sm" container="narrow">
+          <div className="mx-auto max-w-2xl space-y-8">
+            {summary ? (
+              <section aria-labelledby="odeme-ozeti" className="overflow-hidden rounded-2xl border bg-background">
+                <div className="flex items-center gap-2 border-b px-5 py-4">
+                  <Receipt aria-hidden className="size-4 text-muted-foreground" />
+                  <h2 id="odeme-ozeti" className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                    Ödeme özeti
+                  </h2>
+                </div>
+                <ul className="divide-y divide-dashed px-5 text-sm">
+                  {summary.invoices.map((invoice) => (
+                    <li key={invoice.id} className="flex items-start justify-between gap-4 py-3">
+                      <div className="min-w-0">
+                        <p className="font-medium">{invoice.invoiceNumber}</p>
+                        {invoice.order && (
+                          <p className="text-muted-foreground">Sipariş: {invoice.order.orderNumber}</p>
+                        )}
                       </div>
-                    ))}
-                    <Separator />
-                    <div className="flex items-center justify-between font-semibold">
-                      <span>Toplam</span>
-                      <span>{formatPrice(summary.totalAmount)}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Oturum referansı: {summary.sessionId}
-                    </p>
-                  </div>
+                      <p className="shrink-0 font-medium tabular-nums">{formatPrice(invoice.totalAmount)}</p>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex items-baseline justify-between gap-4 border-t bg-muted/30 px-5 py-4">
+                  <span className="font-medium">Toplam</span>
+                  <span className="text-xl font-semibold tabular-nums tracking-tight">
+                    {formatPrice(summary.totalAmount)}
+                  </span>
                 </div>
-              ) : (
-                <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-                  Ödeme detayları henüz yüklenemedi. Birkaç saniye sonra müşteri panelinden
-                  faturalarınızı kontrol edebilirsiniz.
-                </div>
-              )}
+                <p className="break-all border-t px-5 py-3 font-mono text-[11px] text-muted-foreground">
+                  Oturum referansı: {summary.sessionId}
+                </p>
+              </section>
+            ) : (
+              <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                Ödeme detayları henüz yüklenemedi. Birkaç saniye sonra müşteri panelinden faturalarınızı
+                kontrol edebilirsiniz.
+              </p>
+            )}
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button asChild>
-                  <Link href="/musteri/panel/faturalar">
-                    <FileText className="mr-2 h-4 w-4" />
-                    Faturalarım
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link href="/musteri/panel/hizmetlerim">
-                    <Package className="mr-2 h-4 w-4" />
-                    Hizmetlerim
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <Link href="/musteri/panel/faturalar" className={buttonClasses()}>
+                <FileText aria-hidden className="size-4" />
+                Faturalarım
+              </Link>
+              <Link href="/musteri/panel/hizmetlerim" className={buttonClasses({ variant: "outline" })}>
+                <Package aria-hidden className="size-4" />
+                Hizmetlerim
+              </Link>
+            </div>
+          </div>
+        </Section>
       </main>
       <Footer />
     </div>

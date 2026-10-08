@@ -1,154 +1,183 @@
-"use client";
-
-import { useState } from "react";
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { PricingCard, type HostingPlan } from "@/components/hosting/pricing-card";
-import { BillingToggle } from "@/components/hosting/billing-toggle";
-import { HostingFeatures } from "@/components/hosting/hosting-features";
-import { PageHero } from "@/components/sections/page-hero";
-import { TrustStrip } from "@/components/sections/trust-strip";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Store } from "lucide-react";
+import { Clock, Lock, MapPin, Monitor, Tag, Users } from "lucide-react";
+import { FeatureGrid, type FeatureItem } from "@/components/site/feature-grid";
+import type { FaqItem } from "@/components/site/faq-section";
+import type { PlanCardData } from "@/components/site/plan-card";
+import { Section } from "@/components/site/section";
+import { SectionHeading } from "@/components/site/section-heading";
+import type { TrustBarItem } from "@/components/site/trust-bar";
+import type { HostingComparisonData, HostingSubType } from "@/components/site/hosting/data";
+import { HostingLanding } from "@/components/site/hosting/hosting-landing";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { getIcon } from "@/lib/utils/icon-map";
-import type { Product, PricingTier, ProductCategory } from "@prisma/client";
+  ResellerCalculator,
+  type ResellerCalcPlan,
+} from "@/components/site/hosting/reseller-calculator";
+import { ResellerTree } from "@/components/site/hosting/visuals";
 
-type ProductWithPricing = Product & {
-  category: ProductCategory;
-  pricingTiers: PricingTier[];
-};
+const trustItems: TrustBarItem[] = [
+  { icon: Monitor, label: "WHM panel", description: "Bayi yönetim paneli" },
+  { icon: Users, label: "cPanel hesapları", description: "Müşterileriniz için" },
+  { icon: Tag, label: "White label", description: "Kendi markanızla" },
+  { icon: Lock, label: "Ücretsiz SSL", description: "Let's Encrypt" },
+  { icon: Clock, label: "Günlük yedek", description: "Tüm reseller paketlerinde" },
+  { icon: MapPin, label: "İstanbul", description: "Sunucu lokasyonu" },
+];
 
-interface ContentProps {
-  products: ProductWithPricing[];
-}
+const resellerFeatures: FeatureItem[] = [
+  {
+    icon: "Monitor",
+    title: "WHM ile hesap yönetimi",
+    description:
+      "WHM üzerinden müşterileriniz için cPanel hesapları açın, askıya alın veya kapatın; DNS kayıtlarını yönetin.",
+  },
+  {
+    icon: "Users",
+    title: "Kendi paketlerinizi tanımlayın",
+    description:
+      "Toplam disk ve trafik kotanızı dilediğiniz gibi bölün; farklı kaynaklarla kendi hosting paketlerinizi oluşturun.",
+  },
+  {
+    icon: "Tag",
+    title: "White label",
+    description:
+      "Hizmeti kendi markanızla sunun. Müşterileriniz sizinle muhatap olur; fiyatlarınızı ve kampanyalarınızı siz belirlersiniz.",
+  },
+  {
+    icon: "Download",
+    title: "Günlük yedek",
+    description:
+      "Tüm reseller paketlerinde yedekler günlük alınır; müşteri hesaplarınız da bu kapsamdadır.",
+  },
+];
 
-interface FaqItem {
-  question: string;
-  answer: string;
-}
+const faqs: FaqItem[] = [
+  {
+    question: "Reseller hosting nedir?",
+    answer:
+      "Reseller hosting, satın aldığınız hosting kaynaklarını kendi müşterilerinize satmanızı sağlayan bir hizmettir. WHM kontrol paneliyle cPanel hesapları oluşturur, kendi hosting hizmetinizi sunarsınız.",
+  },
+  {
+    question: "WHM paneli nedir?",
+    answer:
+      "WHM (Web Host Manager), reseller hesabınızı yönettiğiniz paneldir. cPanel hesapları oluşturabilir, paketler tanımlayabilir ve DNS yönetimi yapabilirsiniz.",
+  },
+  {
+    question: "White label ne anlama geliyor?",
+    answer:
+      "White label, hosting hizmetini kendi markanız altında satmanızı sağlar. Müşterilerinizle iletişim sizin markanız üzerinden yürür.",
+  },
+  {
+    question: "Müşterilerime ne kadar kaynak verebilirim?",
+    answer:
+      "Paketinizin cPanel hesap limiti, disk alanı ve trafik kotası dahilinde kaynakları dilediğiniz gibi dağıtabilirsiniz. WHM'de farklı paketler oluşturup müşterilerinize atarsınız.",
+  },
+  {
+    question: "Kendi fiyatlarımı belirleyebilir miyim?",
+    answer:
+      "Evet. Müşterilerinize sunacağınız fiyatları tamamen siz belirlersiniz. Sayfadaki hesaplayıcıyla kendi fiyatınıza göre örnek bir aylık hesap yapabilirsiniz.",
+  },
+  {
+    question: "Teknik destek müşterilerime de veriliyor mu?",
+    answer:
+      "Teknik destek doğrudan size verilir. Müşterilerinize destek vermek sizin sorumluluğunuzdadır; sunucu seviyesindeki sorunlarda size yardımcı oluruz.",
+  },
+  {
+    question: "Fiyatlara KDV dahil mi?",
+    answer:
+      "Hayır. Gösterilen fiyatlara KDV dahil değildir; %20 KDV ödeme adımında ayrıca eklenir ve sipariş özetinde gösterilir.",
+  },
+];
 
-interface FeatureItem {
-  label: string;
-  value: string;
-  icon: string;
-  highlight?: boolean;
-}
-
-const mapProductToHostingPlan = (product: ProductWithPricing): HostingPlan => {
-  const monthlyTier = product.pricingTiers.find((t) => t.period === "monthly");
-  const yearlyTier = product.pricingTiers.find((t) => t.period === "yearly");
-  const resources = product.resourceLimits as Record<string, string>;
-  const features = product.features as unknown as FeatureItem[];
-
-  return {
-    sku: product.sku,
-    slug: product.slug,
-    name: product.name,
-    description: product.shortDescription,
-    price: monthlyTier?.price ?? product.basePrice,
-    yearlyPrice: yearlyTier?.discountedPrice ?? yearlyTier?.price,
-    period: "ay",
-    features: (product.includedFeatures as string[]) ?? [],
-    storage: resources?.storage ?? "",
-    bandwidth: resources?.bandwidth ?? "",
-    websites: resources?.websites ?? "",
-    emails: resources?.emails ?? "",
-    popular: product.isPopular,
-    badge: product.badge ?? undefined,
-    detailedFeatures: features?.map((f) => ({
-      icon: getIcon(f.icon),
-      label: f.label,
-      value: f.value,
-      highlight: f.highlight,
-    })),
-  };
-};
-
-export const Content = ({ products }: ContentProps) => {
-  const [isYearly, setIsYearly] = useState(false);
-
-  const plans = products.map(mapProductToHostingPlan);
-
-  const faqProduct = products.find(
-    (p) => Array.isArray(p.faq) && (p.faq as unknown as FaqItem[]).length > 0
-  );
-  const faqs = (faqProduct?.faq as unknown as FaqItem[]) ?? [];
-
+export function Content({
+  plans,
+  comparison,
+  calcPlans,
+  startingPrices,
+}: {
+  plans: PlanCardData[];
+  comparison: HostingComparisonData;
+  calcPlans: ResellerCalcPlan[];
+  startingPrices: Partial<Record<HostingSubType, number>>;
+}) {
   return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-      <main className="flex-1">
-        <PageHero
-          badge="WHM + White-Label"
-          badgeIcon={Store}
-          title="Reseller Hosting"
-          description="WHM kontrol paneli ile kendi hosting şirketinizi kurun. White-label çözümler ve tam destek."
-          accent="amber"
-        >
-          <BillingToggle isYearly={isYearly} onToggle={setIsYearly} />
-        </PageHero>
-
-        <TrustStrip />
-
-        <section className="py-12 md:py-16">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
-                {plans.map((plan) => (
-                  <PricingCard key={plan.name} plan={plan} isYearly={isYearly} />
-                ))}
-              </div>
-            </BlurFade>
+    <HostingLanding
+      subType="reseller"
+      hero={{
+        eyebrow: "WHM · White label",
+        title: "Reseller Hosting",
+        description:
+          "Kendi hosting markanızı kurun. WHM ile müşterilerinize cPanel hesapları açın, paketlerinizi tanımlayın ve fiyatınızı siz belirleyin.",
+        breadcrumb: "Reseller Hosting",
+      }}
+      trustItems={trustItems}
+      plans={plans}
+      comparison={comparison}
+      plansHeading={{
+        eyebrow: "Reseller hosting",
+        title: "Bayi paketleri",
+        description:
+          "Tüm paketlerde WHM, white label, ücretsiz SSL ve günlük yedek var. Paketler cPanel hesap sayısı, disk, trafik ve kaynaklarla ayrılır.",
+      }}
+      steps={{
+        eyebrow: "Nasıl çalışır",
+        title: "Bayiliğe dört adımda başlayın",
+        items: [
+          {
+            title: "Bayi paketinizi seçin",
+            description: "Kaç müşteriye hizmet vereceğinize göre cPanel hesap limitine uygun paketi seçin.",
+          },
+          {
+            title: "WHM'e giriş yapın",
+            description: "Hizmetiniz açıldığında WHM paneliniz üzerinden hesabınızı yönetmeye başlayın.",
+          },
+          {
+            title: "Paketlerinizi tanımlayın",
+            description: "Disk ve trafik kotalarını bölerek müşterilerinize sunacağınız paketleri oluşturun.",
+          },
+          {
+            title: "Müşteri hesaplarını açın",
+            description: "Her müşteriniz için cPanel hesabı oluşturun ve kendi markanızla faturalandırın.",
+          },
+        ],
+      }}
+      startingPrices={startingPrices}
+      faqs={faqs}
+      faqDescription="Reseller hosting ve WHM hakkında sık sorulan sorular."
+      cta={{
+        eyebrow: "Bayilik",
+        title: "Kendi hosting markanızı bugün kurun",
+        description: "WHM ve white label ile müşterilerinize kendi markanızla hosting sunun.",
+        primary: { label: "Paketleri incele", href: "#paketler" },
+        secondary: { label: "Bize yazın", href: "/iletisim" },
+      }}
+    >
+      <Section divider aria-labelledby="whm-heading">
+        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
+          <div>
+            <SectionHeading
+              id="whm-heading"
+              eyebrow="WHM"
+              title="Altyapı bizde, müşteri ilişkisi sizde"
+              description="Sunucu, ağ ve yedekleme tarafını biz yönetiriz. Siz WHM üzerinden müşterilerinizin hesaplarını açar ve yönetirsiniz."
+              className="mb-10"
+            />
+            <FeatureGrid items={resellerFeatures} columns={2} variant="inline" />
           </div>
-        </section>
+          <ResellerTree />
+        </div>
+      </Section>
 
-        {/* Hosting Features */}
-        <HostingFeatures />
-
-        {/* FAQ */}
-        {faqs.length > 0 && (
-          <section className="py-16 md:py-24 bg-muted/30">
-            <div className="container">
-              <BlurFade delay={0.1} inView>
-                <div className="text-center mb-12">
-                  <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                    Sık Sorulan Sorular
-                  </h2>
-                  <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                    Reseller hosting hakkında merak edilenler
-                  </p>
-                </div>
-              </BlurFade>
-
-              <BlurFade delay={0.2} inView>
-                <div className="max-w-3xl mx-auto">
-                  <Accordion type="single" collapsible className="w-full">
-                    {faqs.map((faq, index) => (
-                      <AccordionItem key={index} value={`item-${index}`}>
-                        <AccordionTrigger className="text-left">
-                          {faq.question}
-                        </AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground">
-                          {faq.answer}
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                </div>
-              </BlurFade>
-            </div>
-          </section>
-        )}
-      </main>
-      <Footer />
-    </div>
+      {calcPlans.length > 0 ? (
+        <Section divider aria-labelledby="hesap-heading">
+          <SectionHeading
+            id="hesap-heading"
+            eyebrow="Örnek hesap"
+            title="Kendi fiyatınızla hesaplayın"
+            description="Bir paket seçin, müşteri sayısını ve müşteri başına aylık fiyatınızı girin. Paket bedelleri güncel fiyatlarımızdan gelir."
+            className="mb-10"
+          />
+          <ResellerCalculator plans={calcPlans} />
+        </Section>
+      ) : null}
+    </HostingLanding>
   );
-};
+}

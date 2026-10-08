@@ -1,154 +1,186 @@
-"use client";
+import { Clock, HardDrive, Lock, Mail, MapPin, PanelsTopLeft } from "lucide-react";
+import { FeatureGrid, type FeatureItem } from "@/components/site/feature-grid";
+import type { FaqItem } from "@/components/site/faq-section";
+import type { PlanCardData } from "@/components/site/plan-card";
+import { Section } from "@/components/site/section";
+import { SectionHeading } from "@/components/site/section-heading";
+import type { TrustBarItem } from "@/components/site/trust-bar";
+import type {
+  HostingComparisonData,
+  HostingResourceRow,
+  HostingSubType,
+} from "@/components/site/hosting/data";
+import { HostingLanding } from "@/components/site/hosting/hosting-landing";
+import { ResourceBars } from "@/components/site/hosting/resource-bars";
+import { BusinessPanel } from "@/components/site/hosting/visuals";
 
-import { useState } from "react";
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { PricingCard, type HostingPlan } from "@/components/hosting/pricing-card";
-import { BillingToggle } from "@/components/hosting/billing-toggle";
-import { HostingFeatures } from "@/components/hosting/hosting-features";
-import { PageHero } from "@/components/sections/page-hero";
-import { TrustStrip } from "@/components/sections/trust-strip";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Building2 } from "lucide-react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { getIcon } from "@/lib/utils/icon-map";
-import type { Product, PricingTier, ProductCategory } from "@prisma/client";
+const trustItems: TrustBarItem[] = [
+  { icon: HardDrive, label: "NVMe SSD", description: "Tüm kurumsal paketlerde" },
+  { icon: Lock, label: "Wildcard SSL", description: "Alt alan adları dahil" },
+  { icon: Clock, label: "Günlük yedek", description: "Otomatik" },
+  { icon: Mail, label: "Kurumsal e-posta", description: "Alan adınızla" },
+  { icon: PanelsTopLeft, label: "cPanel", description: "Kontrol paneli" },
+  { icon: MapPin, label: "İstanbul", description: "Sunucu lokasyonu" },
+];
 
-type ProductWithPricing = Product & {
-  category: ProductCategory;
-  pricingTiers: PricingTier[];
-};
+const businessFeatures: FeatureItem[] = [
+  {
+    icon: "Mail",
+    title: "Kurumsal e-posta",
+    description:
+      "Ekibiniz için ad@firmaniz.com biçiminde e-posta hesapları açın. Hesap sayısı pakete göre değişir.",
+  },
+  {
+    icon: "Lock",
+    title: "Wildcard SSL",
+    description:
+      "Tek sertifika ana alan adınızı ve tüm alt alan adlarınızı (www, blog, magaza…) korur; tüm kurumsal paketlerde dahildir.",
+  },
+  {
+    icon: "Download",
+    title: "Günlük otomatik yedek",
+    description: "Siteleriniz, veritabanlarınız ve e-postalarınız her gün otomatik olarak yedeklenir.",
+  },
+  {
+    icon: "Globe",
+    title: "Birden çok site",
+    description:
+      "Kurumsal site, kampanya sayfaları ve alt markalarınızı tek hesapta barındırın; site sayısı pakete göre artar.",
+  },
+  {
+    icon: "Cpu",
+    title: "Daha yüksek kaynak",
+    description:
+      "Kurumsal paketler Linux hosting paketlerine göre daha fazla CPU ve RAM sunar; üst paketlerde kaynaklar artar.",
+  },
+  {
+    icon: "Headphones",
+    title: "7/24 destek",
+    description: "Müşteri panelinden destek talebi açın veya support@kleacore.com adresine yazın.",
+  },
+];
 
-interface ContentProps {
-  products: ProductWithPricing[];
-}
+const faqs: FaqItem[] = [
+  {
+    question: "Kurumsal hosting ile Linux hosting arasındaki fark nedir?",
+    answer:
+      "Kurumsal paketler daha fazla CPU, RAM, disk ve e-posta hesabı sunar; tüm paketlerde NVMe SSD, Wildcard SSL ve günlük yedekleme bulunur. Birden çok siteyi ve ekip e-postalarını tek hesapta toplamak isteyen işletmeler için tasarlanmıştır.",
+  },
+  {
+    question: "Wildcard SSL sertifikası nedir?",
+    answer:
+      "Wildcard SSL, ana alan adınızı ve tüm alt alan adlarınızı tek sertifikayla korur. Örneğin firmaniz.com, www.firmaniz.com ve blog.firmaniz.com aynı sertifikayla HTTPS üzerinden açılır.",
+  },
+  {
+    question: "Kurumsal e-posta hesaplarını nasıl kullanırım?",
+    answer:
+      "E-posta hesaplarınızı cPanel üzerinden oluşturursunuz. Webmail ile tarayıcıdan veya IMAP/SMTP ayarlarıyla Outlook, Apple Mail ve mobil uygulamalardan kullanabilirsiniz.",
+  },
+  {
+    question: "Sunucular nerede?",
+    answer: "Sunucularımız İstanbul lokasyonunda barındırılır.",
+  },
+  {
+    question: "Kaynaklarımı yükseltebilir miyim?",
+    answer:
+      "Evet. İşletmeniz büyüdükçe müşteri panelinden paket değişikliği talebi oluşturabilirsiniz; talebiniz ekibimiz tarafından değerlendirilir.",
+  },
+  {
+    question: "Fiyatlara KDV dahil mi?",
+    answer:
+      "Hayır. Gösterilen fiyatlara KDV dahil değildir; %20 KDV ödeme adımında ayrıca eklenir ve sipariş özetinde gösterilir.",
+  },
+];
 
-interface FaqItem {
-  question: string;
-  answer: string;
-}
-
-interface FeatureItem {
-  label: string;
-  value: string;
-  icon: string;
-  highlight?: boolean;
-}
-
-const mapProductToHostingPlan = (product: ProductWithPricing): HostingPlan => {
-  const monthlyTier = product.pricingTiers.find((t) => t.period === "monthly");
-  const yearlyTier = product.pricingTiers.find((t) => t.period === "yearly");
-  const resources = product.resourceLimits as Record<string, string>;
-  const features = product.features as unknown as FeatureItem[];
-
-  return {
-    sku: product.sku,
-    slug: product.slug,
-    name: product.name,
-    description: product.shortDescription,
-    price: monthlyTier?.price ?? product.basePrice,
-    yearlyPrice: yearlyTier?.discountedPrice ?? yearlyTier?.price,
-    period: "ay",
-    features: (product.includedFeatures as string[]) ?? [],
-    storage: resources?.storage ?? "",
-    bandwidth: resources?.bandwidth ?? "",
-    websites: resources?.websites ?? "",
-    emails: resources?.emails ?? "",
-    popular: product.isPopular,
-    badge: product.badge ?? undefined,
-    detailedFeatures: features?.map((f) => ({
-      icon: getIcon(f.icon),
-      label: f.label,
-      value: f.value,
-      highlight: f.highlight,
-    })),
-  };
-};
-
-export const Content = ({ products }: ContentProps) => {
-  const [isYearly, setIsYearly] = useState(false);
-
-  const plans = products.map(mapProductToHostingPlan);
-
-  const faqProduct = products.find(
-    (p) => Array.isArray(p.faq) && (p.faq as unknown as FaqItem[]).length > 0
-  );
-  const faqs = (faqProduct?.faq as unknown as FaqItem[]) ?? [];
-
+export function Content({
+  plans,
+  comparison,
+  resources,
+  startingPrices,
+}: {
+  plans: PlanCardData[];
+  comparison: HostingComparisonData;
+  resources: HostingResourceRow[];
+  startingPrices: Partial<Record<HostingSubType, number>>;
+}) {
   return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-      <main className="flex-1">
-        <PageHero
-          badge="Kurumsal Çözümler"
-          badgeIcon={Building2}
-          title="Kurumsal Web Hosting"
-          description="Büyük ölçekli projeler için yüksek performans, güvenlik ve 7/24 öncelikli destek."
-          accent="violet"
-        >
-          <BillingToggle isYearly={isYearly} onToggle={setIsYearly} />
-        </PageHero>
-
-        <TrustStrip />
-
-        <section className="py-12 md:py-16">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto">
-                {plans.map((plan) => (
-                  <PricingCard key={plan.name} plan={plan} isYearly={isYearly} />
-                ))}
-              </div>
-            </BlurFade>
+    <HostingLanding
+      subType="kurumsal"
+      hero={{
+        eyebrow: "İşletmeler için",
+        title: "Kurumsal Hosting",
+        description:
+          "Şirket siteniz, kurumsal e-postalarınız ve alt markalarınız tek hesapta. NVMe SSD, Wildcard SSL ve günlük yedekle daha yüksek kaynaklı paketler.",
+        breadcrumb: "Kurumsal Hosting",
+      }}
+      trustItems={trustItems}
+      plans={plans}
+      comparison={comparison}
+      plansHeading={{
+        eyebrow: "Kurumsal hosting",
+        title: "Kurumsal paketler",
+        description:
+          "Tüm paketlerde NVMe SSD, Wildcard SSL, günlük yedek ve cPanel var. Paketler site, e-posta ve CPU/RAM miktarıyla ayrılır.",
+      }}
+      steps={{
+        title: "Firmanızı taşıyın, ekibinizi bağlayın",
+        items: [
+          {
+            title: "Paketinizi seçin",
+            description: "Site, e-posta ve kaynak ihtiyacınıza göre kurumsal paketi seçin.",
+          },
+          {
+            title: "Alan adınızı bağlayın",
+            description: "Mevcut alan adınızı kullanın veya yeni bir alan adı kaydedin.",
+          },
+          {
+            title: "E-postaları oluşturun",
+            description: "cPanel'den ekibiniz için kurumsal e-posta hesaplarını açın.",
+          },
+          {
+            title: "Sitelerinizi yayınlayın",
+            description: "Dosyalarınızı yükleyin; SSL ve günlük yedek otomatik olarak çalışır.",
+          },
+        ],
+      }}
+      startingPrices={startingPrices}
+      faqs={faqs}
+      faqDescription="Kurumsal hosting paketleri hakkında sık sorulan sorular."
+      cta={{
+        eyebrow: "Kurumsal",
+        title: "İşletmenizin web altyapısını tek yerde toplayın",
+        description: "Kurumsal siteniz, e-postalarınız ve yedekleriniz için doğru paketi seçin.",
+        primary: { label: "Paketleri incele", href: "#paketler" },
+        secondary: { label: "Bize yazın", href: "/iletisim" },
+      }}
+    >
+      <Section divider aria-labelledby="kurumsal-heading">
+        <div className="grid items-start gap-12 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
+          <div>
+            <SectionHeading
+              id="kurumsal-heading"
+              eyebrow="İşletmeler için"
+              title="Kurumsal ihtiyaçlar pakete dahil"
+              description="Ayrı ayrı satın almanız gereken SSL, yedek ve e-posta gibi hizmetler kurumsal paketlerde hazır gelir."
+              className="mb-10"
+            />
+            <FeatureGrid items={businessFeatures} columns={2} variant="inline" />
           </div>
-        </section>
+          <BusinessPanel className="lg:mt-24" />
+        </div>
+      </Section>
 
-        {/* Hosting Features */}
-        <HostingFeatures />
-
-        {/* FAQ */}
-        {faqs.length > 0 && (
-          <section className="py-16 md:py-24 bg-muted/30">
-            <div className="container">
-              <BlurFade delay={0.1} inView>
-                <div className="text-center mb-12">
-                  <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                    Sık Sorulan Sorular
-                  </h2>
-                  <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                    Kurumsal hosting hakkında merak edilenler
-                  </p>
-                </div>
-              </BlurFade>
-
-              <BlurFade delay={0.2} inView>
-                <div className="max-w-3xl mx-auto">
-                  <Accordion type="single" collapsible className="w-full">
-                    {faqs.map((faq, index) => (
-                      <AccordionItem key={index} value={`item-${index}`}>
-                        <AccordionTrigger className="text-left">
-                          {faq.question}
-                        </AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground">
-                          {faq.answer}
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                </div>
-              </BlurFade>
-            </div>
-          </section>
-        )}
-      </main>
-      <Footer />
-    </div>
+      <Section divider aria-labelledby="kaynak-heading">
+        <div className="grid items-center gap-12 lg:grid-cols-[1fr_1.2fr] lg:gap-16">
+          <SectionHeading
+            id="kaynak-heading"
+            eyebrow="Kaynaklar"
+            title="Büyüdükçe kaynağınız da büyüsün"
+            description="Paketler arasındaki CPU, RAM ve disk farkını bir bakışta görün. İhtiyacınız arttığında üst pakete geçmek için müşteri panelinden talep oluşturabilirsiniz."
+          />
+          <ResourceBars rows={resources} title="kurumsal / kaynaklar" />
+        </div>
+      </Section>
+    </HostingLanding>
   );
-};
+}

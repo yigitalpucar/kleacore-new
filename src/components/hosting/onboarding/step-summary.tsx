@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ShoppingCart } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { ShoppingCart } from "lucide-react";
+import { buttonClasses } from "@/components/site/button-classes";
+import { formatTRY, yearlySavingsPercent } from "@/lib/format/price";
+import { cn } from "@/lib/utils";
+import { StepHeading, StepNav } from "./step-shell";
 import { BillingToggle } from "@/components/hosting/billing-toggle";
 import { useCartStore } from "@/store/cart-store";
 import { toast } from "@/lib/toast";
@@ -93,91 +94,130 @@ export const StepSummary = ({
     }
   };
 
+  const savings = yearlySavingsPercent(
+    monthlyTier?.price ?? product.basePrice,
+    yearlyTier?.discountedPrice ?? yearlyTier?.price
+  );
+  const periodNote = isYearly ? "/ay · yıllık ödemede aylık karşılığı" : "/ay";
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold mb-1">Sipariş Özeti</h2>
-        <p className="text-sm text-muted-foreground">
-          Siparişinizi gözden geçirin ve onaylayın.
-        </p>
-      </div>
+    <div className="space-y-8">
+      <StepHeading
+        eyebrow="Adım · Özet"
+        title="Siparişinizi gözden geçirin"
+        description="Ödeme dönemini seçin ve sepete ekleyin. Ödemeyi sepet adımında tamamlarsınız."
+      />
 
-      <BillingToggle isYearly={isYearly} onToggle={setIsYearly} />
+      {yearlyTier ? (
+        <BillingToggle
+          isYearly={isYearly}
+          onToggle={setIsYearly}
+          savingsPercent={savings}
+          className="items-start"
+        />
+      ) : null}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <h3 className="font-semibold">Sipariş Detayları</h3>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex justify-between text-sm">
-            <span>{product.name}</span>
-            <span className="font-medium">₺{hostingPrice.toFixed(2)}/{isYearly ? "ay" : "ay"}</span>
-          </div>
+      <section
+        aria-labelledby="siparis-detay"
+        className="overflow-hidden rounded-2xl border bg-background"
+      >
+        <div className="border-b px-5 py-4">
+          <h3 id="siparis-detay" className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            Sipariş detayları
+          </h3>
+        </div>
+        <dl className="divide-y divide-dashed px-5 text-sm">
+          <Row label={product.name} value={formatTRY(hostingPrice, { keepDecimals: true })} note={periodNote} strong />
 
           {domainChoice.type === "new" && domainChoice.domain && (
-            <div className="flex justify-between text-sm">
-              <span>Domain: {domainChoice.domain}</span>
-              <span className="font-medium">₺{domainPrice.toFixed(2)}/yıl</span>
-            </div>
+            <Row
+              label={`Alan adı: ${domainChoice.domain}`}
+              value={formatTRY(domainPrice, { keepDecimals: true })}
+              note="/yıl"
+            />
           )}
           {domainChoice.type === "existing" && domainChoice.domain && (
-            <div className="flex justify-between text-sm">
-              <span>Domain: {domainChoice.domain}</span>
-              <span className="text-muted-foreground">Mevcut</span>
-            </div>
+            <Row label={`Alan adı: ${domainChoice.domain}`} value="Mevcut" muted />
+          )}
+          {domainChoice.type === "later" && (
+            <Row label="Alan adı" value="Sonra belirlenecek" muted />
           )}
 
           {configPricing.lines.map((line) => (
-            <div key={line.slug} className="flex justify-between text-sm">
-              <span>
-                {line.name}: {line.label}
-              </span>
-              <span className="font-medium">₺{line.price.toFixed(2)}</span>
-            </div>
+            <Row
+              key={line.slug}
+              label={`${line.name}: ${line.label}`}
+              value={formatTRY(line.price, { keepDecimals: true })}
+            />
           ))}
 
           {selectedAddons.map((addon) => (
-            <div key={addon.sku} className="flex justify-between text-sm">
-              <span>{addon.name}</span>
-              <span className="font-medium">
-                ₺{(isYearly ? addon.yearlyPrice : addon.monthlyPrice).toFixed(2)}/ay
-              </span>
-            </div>
+            <Row
+              key={addon.sku}
+              label={addon.name}
+              value={formatTRY(isYearly ? addon.yearlyPrice : addon.monthlyPrice, { keepDecimals: true })}
+              note="/ay"
+            />
           ))}
+        </dl>
 
-          <Separator />
-
-          <div className="flex justify-between text-sm">
-            <span>Ara Toplam</span>
-            <span>₺{subtotal.toFixed(2)}</span>
+        <dl className="space-y-2 border-t bg-muted/30 px-5 py-4 text-sm">
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-muted-foreground">Ara toplam</dt>
+            <dd className="tabular-nums">{formatTRY(subtotal, { keepDecimals: true })}</dd>
           </div>
-
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>KDV (%{TAX_RATE * 100})</span>
-            <span>₺{tax.toFixed(2)}</span>
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-muted-foreground">KDV (%{TAX_RATE * 100})</dt>
+            <dd className="tabular-nums">{formatTRY(tax, { keepDecimals: true })}</dd>
           </div>
-
-          <Separator />
-
-          <div className="flex justify-between font-semibold text-lg">
-            <span>Toplam</span>
-            <span className="text-primary">₺{total.toFixed(2)}</span>
+          <div className="flex items-baseline justify-between gap-4 border-t border-dashed pt-3">
+            <dt className="font-medium">Toplam</dt>
+            <dd className="text-2xl font-semibold tabular-nums tracking-tight">
+              {formatTRY(total, { keepDecimals: true })}
+            </dd>
           </div>
-        </CardContent>
-        <CardFooter className="flex-col gap-3">
-          <Button className="w-full" size="lg" onClick={handleAddToCart}>
-            <ShoppingCart className="h-4 w-4 mr-2" />
-            Sepete Ekle
-          </Button>
-        </CardFooter>
-      </Card>
+        </dl>
 
-      <div className="flex justify-start">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Geri
-        </Button>
-      </div>
+        <div className="border-t p-5">
+          <button
+            type="button"
+            onClick={handleAddToCart}
+            className={buttonClasses({ size: "lg", className: "w-full" })}
+          >
+            <ShoppingCart aria-hidden className="size-4" />
+            Sepete ekle
+          </button>
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            Ödenecek tutar sepet ve ödeme adımında kesinleşir.
+          </p>
+        </div>
+      </section>
+
+      <StepNav onBack={onBack} />
     </div>
   );
 };
+
+function Row({
+  label,
+  value,
+  note,
+  strong = false,
+  muted = false,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  strong?: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-3">
+      <dt className={cn("min-w-0 break-words", strong ? "font-medium" : "text-foreground/90")}>{label}</dt>
+      <dd className={cn("shrink-0 text-right tabular-nums", muted ? "text-muted-foreground" : "font-medium")}>
+        {value}
+        {note ? <span className="block text-xs font-normal text-muted-foreground">{note}</span> : null}
+      </dd>
+    </div>
+  );
+}

@@ -1,11 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -13,7 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { formatTRY } from "@/lib/format/price";
+import { StepHeading, StepNav, fieldClass } from "./step-shell";
 import { calculateConfigurationPrice } from "@/lib/products/configurator-pricing";
 import type {
   ConfigurationSelections,
@@ -109,28 +105,29 @@ export const StepConfiguration = ({
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold mb-1">Yapılandırma</h2>
-        <p className="text-sm text-muted-foreground">
-          Hosting paketinizi ihtiyaçlarınıza göre özelleştirin.
-        </p>
-      </div>
+    <div className="space-y-8">
+      <StepHeading
+        eyebrow="Adım · Yapılandırma"
+        title="Paketinizi yapılandırın"
+        description="Hosting paketinizi ihtiyaçlarınıza göre özelleştirin. Yıldızlı alanlar zorunludur."
+      />
 
-      <div className="space-y-4">
-        {configOptions.map((option) => (
-          <Card key={option.id}>
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <Label className="text-sm font-medium">
+      <div className="divide-y divide-dashed rounded-xl border bg-background">
+        {configOptions.map((option) => {
+          const fieldId = `config-${option.slug}`;
+          return (
+            <div key={option.id} className="space-y-3 p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <label htmlFor={fieldId} className="text-sm font-medium">
                   {option.name}
-                  {option.isRequired ? " *" : ""}
-                </Label>
+                  {option.isRequired ? <span aria-hidden> *</span> : null}
+                  {option.isRequired ? <span className="sr-only"> (zorunlu)</span> : null}
+                </label>
                 {option.optionType === "quantity" && (
-                  <span className="text-xs text-muted-foreground">
-                    ₺{option.unitPrice}/ay
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    Birim {formatTRY(option.unitPrice)}/ay
                     {option.minValue !== null || option.maxValue !== null
-                      ? ` (${option.minValue ?? 0}-${option.maxValue ?? "∞"})`
+                      ? ` · ${option.minValue ?? 0}–${option.maxValue ?? "∞"}`
                       : ""}
                   </span>
                 )}
@@ -145,21 +142,24 @@ export const StepConfiguration = ({
                   }
                   onValueChange={(value) => updateSelection(option.slug, value)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id={fieldId} className="h-11">
                     <SelectValue placeholder={`${option.name} seçin`} />
                   </SelectTrigger>
                   <SelectContent>
                     {option.choices.map((choice) => (
                       <SelectItem key={choice.value} value={choice.value}>
                         {choice.label}
-                        {choice.priceMonthly > 0 ? ` (+₺${choice.priceMonthly}/ay)` : ""}
+                        {choice.priceMonthly > 0 ? ` (+${formatTRY(choice.priceMonthly)}/ay)` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
-                <Input
+                <input
+                  id={fieldId}
                   type="number"
+                  inputMode="numeric"
+                  className={fieldClass}
                   min={option.minValue ?? 0}
                   max={option.maxValue ?? undefined}
                   value={
@@ -174,32 +174,19 @@ export const StepConfiguration = ({
                   placeholder="0"
                 />
               )}
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+          );
+        })}
       </div>
 
       {pricePreview.total > 0 && (
-        <div
-          className={cn(
-            "rounded-lg border bg-muted/40 px-4 py-3 text-sm flex items-center justify-between"
-          )}
-        >
+        <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/40 px-4 py-3 text-sm">
           <span className="text-muted-foreground">Yapılandırma ek ücreti (aylık önizleme)</span>
-          <span className="font-medium text-primary">+₺{pricePreview.total.toFixed(2)}</span>
+          <span className="font-medium tabular-nums">+{formatTRY(pricePreview.total)}</span>
         </div>
       )}
 
-      <div className="flex justify-between pt-4">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Geri
-        </Button>
-        <Button onClick={handleNext}>
-          Devam Et
-          <ArrowRight className="h-4 w-4 ml-2" />
-        </Button>
-      </div>
+      <StepNav onBack={onBack} onNext={handleNext} />
     </div>
   );
 };
