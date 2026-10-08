@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getServiceById } from "@/lib/dal/services";
+import { getManualEtaText } from "@/lib/provisioning/manual";
 import { HizmetDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -82,6 +83,7 @@ export default async function HizmetDetayPage(props: Props) {
           createdAt: pendingCancellation.createdAt.toISOString(),
         }
       : null,
+    provisioningEta: service.status === "PENDING" ? await getManualEtaText() : null,
   };
 
   return <HizmetDetayContent service={serialized} />;

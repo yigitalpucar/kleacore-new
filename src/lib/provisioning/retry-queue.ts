@@ -11,6 +11,7 @@ import {
 import type { CronJobResult } from "@/lib/cron/jobs/types";
 import type { JobContext } from "@/lib/jobs/registry";
 import { dismissFailedQueueEntries, queueProvisioningAttempt } from "@/lib/provisioning/queue";
+import { sendNotification } from "@/lib/notifications/send";
 
 const RETRY_DELAYS_MS = [
   5 * 60 * 1000,
@@ -124,6 +125,17 @@ async function retryDomainProvisioning(
   const registrarResult = await submitDomainToRegistrar(db, order, configuredDomain);
 
   if (registrarResult.ok && !registrarResult.skipped) {
+    const domain = await db.domain.findUnique({ where: { name: configuredDomain }, select: { expiresAt: true } });
+    await sendNotification({
+      userId: order.customerId,
+      template: "domain.registered",
+      data: {
+        domain: configuredDomain,
+        expiresAt: domain?.expiresAt ?? undefined,
+        transfer: config.type === "domain_transfer",
+      },
+      dedupeKey: `domain.registered:${order.id}`,
+    });
     return { ok: true as const };
   }
 
@@ -232,6 +244,16 @@ async function retryServiceProvisioning(
     await db.service.update({
       where: { id: service.id },
       data: { serverName: provisioning.reference },
+    });
+  }
+
+  if (provisioning.ok && !provisioning.skipped) {
+    const { activationKindForCategory, queueServiceActivatedNotice } = await import(
+      "@/lib/provisioning/activation-notice"
+    );
+    await queueServiceActivatedNotice(undefined, {
+      service: { ...service, serverName: provisioning.reference ?? service.serverName },
+      kind: activationKindForCategory(order.product.category.slug),
     });
   }
 
@@ -384,6 +406,7 @@ export async function recoverStaleProcessingJobs(
   const result = await client.provisioningJob.updateMany({
     where: {
       status: "PROCESSING",
+      kind: { not: "MANUAL" },
       updatedAt: { lt: threshold },
     },
     data: {
@@ -408,6 +431,10 @@ export async function manualRetryProvisioningJob(jobId: string) {
 
   if (job.status === "PROCESSING") {
     return { ok: false as const, error: "JOB_ALREADY_PROCESSING" };
+  }
+
+  if (job.kind === "MANUAL") {
+    return { ok: false as const, error: "JOB_IS_MANUAL" };
   }
 
   await db.provisioningJob.update({
@@ -462,7 +489,8 @@ export async function reconcileProvisioningQueue(limit = 100): Promise<CronJobRe
   await recoverStaleProcessingJobs(STALE_PROCESSING_MS);
 
   const jobs = await db.provisioningJob.findMany({
-    where: { status: "PENDING" },
+    // MANUAL tasks wait for an admin (/yonetim/kurulumlar), never for the queue.
+    where: { status: "PENDING", kind: { not: "MANUAL" } },
     select: { id: true, attempts: true, maxAttempts: true, nextRetryAt: true },
     orderBy: { nextRetryAt: "asc" },
     take: limit,
@@ -512,6 +540,10 @@ export async function runQueuedProvisioningJob(provisioningJobId: string, contex
 
   if (job.status === "COMPLETED") {
     return { skipped: "ALREADY_COMPLETED" };
+  }
+
+  if (job.kind === "MANUAL") {
+    return { skipped: "MANUAL_TASK" };
   }
 
   // Same claim as the inline unsuspend runner, so the two never run one row

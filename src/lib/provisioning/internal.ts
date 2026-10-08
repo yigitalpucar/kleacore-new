@@ -11,7 +11,13 @@ import {
   serializeSslProvisionResult,
 } from "@/lib/integrations/ssl";
 import { enqueueProvisioningRetry } from "@/lib/provisioning/retry-queue";
+import { openManualProvisioningTask, requiresManualProvisioning } from "@/lib/provisioning/manual";
+import {
+  activationKindForCategory,
+  queueServiceActivatedNotice,
+} from "@/lib/provisioning/activation-notice";
 import { decryptSecret } from "@/lib/secrets/crypto";
+import { sendNotification } from "@/lib/notifications/send";
 
 const billingMonths: Record<BillingPeriod, number> = {
   monthly: 1,
@@ -159,6 +165,19 @@ export async function provisionCompletedOrder(
       };
     }
 
+    await sendNotification({
+      userId: order.customerId,
+      template: "domain.registered",
+      data: {
+        domain: configuredDomain,
+        expiresAt,
+        nameservers: DEFAULT_NAMESERVERS,
+        transfer: orderItemConfig(order).type === "domain_transfer",
+      },
+      dedupeKey: `domain.registered:${order.id}`,
+      tx,
+    });
+
     return { type: "domain" as const, identifier: configuredDomain, registrar: registrarResult };
   }
 
@@ -222,6 +241,11 @@ export async function provisionCompletedOrder(
     return { type: "service" as const, identifier: order.serviceId };
   }
 
+  // No automation module (VDS in Faz 1, unconfigured WHM/Virtualizor,
+  // datacenter): the service waits as PENDING ("Kurulum sürüyor") and an
+  // admin task is opened. Its billing period starts on activation.
+  const manual = await requiresManualProvisioning(order.product.category.slug);
+
   const service = await tx.service.create({
     data: {
       customerId: order.customerId,
@@ -234,9 +258,9 @@ export async function provisionCompletedOrder(
       // added again by every renewal (cron + renewService), so storing the
       // tax-inclusive total here would charge KDV twice on renewal.
       amount: order.basePrice,
-      nextDueDate: expiresAt,
-      expiresAt,
-      status: "ACTIVE",
+      nextDueDate: manual ? null : expiresAt,
+      expiresAt: manual ? null : expiresAt,
+      status: manual ? "PENDING" : "ACTIVE",
     },
   });
 
@@ -244,6 +268,22 @@ export async function provisionCompletedOrder(
     where: { id: order.id },
     data: { serviceId: service.id },
   });
+
+  if (manual) {
+    const task = await openManualProvisioningTask(tx, {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      serviceId: service.id,
+      productName: order.product.name,
+      customerName:
+        order.customer.companyName ||
+        `${order.customer.name} ${order.customer.surname}`.trim() ||
+        order.customer.email,
+      customerEmail: order.customer.email,
+      domain: configuredDomain,
+    });
+    return { type: "service" as const, identifier: service.id, manual: true as const, taskId: task.id };
+  }
 
   const provisioning = await createRemoteService({
     ...service,
@@ -255,6 +295,13 @@ export async function provisionCompletedOrder(
     await tx.service.update({
       where: { id: service.id },
       data: { serverName: provisioning.reference },
+    });
+  }
+
+  if (provisioning.ok && !provisioning.skipped) {
+    await queueServiceActivatedNotice(tx, {
+      service: { ...service, product: order.product },
+      kind: activationKindForCategory(order.product.category.slug),
     });
   }
 

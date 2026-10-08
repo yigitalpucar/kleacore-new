@@ -4,13 +4,27 @@ const mocks = vi.hoisted(() => ({
   registerDomainWithRegistrar: vi.fn(),
   transferDomainWithRegistrar: vi.fn(),
   enqueueProvisioningRetry: vi.fn(),
+  createRemoteService: vi.fn(),
+  sendNotification: vi.fn(),
+  requiresManualProvisioning: vi.fn(),
+  openManualProvisioningTask: vi.fn(),
+  queueServiceActivatedNotice: vi.fn(),
 }));
 
 vi.mock("@/lib/integrations/registrar", () => ({
   registerDomainWithRegistrar: mocks.registerDomainWithRegistrar,
   transferDomainWithRegistrar: mocks.transferDomainWithRegistrar,
 }));
-vi.mock("@/lib/integrations/provisioning-provider", () => ({ createRemoteService: vi.fn() }));
+vi.mock("@/lib/integrations/provisioning-provider", () => ({ createRemoteService: mocks.createRemoteService }));
+vi.mock("@/lib/notifications/send", () => ({ sendNotification: mocks.sendNotification }));
+vi.mock("@/lib/provisioning/manual", () => ({
+  requiresManualProvisioning: mocks.requiresManualProvisioning,
+  openManualProvisioningTask: mocks.openManualProvisioningTask,
+}));
+vi.mock("@/lib/provisioning/activation-notice", () => ({
+  activationKindForCategory: (slug: string) => (slug === "hosting" ? "hosting" : "server"),
+  queueServiceActivatedNotice: mocks.queueServiceActivatedNotice,
+}));
 vi.mock("@/lib/integrations/ssl", () => ({
   mapProductSubTypeToSslType: vi.fn(),
   provisionSslCertificate: vi.fn(),
@@ -69,6 +83,9 @@ describe("provisionCompletedOrder — domains", () => {
     });
     expect(result).not.toHaveProperty("partialFailure");
     expect(mocks.enqueueProvisioningRetry).not.toHaveBeenCalled();
+    expect(mocks.sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ template: "domain.registered", dedupeKey: "domain.registered:ord-1", tx })
+    );
   });
 
   it("keeps the domain PENDING and queues an admin retry when the registrar is disabled", async () => {
@@ -120,5 +137,77 @@ describe("provisionCompletedOrder — domains", () => {
       where: { name: "ornek.com.tr" },
       data: { registrar: "gri", status: "TRANSFERRING" },
     });
+  });
+});
+
+function serviceOrder(slug: string) {
+  return {
+    id: "ord-2",
+    orderNumber: "S-2026-000011",
+    customerId: "cus-1",
+    productId: "prd-vds",
+    serviceId: null,
+    domain: null,
+    billingPeriod: "monthly",
+    basePrice: 500,
+    product: { name: "VDS Pro", subType: null, category: { slug } },
+    customer: { id: "cus-1", name: "Ayşe", surname: "Yılmaz", email: "a@example.com", companyName: null, country: null },
+    items: [{ configuration: {} }],
+  };
+}
+
+function createServiceTx(order: ReturnType<typeof serviceOrder>) {
+  return {
+    order: { findUnique: vi.fn().mockResolvedValue(order), update: vi.fn() },
+    service: {
+      create: vi.fn().mockImplementation(async ({ data }) => ({ id: "svc-1", ...data })),
+      update: vi.fn(),
+    },
+  };
+}
+
+describe("provisionCompletedOrder — services", () => {
+  beforeEach(() => {
+    Object.values(mocks).forEach((mock) => mock.mockReset());
+    mocks.openManualProvisioningTask.mockResolvedValue({ id: "task-1" });
+  });
+
+  it("creates a PENDING service and an admin task when there is no automation module", async () => {
+    mocks.requiresManualProvisioning.mockResolvedValue(true);
+    const tx = createServiceTx(serviceOrder("vds"));
+
+    const result = await provisionCompletedOrder(tx as unknown as Prisma.TransactionClient, "ord-2");
+
+    const created = tx.service.create.mock.calls[0][0].data;
+    expect(created).toMatchObject({ status: "PENDING", nextDueDate: null, expiresAt: null });
+    expect(mocks.openManualProvisioningTask).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ orderId: "ord-2", serviceId: "svc-1", productName: "VDS Pro", customerName: "Ayşe Yılmaz" })
+    );
+    expect(mocks.createRemoteService).not.toHaveBeenCalled();
+    expect(result).toEqual({ type: "service", identifier: "svc-1", manual: true, taskId: "task-1" });
+  });
+
+  it("activates automatically provisioned services and queues the 'hizmet aktif' mail", async () => {
+    mocks.requiresManualProvisioning.mockResolvedValue(false);
+    mocks.createRemoteService.mockResolvedValue({ ok: true, reference: "srv-9" });
+    const tx = createServiceTx(serviceOrder("hosting"));
+
+    await provisionCompletedOrder(tx as unknown as Prisma.TransactionClient, "ord-2");
+
+    expect(tx.service.create.mock.calls[0][0].data.status).toBe("ACTIVE");
+    expect(mocks.queueServiceActivatedNotice).toHaveBeenCalledWith(tx, expect.objectContaining({ kind: "hosting" }));
+    expect(mocks.openManualProvisioningTask).not.toHaveBeenCalled();
+  });
+
+  it("doesn't announce a service whose remote creation failed", async () => {
+    mocks.requiresManualProvisioning.mockResolvedValue(false);
+    mocks.createRemoteService.mockResolvedValue({ ok: false, error: "WHM_DOWN" });
+    const tx = createServiceTx(serviceOrder("hosting"));
+
+    await provisionCompletedOrder(tx as unknown as Prisma.TransactionClient, "ord-2");
+
+    expect(mocks.queueServiceActivatedNotice).not.toHaveBeenCalled();
+    expect(mocks.enqueueProvisioningRetry).toHaveBeenCalledWith("ord-2", "WHM_DOWN", tx, "svc-1");
   });
 });

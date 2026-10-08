@@ -12,6 +12,7 @@ import {
   Database,
   Download,
   ExternalLink,
+  Hourglass,
   FileText,
   FolderOpen,
   Loader2,
@@ -104,6 +105,8 @@ interface ServiceData {
     reason: string;
     createdAt: string;
   } | null;
+  /** Expected-time text while the service waits for manual provisioning (status PENDING). */
+  provisioningEta: string | null;
 }
 
 interface HizmetDetayContentProps {
@@ -224,16 +227,18 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
           <>
             <StatusBadge kind="service" status={service.status} size="md" />
             {service.pendingCancellation ? <StatusBadge size="md" tone="warning" label="İptal talebi bekliyor" /> : null}
-            <span>Bitiş {formatDate(endDate)}</span>
+            {endDate ? <span>Bitiş {formatDate(endDate)}</span> : null}
             <span className="tabular-nums">{price}</span>
           </>
         }
         actions={
           <>
-            <Link href={`${P}/${service.id}/yenile`} className={appButton({ variant: "outline" })}>
-              <RefreshCcw aria-hidden />
-              Yenile
-            </Link>
+            {service.status !== "PENDING" ? (
+              <Link href={`${P}/${service.id}/yenile`} className={appButton({ variant: "outline" })}>
+                <RefreshCcw aria-hidden />
+                Yenile
+              </Link>
+            ) : null}
             {service.status === "ACTIVE" ? (
               <Link href={`${P}/${service.id}/yukselt`} className={appButton({ variant: "outline" })}>
                 <ArrowUpDown aria-hidden />
@@ -245,7 +250,19 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
         }
       />
 
-      {quickLinks.length || soonActions.length ? (
+      {service.status === "PENDING" ? (
+        <SectionCard title="Kurulum sürüyor">
+          <div role="status" className="flex items-start gap-3">
+            <Hourglass aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div className="space-y-1 text-sm">
+              <p>Ödemeniz alındı; hizmetiniz ekibimiz tarafından kuruluyor.</p>
+              {service.provisioningEta ? <p className="text-muted-foreground">{service.provisioningEta}</p> : null}
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {service.status !== "PENDING" && (quickLinks.length || soonActions.length) ? (
         <SectionCard title="Hızlı işlemler" description={soonActions.length ? "Panel bağlantıları kademeli olarak açılıyor." : undefined}>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {quickLinks.map((a) => (
@@ -385,10 +402,12 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
             ) : null}
 
             <div className="mt-4 grid gap-2 border-t pt-4">
-              <Link href={`${P}/${service.id}/yenile`} className={appButton({ variant: "outline", className: "justify-start" })}>
-                <RefreshCcw aria-hidden />
-                Hizmeti yenile
-              </Link>
+              {service.status !== "PENDING" ? (
+                <Link href={`${P}/${service.id}/yenile`} className={appButton({ variant: "outline", className: "justify-start" })}>
+                  <RefreshCcw aria-hidden />
+                  Hizmeti yenile
+                </Link>
+              ) : null}
               {service.status === "ACTIVE" ? (
                 <Link href={`${P}/${service.id}/yukselt`} className={appButton({ variant: "outline", className: "justify-start" })}>
                   <ArrowUpDown aria-hidden />

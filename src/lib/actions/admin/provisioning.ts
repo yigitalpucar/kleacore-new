@@ -13,6 +13,7 @@ const errorMessages: Record<string, string> = {
   JOB_NOT_FOUND: "Provisioning işi bulunamadı",
   JOB_ALREADY_COMPLETED: "Bu iş zaten tamamlanmış",
   JOB_ALREADY_PROCESSING: "Bu iş şu anda işleniyor",
+  JOB_IS_MANUAL: "Manuel kurulum görevi: /yonetim/kurulumlar üzerinden aktifleştirin",
 };
 
 export async function retryProvisioningJobAction(jobId: string) {

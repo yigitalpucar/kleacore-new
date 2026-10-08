@@ -9,6 +9,7 @@ import {
   Headphones,
   ListChecks,
   LayoutDashboard,
+  Mail,
   Newspaper,
   Package,
   Plug,
@@ -20,6 +21,7 @@ import {
   ShoppingCart,
   Store,
   Users,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import type { AppNavGroup, AppSearchItem } from "@/components/app";
@@ -41,6 +43,7 @@ export type AdminCounts = {
   openTickets: number;
   overdueInvoices: number;
   pendingCancellations: number;
+  pendingManualProvisioning: number;
 };
 
 export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
@@ -66,6 +69,12 @@ export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
           badge: counts.pendingOrders + counts.pendingCancellations || null,
         },
         { title: "Hizmetler", href: `${ADMIN_ROOT}/hizmetler`, icon: Package },
+        {
+          title: "Kurulum görevleri",
+          href: `${ADMIN_ROOT}/kurulumlar`,
+          icon: Wrench,
+          badge: counts.pendingManualProvisioning || null,
+        },
         { title: "Faturalar", href: `${ADMIN_ROOT}/faturalar`, icon: FileText, badge: counts.overdueInvoices || null },
         { title: "E-Fatura / e-Arşiv", href: `${ADMIN_ROOT}/efatura`, icon: FileCheck },
       ],
@@ -92,6 +101,7 @@ export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
         { title: "Sistem durumu", href: `${ADMIN_ROOT}/durum`, icon: Activity },
         { title: "Provisioning kuyruğu", href: `${ADMIN_ROOT}/provisioning`, icon: RefreshCw },
         { title: "Arka plan işleri", href: `${ADMIN_ROOT}/isler`, icon: ListChecks },
+        { title: "Bildirimler", href: `${ADMIN_ROOT}/bildirimler`, icon: Mail },
         { title: "Aktivite kayıtları", href: `${ADMIN_ROOT}/aktivite`, icon: ScrollText },
         { title: "Entegrasyonlar", href: `${ADMIN_ROOT}/entegrasyonlar`, icon: Plug },
         { title: "Ayarlar", href: `${ADMIN_ROOT}/ayarlar`, icon: Settings },
@@ -249,4 +259,5 @@ export const ADMIN_SEGMENT_LABELS: Record<string, string> = {
   promosyonlar: "Promosyonlar",
   "bilgi-bankasi": "Bilgi bankası",
   durum: "Sistem durumu",
+  sablonlar: "Şablonlar",
 };

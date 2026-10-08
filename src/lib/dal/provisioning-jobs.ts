@@ -7,8 +7,10 @@ const defaultStatuses: ProvisioningJobStatus[] = ["FAILED", "PENDING", "PROCESSI
 /** Admin list rows; order/product amounts are plain numbers (passed to a client component). */
 export async function getProvisioningJobsForAdmin(statuses = defaultStatuses) {
   const jobs = await db.provisioningJob.findMany({
+    // MANUAL tasks have their own screen (/yonetim/kurulumlar); "Yeniden dene" doesn't apply.
     where: {
       status: { in: statuses },
+      kind: { not: "MANUAL" },
     },
     include: {
       order: {
@@ -46,10 +48,10 @@ export async function getProvisioningJobsForAdmin(statuses = defaultStatuses) {
 
 export async function getProvisioningJobStats() {
   const [failed, pending, processing, completed] = await Promise.all([
-    db.provisioningJob.count({ where: { status: "FAILED" } }),
-    db.provisioningJob.count({ where: { status: "PENDING" } }),
-    db.provisioningJob.count({ where: { status: "PROCESSING" } }),
-    db.provisioningJob.count({ where: { status: "COMPLETED" } }),
+    db.provisioningJob.count({ where: { status: "FAILED", kind: { not: "MANUAL" } } }),
+    db.provisioningJob.count({ where: { status: "PENDING", kind: { not: "MANUAL" } } }),
+    db.provisioningJob.count({ where: { status: "PROCESSING", kind: { not: "MANUAL" } } }),
+    db.provisioningJob.count({ where: { status: "COMPLETED", kind: { not: "MANUAL" } } }),
   ]);
 
   return {
