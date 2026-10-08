@@ -1,34 +1,6 @@
 import { db } from "@/lib/db";
-import { getSettingValue, isEnabled } from "@/lib/integrations/settings";
-import { dispatchSmsNotification, sendSmsNotification } from "@/lib/notifications/sms";
+import { notifyOverdueInvoices } from "@/lib/notifications/billing-notices";
 import type { CronJobResult } from "./types";
-
-async function notifyOverdueInvoicesBySms(invoiceIds: string[]) {
-  const smsEnabled = isEnabled(
-    await getSettingValue("sms_notifications", undefined, "false")
-  );
-  if (!smsEnabled || invoiceIds.length === 0) {
-    return;
-  }
-
-  const invoices = await db.invoice.findMany({
-    where: { id: { in: invoiceIds } },
-    select: {
-      invoiceNumber: true,
-      customerId: true,
-    },
-  });
-
-  for (const invoice of invoices) {
-    dispatchSmsNotification(() =>
-      sendSmsNotification({
-        customerId: invoice.customerId,
-        message: `Gecikmiş faturanız: ${invoice.invoiceNumber}. Lütfen ödeme yapın.`,
-        template: "invoice_overdue",
-      })
-    );
-  }
-}
 
 export async function markOverdueInvoices(): Promise<CronJobResult> {
   const now = new Date();
@@ -52,7 +24,8 @@ export async function markOverdueInvoices(): Promise<CronJobResult> {
     data: { status: "OVERDUE" },
   });
 
-  await notifyOverdueInvoicesBySms(ids);
+  // "Fatura gecikti" e-mail (+ SMS when configured), once per invoice.
+  await notifyOverdueInvoices(ids, now);
 
   return { processed: ids.length, ids };
 }
