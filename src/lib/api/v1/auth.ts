@@ -40,6 +40,7 @@ export async function authenticateApiRequest(
       userId: true,
       keyHash: true,
       expiresAt: true,
+      user: { select: { status: true } },
     },
   });
 
@@ -52,6 +53,11 @@ export async function authenticateApiRequest(
   }
 
   if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
+    return null;
+  }
+
+  // Suspended/closed accounts must not keep API access through old keys.
+  if (apiKey.user.status !== "ACTIVE") {
     return null;
   }
 
