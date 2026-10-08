@@ -161,6 +161,11 @@ export interface DnsZoneInfo {
   /** Nameservers the registrar must point at. */
   nameservers: string[];
   created: boolean;
+  /**
+   * Provider zone status when known ("active" = nameservers point at the
+   * provider; Cloudflare also reports "pending", "moved", "deactivated" …).
+   */
+  status?: string;
 }
 
 export interface DnsModule {
@@ -177,6 +182,8 @@ export interface DnsModule {
   upsertRecord(zone: string, record: DnsModuleRecord): Promise<IntegrationResult<DnsModuleRecord & { id: string }>>;
   /** Deleting a missing record is ok (idempotent). */
   deleteRecord(zone: string, recordId: string): Promise<OperationResult>;
+  /** Capability "deleteZone" (admin only). Deleting a missing zone is ok. */
+  deleteZone?(zone: string): Promise<OperationResult>;
 }
 
 // ---------------------------------------------------------------------------

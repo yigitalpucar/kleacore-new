@@ -185,6 +185,9 @@ const OPTIONAL_METHOD_CAPABILITIES: Partial<Record<ModuleKind, Record<string, st
     getEppCode: "eppCode",
     setLock: "lock",
   },
+  dns: {
+    deleteZone: "deleteZone",
+  },
 };
 
 const REQUIRED_METHODS: Partial<Record<ModuleKind, string[]>> = {
@@ -353,6 +356,7 @@ export function describeModuleContract(manifest: AnyModuleManifest, options: Mod
             subject.upsertRecord("ornek.com.tr", { type: "A", name: "ornek.com.tr", content: "192.0.2.10" })
           );
           await expectGracefulFailure("deleteRecord", () => subject.deleteRecord("ornek.com.tr", "rec_1"));
+          if (subject.deleteZone) await expectGracefulFailure("deleteZone", () => subject.deleteZone!("ornek.com.tr"));
         });
       }
 

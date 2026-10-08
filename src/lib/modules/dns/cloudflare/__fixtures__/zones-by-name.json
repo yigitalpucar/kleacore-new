@@ -1,0 +1,32 @@
+{
+  "result": [
+    {
+      "id": "0f609d5c1e8a4b7c9d2e3f4a5b6c7d8e",
+      "name": "ornek.com.tr",
+      "status": "active",
+      "paused": false,
+      "type": "full",
+      "development_mode": 0,
+      "name_servers": ["isaac.ns.cloudflare.com", "luciane.ns.cloudflare.com"],
+      "original_name_servers": ["ns1.dyna-ns.net", "ns2.dyna-ns.net"],
+      "original_registrar": null,
+      "original_dnshost": null,
+      "modified_on": "2026-10-01T18:49:32.219334Z",
+      "created_on": "2025-10-24T01:05:58.891065Z",
+      "activated_on": "2025-10-24T01:20:00.000000Z",
+      "vanity_name_servers": [],
+      "vanity_name_servers_ips": null,
+      "meta": { "step": 2, "phishing_detected": false },
+      "owner": { "id": null, "type": "user", "email": null },
+      "account": { "id": "6eaa8900000000000000000000000000", "name": "Test hesabı" },
+      "tenant": { "id": null, "name": null },
+      "tenant_unit": { "id": null },
+      "permissions": ["#dns_records:edit", "#dns_records:read", "#zone:read"],
+      "plan": { "id": "0feeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "name": "Free Website", "price": 0, "currency": "USD", "frequency": "", "is_subscribed": false, "can_subscribe": false, "legacy_id": "free", "legacy_discount": false, "externally_managed": false }
+    }
+  ],
+  "result_info": { "page": 1, "per_page": 5, "total_pages": 1, "count": 1, "total_count": 1 },
+  "success": true,
+  "errors": [],
+  "messages": []
+}

@@ -70,7 +70,7 @@ export interface CapabilitiesByKind {
     | "listDomains" // listDomains (importers)
     | "eppCode" // getEppCode
     | "lock"; // setLock
-  dns: "zones" | "records" | "proxy";
+  dns: "zones" | "records" | "proxy" | "deleteZone"; // deleteZone → deleteZone()
   payment: "checkout" | "refund" | "storedCard" | "installments";
   einvoice: "earsiv" | "efatura" | "cancel" | "pdf";
   sms: "send" | "deliveryReports";

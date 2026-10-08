@@ -1,0 +1,11 @@
+{
+  "result": [
+    { "id": "1e7cca00000000000000000000000001", "name": "cpanel.ornek.com.tr", "type": "A", "content": "192.0.2.10", "proxiable": true, "proxied": false, "ttl": 1, "settings": {}, "meta": {}, "comment": null, "tags": [], "created_on": "2026-10-01T18:49:32.219334Z", "modified_on": "2026-10-01T18:49:32.219334Z" },
+    { "id": "087e9a00000000000000000000000002", "name": "ornek.com.tr", "type": "A", "content": "192.0.2.88", "proxiable": true, "proxied": true, "ttl": 1, "settings": {}, "meta": {}, "comment": null, "tags": [], "created_on": "2026-02-27T20:50:37.017908Z", "modified_on": "2026-10-07T21:42:09.951619Z" },
+    { "id": "5a1b2c00000000000000000000000003", "name": "ornek.com.tr", "type": "MX", "content": "mail.ornek.com.tr", "priority": 10, "proxiable": false, "proxied": false, "ttl": 1, "settings": {}, "meta": {}, "comment": null, "tags": [], "created_on": "2025-10-24T01:05:58.891065Z", "modified_on": "2025-10-24T01:05:58.891065Z" }
+  ],
+  "result_info": { "page": 1, "per_page": 3, "count": 3, "total_count": 5, "total_pages": 2 },
+  "success": true,
+  "errors": [],
+  "messages": []
+}
