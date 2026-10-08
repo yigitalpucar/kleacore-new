@@ -151,7 +151,12 @@ export function AdminDnsCard({ domain, zone, records, provider, hasDnsModule }: 
                     <p className="flex flex-wrap items-center gap-2 font-mono text-[13px]">
                       {relativeRecordName(record.name, domain.name)}
                       {record.proxied ? <StatusBadge tone="info" label="Proxy" /> : null}
-                      {record.managedBy ? <StatusBadge tone="neutral" label={`Otomatik · ${record.managedBy}`} /> : null}
+                      {record.managedBy ? (
+                        // Short badge (a service id doesn't fit at 390px); the source is in the tooltip.
+                        <span title={record.managedBy}>
+                          <StatusBadge tone="neutral" label="Otomatik" />
+                        </span>
+                      ) : null}
                     </p>
                     <p className="break-all font-mono text-xs text-muted-foreground">{record.value}</p>
                   </div>

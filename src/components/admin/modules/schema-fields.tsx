@@ -77,7 +77,7 @@ export function SchemaFields({
               onValueChange={(next) => set(field.name, next === EMPTY_SELECT ? "" : next)}
               disabled={disabled}
             >
-              <SelectTrigger id={id} className={control} aria-invalid={Boolean(errors[field.name])}>
+              <SelectTrigger id={id} className={`${control} [&>span]:truncate`} aria-invalid={Boolean(errors[field.name])}>
                 <SelectValue placeholder="Seçin" />
               </SelectTrigger>
               <SelectContent>
@@ -134,7 +134,8 @@ export function SchemaFields({
             required={field.required}
             hint={field.type === "secret" ? (field.hint ?? "Kayıtlı değer gizlidir; değiştirmek için yeni değeri yazın, boş bırakırsanız korunur.") : field.hint}
             error={errors[field.name]}
-            className={wide ? "md:col-span-2" : undefined}
+            // min-w-0: a long option label (e.g. WHM package prefix) must not widen the grid on phones.
+            className={wide ? "min-w-0 md:col-span-2" : "min-w-0"}
           >
             {input}
           </FormField>
