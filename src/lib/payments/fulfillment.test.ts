@@ -12,11 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/affiliate", () => ({ applyAffiliateCommission: mocks.applyAffiliateCommission }));
-vi.mock("@/lib/notifications/email", () => ({
-  loadCustomerRecipient: vi.fn(),
-  sendPaymentReceivedEmail: vi.fn(),
-}));
-vi.mock("@/lib/notifications/sms", () => ({ sendSmsNotification: vi.fn() }));
+vi.mock("@/lib/notifications/send", () => ({ sendNotification: vi.fn() }));
 vi.mock("@/lib/payments/follow-ups", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/payments/follow-ups")>()),
   queuePaymentFollowUps: mocks.queuePaymentFollowUps,

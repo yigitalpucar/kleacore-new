@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   queueProvisioningAttempt: vi.fn(),
   createRemoteService: vi.fn(),
   provisionSslCertificate: vi.fn(),
+  requiresManualProvisioning: vi.fn(),
+  openManualProvisioningTask: vi.fn(),
 }));
 
 vi.mock("@/lib/integrations/registrar", () => ({
@@ -13,6 +15,10 @@ vi.mock("@/lib/integrations/registrar", () => ({
   transferDomainWithRegistrar: mocks.transferDomainWithRegistrar,
 }));
 vi.mock("@/lib/integrations/provisioning-provider", () => ({ createRemoteService: mocks.createRemoteService }));
+vi.mock("@/lib/provisioning/manual", () => ({
+  requiresManualProvisioning: mocks.requiresManualProvisioning,
+  openManualProvisioningTask: mocks.openManualProvisioningTask,
+}));
 vi.mock("@/lib/integrations/ssl", () => ({
   mapProductSubTypeToSslType: vi.fn(() => "DV"),
   provisionSslCertificate: mocks.provisionSslCertificate,
@@ -69,6 +75,8 @@ describe("prepareOrderProvisioning (inside the payment transaction)", () => {
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.queueProvisioningAttempt.mockResolvedValue({ queued: true, deduplicated: false });
+    mocks.requiresManualProvisioning.mockResolvedValue(false);
+    mocks.openManualProvisioningTask.mockResolvedValue({ id: "task-1" });
   });
 
   it("stores a paid domain as PENDING and queues the registrar call instead of making it", async () => {
@@ -121,6 +129,28 @@ describe("prepareOrderProvisioning (inside the payment transaction)", () => {
     expect(result).toMatchObject({ type: "service", identifier: "svc-1", status: "QUEUED" });
     expect(tx.service.create.mock.calls[0][0].data).toMatchObject({ domain: "ornek.com", status: "ACTIVE" });
     expect(tx.provisioningJob.upsert.mock.calls[0][0].create).toMatchObject({ serviceId: "svc-1" });
+    expect(mocks.createRemoteService).not.toHaveBeenCalled();
+  });
+
+  it("opens a MANUAL admin task and a PENDING service when the product has no automation", async () => {
+    mocks.requiresManualProvisioning.mockResolvedValue(true);
+    const tx = createTx(order("hosting", { type: "vds" }, { product: { name: "VDS Pro", sku: "VDS-1", subType: null, category: { slug: "vds" } } }));
+
+    const result = await prepareOrderProvisioning(asTx(tx), "ord-1");
+
+    expect(result).toEqual({ type: "service", identifier: "svc-1", status: "MANUAL", taskId: "task-1" });
+    expect(tx.service.create.mock.calls[0][0].data).toMatchObject({
+      status: "PENDING",
+      nextDueDate: null,
+      expiresAt: null,
+    });
+    expect(mocks.openManualProvisioningTask).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ orderId: "ord-1", serviceId: "svc-1", productName: "VDS Pro", customerName: "Ayşe Yılmaz" })
+    );
+    // No PROVISION job and nothing queued: the task waits for an admin.
+    expect(tx.provisioningJob.upsert).not.toHaveBeenCalled();
+    expect(mocks.queueProvisioningAttempt).not.toHaveBeenCalled();
     expect(mocks.createRemoteService).not.toHaveBeenCalled();
   });
 

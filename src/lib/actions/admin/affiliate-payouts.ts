@@ -11,13 +11,9 @@ import {
   loadCustomerRecipient,
   sendAffiliatePayoutCompletedEmail,
 } from "@/lib/notifications/email";
-import {
-  dispatchSmsNotification,
-  sendSmsNotification,
-} from "@/lib/notifications/sms";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
-import { toFixed2, toNumber } from "@/lib/money";
+import { toNumber } from "@/lib/money";
 
 function revalidateAffiliatePayoutPaths() {
   revalidatePath("/yonetim/affiliate-odemeleri");
@@ -77,14 +73,6 @@ export async function completePayout(paymentId: string, notes?: string) {
         paymentId: payment.id,
         amount: toNumber(payment.amount),
         paidAt: payment.paidAt ?? new Date(),
-      });
-    });
-
-    dispatchSmsNotification(async () => {
-      await sendSmsNotification({
-        customerId: payment.affiliateId,
-        template: "custom",
-        message: `Satış ortaklığı ödemeniz tamamlandı: ${toFixed2(payment.amount)} TL`,
       });
     });
 

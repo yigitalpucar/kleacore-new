@@ -107,20 +107,16 @@ export async function runPaymentSettledJob(payload: {
   const { db } = await import("@/lib/db");
   const invoice = await db.invoice.findUnique({
     where: { id: payload.invoiceId },
-    select: { customerId: true },
+    select: { id: true },
   });
   if (!invoice) {
     return { skipped: "INVOICE_NOT_FOUND" };
   }
 
   // Notification first: it is the only step that can fail (enqueue) and a
-  // retry must not re-send the webhooks below.
-  const { sendNotification } = await import("@/lib/notifications/send");
-  await sendNotification({
-    userId: invoice.customerId,
-    template: "payment_received",
-    data: { invoiceId: payload.invoiceId },
-  });
+  // retry must not re-send the webhooks below. Deduped per invoice.
+  const { queuePaymentReceivedNotice } = await import("@/lib/payments/fulfillment");
+  await queuePaymentReceivedNotice(payload.invoiceId);
 
   const { dispatchEvent } = await import("@/lib/events/dispatcher");
   for (const event of payload.events as unknown as KleacoreEvent[]) {

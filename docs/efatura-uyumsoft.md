@@ -16,7 +16,7 @@
    (Kalemlerdeki `totalPrice` bazı akışlarda KDV dahil, bazılarında hariç; bu yüzden yalnızca dağıtım ağırlığı olarak kullanılır.)
 5. Uyumsoft `SendInvoice` → numara (`BOX2026000001884` gibi) ve durum `SENT` kaydedilir; UBL XML `ublPayload.xml`'de saklanır.
 6. Durum takibi: `syncEInvoiceStatuses({ limit })` `SENT` kayıtları toplu `QueryOutboxInvoiceStatus` ile sorgular. Cron/kuyruk dostu;
-   şimdilik `/yonetim/efatura` → "Durumları güncelle" ile tetikleniyor. **Kuyruk ajanı bunu periyodik işe bağlamalı (ör. 15 dk).**
+   15 dakikada bir `/api/cron/efatura-status` (advisory lock + `cron_runs`, bkz. `docs/ops-cron.md`) çalıştırır; `/yonetim/efatura` → "Durumları güncelle" elle tetikler.
 7. PDF: `GET /api/faturalar/[id]/e-belge` (müşteri kendi faturası / admin) entegratörden canlı çeker. Müşteri fatura sayfasında "Resmi faturayı indir".
 8. e-Arşiv iptali: admin listesinde iptal (neden zorunlu, yerelde `cancelReason`). Uyumsoft yalnızca işlenmiş (`Approved`) belgeyi iptal eder.
 

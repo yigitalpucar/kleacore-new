@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
+import { sendNotification } from "@/lib/notifications/send";
 
 function revalidateCancellationPaths(serviceId: string, orderId?: string | null) {
   revalidatePath(`/musteri/panel/hizmetlerim/${serviceId}`);
@@ -32,6 +33,8 @@ export async function submitCancellationRequest(serviceId: string, reason: strin
         id: true,
         customerId: true,
         status: true,
+        label: true,
+        domain: true,
         product: { select: { name: true } },
       },
     });
@@ -96,6 +99,18 @@ export async function submitCancellationRequest(serviceId: string, reason: strin
           },
         });
       }
+
+      await sendNotification({
+        userId: session.user.id,
+        template: "service.cancellation-received",
+        data: {
+          serviceId,
+          serviceLabel: service.label || service.domain || service.product.name,
+          reason: trimmedReason,
+        },
+        dedupeKey: `cancellation.received:${created.id}`,
+        tx,
+      });
 
       return created;
     });

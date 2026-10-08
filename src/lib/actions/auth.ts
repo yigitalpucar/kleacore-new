@@ -15,7 +15,7 @@ import {
   passwordResetSchema,
   registerSchema,
 } from "@/lib/validations/auth";
-import { sendTransactionalEmail } from "@/lib/mail";
+import { sendNotification } from "@/lib/notifications/send";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
 import { compare, hash } from "bcryptjs";
 import { AuthError } from "next-auth";
@@ -37,29 +37,14 @@ function buildPasswordResetUrl(token: string) {
   return `${baseUrl}/musteri/sifre-sifirla?token=${encodeURIComponent(token)}`;
 }
 
-async function sendPasswordResetEmail(email: string, resetUrl: string) {
-  await sendTransactionalEmail({
-    to: email,
-    subject: "KLEACORE - Şifre Sıfırlama Talebi",
-    text: [
-      "Şifre sıfırlama talebi aldık.",
-      `Bağlantı: ${resetUrl}`,
-      `Bu bağlantı ${PASSWORD_RESET_TTL_MINUTES} dakika boyunca geçerlidir.`,
-      "Eğer bu işlemi siz başlatmadıysanız bu e-postayı yok sayabilirsiniz.",
-    ].join("\n"),
-    html: `
-        <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
-          <h2>Şifre Sıfırlama Talebi</h2>
-          <p>Hesabınız için şifre sıfırlama isteği aldık.</p>
-          <p>
-            <a href="${resetUrl}" style="display:inline-block;padding:10px 14px;background:#111827;color:#fff;text-decoration:none;border-radius:8px">
-              Şifremi Sıfırla
-            </a>
-          </p>
-          <p>Bu bağlantı ${PASSWORD_RESET_TTL_MINUTES} dakika boyunca geçerlidir.</p>
-          <p>Eğer bu işlemi siz başlatmadıysanız bu e-postayı yok sayabilirsiniz.</p>
-        </div>
-      `,
+async function sendPasswordResetEmail(userId: string, resetUrl: string) {
+  // Queued via the notification system; the link is encrypted in the queue
+  // payload and NotificationLog (sensitive field), never logged in clear.
+  await sendNotification({
+    userId,
+    template: "auth.password-reset",
+    data: { resetUrl, ttlMinutes: PASSWORD_RESET_TTL_MINUTES },
+    channel: "EMAIL",
   });
 }
 
@@ -247,7 +232,7 @@ export async function requestPasswordReset(formData: FormData) {
     const resetUrl = buildPasswordResetUrl(rawToken);
 
     try {
-      await sendPasswordResetEmail(user.email, resetUrl);
+      await sendPasswordResetEmail(user.id, resetUrl);
     } catch (error) {
       console.error("[PasswordReset] email send error:", error);
     }
@@ -323,6 +308,12 @@ export async function resetPasswordAction(formData: FormData) {
         },
       }),
     ]);
+
+    await sendNotification({
+      userId: resetToken.userId,
+      template: "auth.password-changed",
+      data: { changedAt: new Date(), method: "reset" },
+    });
 
     return { success: true };
   } catch (error) {

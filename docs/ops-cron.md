@@ -30,7 +30,19 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 | KLEACORE: Gecikmiş Faturalar | `0 5 * * *` | `/app/cron-run.sh overdue-invoices` |
 | KLEACORE: Hizmet Askıya Alma | `0 6 * * *` | `/app/cron-run.sh suspend-services` |
 | KLEACORE: Provisioning Retry | `*/15 * * * *` | `/app/cron-run.sh retry-provisioning` |
+| KLEACORE: E-Fatura Durumları | `*/15 * * * *` | `/app/cron-run.sh efatura-status` |
+| KLEACORE: Bildirimler | `20 8-21 * * *` | `/app/cron-run.sh notifications` |
 | KLEACORE: İş Kuyruğu | `* * * * *` | `/app/cron-run.sh jobs-drain` |
+
+- `efatura-status`: `syncEInvoiceStatuses({ limit: 100 })` — Uyumsoft'ta `SENT`
+  durumundaki belgelerin durumunu sorgular (en eski kontrol edilen önce). e-Fatura
+  kapalıyken kayıt olmadığı için hemen biter.
+- `notifications`: saat başı (08–21) "fatura oluştu" (yenileme / elle oluşturulan
+  faturalar), "vade -3 gün" hatırlatması ve gözden kaçan "gecikti" bildirimleri;
+  hepsi fatura × tür başına **bir kez** (`NotificationLog.dedupeKey`). Ayrıca kuyruğa
+  girememiş (`QUEUED`, >10 dk) bildirimleri yeniden kuyruğa koyar.
+  "Gecikti" bildirimi asıl olarak `overdue-invoices` (05:00) içinde, fatura
+  `OVERDUE` olduğu anda gider.
 
 Aynı görev aynı anda iki kez çalışmaz (Postgres advisory lock); ikinci çağrı
 `{"status":"locked"}` döner. Çalıştırmalar `cron_runs` tablosuna yazılır ve

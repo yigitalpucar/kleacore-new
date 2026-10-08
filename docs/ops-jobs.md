@@ -115,7 +115,7 @@ yerel kayıtlar (alan adı `PENDING`, SSL sertifikası `PENDING`, hizmet satır�
 |---|---|---|
 | `provisioning.run` | Registrar kaydı/transferi, SSL siparişi, WHM/VPS oluşturma, paket değişikliği (`PLAN_CHANGE`), askı kaldırma | 5 deneme, backoff; sonra `FAILED` |
 | `efatura.issue` | Uyumsoft/Paraşüt e-fatura/e-arşiv kesimi | 6 deneme; fatura verisi hatası (`EFATURA_…:`) tekrar denenmez, `/yonetim/e-fatura`'da görünür |
-| `payment.settled` | Webhook/aktivite olayları + `notification.send` ("ödeme alındı") | 4 deneme |
+| `payment.settled` | Webhook/aktivite olayları + "ödeme alındı" bildirimi (`billing.payment-received`, fatura başına tek gönderim) | 4 deneme |
 
 Transaction içinde **hiçbir uzak çağrı yapılmaz**; bu yüzden registrar/WHM/SSL
 hatası artık kart çekimini geri almaz. Sipariş verisi bozuksa (ör. alan adı
@@ -126,6 +126,54 @@ bir SAVEPOINT'e geri alınır, ödeme kalır; sipariş `PROCESSING`, iş
 `FAILED` (`FULFILMENT_ERROR: …`) olur. Kuyruk o an erişilemezse ödeme yine
 kaydedilir; takip işleri commit'ten sonra yeniden kuyruğa eklenir, olmazsa aynı
 istekte çalıştırılır.
+
+Otomasyonu olmayan ürünlerde (`manual_provisioning_categories`, ör. VDS) aynı
+transaction `provisioning.run` yerine `MANUAL` görev açar (aşağıya bakın); yönetim
+bildirimi `notification_logs` + kuyruk üzerinden commit ile birlikte gider.
+
+## Bildirimler (`notification.send`)
+
+Kod: `src/lib/notifications/` — yönetim: **/yonetim/bildirimler** (kayıtlar, filtre,
+"Yeniden gönder"), **/yonetim/bildirimler/sablonlar** (örnek veriyle önizleme).
+
+```ts
+import { sendNotification } from "@/lib/notifications/send";
+await sendNotification({
+  userId,                          // alıcı hesap (e-posta/telefon/ad buradan)
+  template: "domain.expiry-notice", // src/lib/notifications/templates/*
+  data: { domain, daysLeft, renewUrl },
+  channel: "EMAIL",                // isteğe bağlı; varsayılan e-posta (+ SMS açıksa)
+  dedupeKey: `domain.expiry:${id}:${daysLeft}`, // isteğe bağlı: anahtar×kanal başına tek gönderim
+  tx,                               // isteğe bağlı: iş verisiyle aynı transaction
+});
+```
+
+- Her kanal için bir `notification_logs` satırı (`QUEUED`) yazılır ve `notification.send`
+  işi kuyruğa girer; iş şablonu işler, SMTP (Ayarlar → E-posta, `smtp_*`) veya SMS
+  sağlayıcısıyla gönderir: `SENT` (sağlayıcı ileti no), `SKIPPED` (SMTP/SMS kapalı) ya da
+  5 denemeden sonra `FAILED`. `sendNotification` hiçbir zaman hata fırlatmaz.
+- Şablonlar tipli TS modülleridir (zod şeması + Türkçe konu + ortak HTML düzeni + düz
+  metin + isteğe bağlı SMS). Logo satır içi CID eki; dış görsel/izleme yok.
+- Gizli alanlar (`sensitive`: ilk şifre, doğrulama/sıfırlama bağlantısı) kuyruk
+  yükünde ve log'da şifreli (`enc:v1:`), müşteri gelen kutusu kopyasında ve yönetim
+  önizlemesinde "•••••• (gizli)" olarak durur; log `redacted=true`.
+- SMS yalnızca `sms_notifications=true` + yapılandırılmış sağlayıcı + telefon varsa yazılır.
+- Yönetim bildirimleri: `admin_notification_email` (yoksa `support_email`,
+  `company_email`), SMS için `admin_notification_phone`.
+- Yerelde: `docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit`, Ayarlar'da
+  `smtp_server=localhost`, `smtp_port=1025` (kullanıcı/şifre boş olabilir), sonra
+  `pnpm jobs:worker` ya da `/api/cron/jobs-drain`; e-postalar http://localhost:8025.
+
+## Manuel kurulum (ProvisioningJob `kind = MANUAL`)
+
+Otomasyon modülü olmayan ürünlerin ödemesi alındığında (`manual_provisioning_categories`
+— varsayılan `vds` —, WHM/Virtualizor yapılandırılmamış kategoriler, `datacenter` vb.)
+hizmet `PENDING` ("Kurulum sürüyor") açılır, `MANUAL` görev + yönetime e-posta/SMS +
+panel bildirimi oluşur. **/yonetim/kurulumlar** → görev → IP, sunucu adı, kullanıcı,
+ilk şifre (ya da "ayrıca iletildi"), notlar → **Aktifleştir**: hizmet `ACTIVE`, dönem
+bugünden başlar, şifre şifreli saklanır, müşteriye "hizmet aktif" gider. SLA hedefi
+`manual_provisioning_sla_hours` (24), müşteriye gösterilen süre metni
+`manual_provisioning_eta_text`. MANUAL görevler `provisioning.run` kuyruğuna girmez.
 
 ## Cron kilidi ve çalışma kaydı
 

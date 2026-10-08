@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { getSettingValue } from "@/lib/integrations/settings";
 import { suspendRemoteService } from "@/lib/integrations/provisioning-provider";
 import { NON_PAYMENT_SUSPEND_REASON } from "@/lib/payments/service-lifecycle";
+import { sendNotification } from "@/lib/notifications/send";
 import type { CronJobResult } from "./types";
 
 export const SUSPEND_GRACE_DAYS_SETTING = "suspend_grace_days";
@@ -92,6 +93,16 @@ export async function suspendOverdueServices(now = new Date()): Promise<CronJobR
         `[Cron] Hizmet ${service.id} uzak sunucuda askıya alınamadı: ${remote.error ?? "bilinmeyen hata"}`
       );
     }
+    await sendNotification({
+      userId: service.customerId,
+      template: "service.suspended",
+      data: {
+        serviceId: service.id,
+        serviceLabel: service.label || service.domain || service.product.name,
+        reason: NON_PAYMENT_SUSPEND_REASON,
+        suspendedAt: now,
+      },
+    });
     suspendedIds.push(service.id);
   }
 

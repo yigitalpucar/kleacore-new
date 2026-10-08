@@ -98,23 +98,25 @@ export const paymentSettledJob = defineJob({
 export const NOTIFICATION_SEND_JOB = "notification.send";
 
 /**
- * STUB (fulfil branch): agreed entry point of the notification system; the
- * notify branch replaces this definition with templates + NotificationLog.
- * Until then only "payment_received" is delivered (existing e-mail + SMS).
+ * Delivers one NotificationLog row (one channel, one recipient) written by
+ * sendNotification(). The row is the admin-visible record (/yonetim/bildirimler);
+ * 5 attempts, backoff ≈ 1, 2, 4, 8 min (SMTP hiccups, provider timeouts).
  */
 export const notificationSendJob = defineJob({
   name: NOTIFICATION_SEND_JOB,
-  label: "Bildirim gönderimi",
-  schema: z.object({
-    userId: z.string().min(1),
-    template: z.string().min(1),
-    data: z.record(z.string(), z.unknown()).default({}),
-    channel: z.enum(["email", "sms", "all"]).optional(),
-  }),
-  queue: { policy: "standard", retryLimit: 3, retryDelay: 60, retryBackoff: true },
-  handler: async (payload) => {
-    const { deliverNotificationStub } = await import("@/lib/notifications/send");
-    return deliverNotificationStub(payload);
+  label: "Bildirim gönderimi (e-posta / SMS)",
+  schema: z.object({ notificationLogId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 4,
+    retryDelay: 60,
+    retryBackoff: true,
+    retryDelayMax: 60 * 60,
+    expireInSeconds: 2 * 60,
+  },
+  handler: async ({ notificationLogId }, context) => {
+    const { deliverNotificationLog } = await import("@/lib/notifications/deliver");
+    return deliverNotificationLog(notificationLogId, context);
   },
 });
 

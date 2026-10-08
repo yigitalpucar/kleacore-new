@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
+import { sendNotification } from "@/lib/notifications/send";
 
 function revalidateCancellationPaths(request: {
   id: string;
@@ -29,7 +30,7 @@ export async function approveCancellationRequest(requestId: string) {
       where: { id: requestId },
       include: {
         order: true,
-        service: true,
+        service: { include: { product: { select: { name: true } } } },
       },
     });
 
@@ -81,6 +82,20 @@ export async function approveCancellationRequest(requestId: string) {
             description: `İptal talebi onaylandı: ${request.reason}`,
             performedBy: session.user.id,
           },
+        });
+      }
+
+      if (request.service) {
+        await sendNotification({
+          userId: request.customerId,
+          template: "service.cancellation-approved",
+          data: {
+            serviceId: request.service.id,
+            serviceLabel: request.service.label || request.service.domain || request.service.product.name,
+            cancelledAt: now,
+          },
+          dedupeKey: `cancellation.approved:${request.id}`,
+          tx,
         });
       }
     });

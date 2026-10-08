@@ -13,6 +13,7 @@ import {
   loadCustomerRecipient,
   sendServiceSuspendedEmail,
 } from "@/lib/notifications/email";
+import { sendNotification } from "@/lib/notifications/send";
 import { logActivity } from "@/lib/activity-log";
 import { productPeriodPricing } from "@/lib/billing/period-price";
 import { revalidatePath } from "next/cache";
@@ -226,6 +227,15 @@ export async function activateService(id: string) {
       ...updatedService,
       product: service.product,
       customer: service.customer,
+    });
+
+    await sendNotification({
+      userId: service.customerId,
+      template: "service.unsuspended",
+      data: {
+        serviceId: service.id,
+        serviceLabel: service.label || service.domain || service.product.name,
+      },
     });
 
     revalidatePath("/yonetim/hizmetler");

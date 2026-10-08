@@ -5,11 +5,7 @@ import type {
   KleacoreEvent,
   PaymentCompletedContext,
 } from "@/lib/events/types";
-import {
-  loadCustomerRecipient,
-  sendPaymentReceivedEmail,
-} from "@/lib/notifications/email";
-import { sendSmsNotification } from "@/lib/notifications/sms";
+import { sendNotification } from "@/lib/notifications/send";
 import { applyServiceRenewalFromOrder } from "@/lib/payments/renewal-fulfillment";
 import { applyPlanChangeFromOrder } from "@/lib/services/plan-change";
 import { unsuspendServiceIfNeeded } from "@/lib/payments/service-lifecycle";
@@ -24,7 +20,7 @@ import {
   type PaymentFollowUps,
 } from "@/lib/payments/follow-ups";
 import { createLogger } from "@/lib/logger";
-import { toNumber, type MoneyInput } from "@/lib/money";
+import { max as maxMoney, toNumber, type MoneyInput } from "@/lib/money";
 
 const log = createLogger("payments.fulfillment");
 
@@ -241,6 +237,9 @@ function describeProvisioning(provisioned: PreparedProvisioning) {
   }
   if (provisioned.status === "EXISTING") {
     return "Ödeme tamamlandı";
+  }
+  if (provisioned.status === "MANUAL") {
+    return "Ödeme tamamlandı; manuel kurulum görevi açıldı";
   }
   return provisioned.type === "domain"
     ? "Ödeme tamamlandı; alan adı kaydı kuyruğa alındı"
@@ -488,45 +487,49 @@ export async function finalizeFulfilledInvoices(results: FulfillInvoicePaymentRe
   );
 }
 
-export async function notifyInvoicePaymentReceived(invoiceId: string) {
-  try {
-    const invoice = await db.invoice.findUnique({
-      where: { id: invoiceId },
-      select: {
-        id: true,
-        invoiceNumber: true,
-        customerId: true,
-        totalAmount: true,
-        paidAmount: true,
-        paidAt: true,
-        updatedAt: true,
-      },
-    });
+/**
+ * Queues "ödeme alındı" (e-posta + SMS when configured) for a PAID invoice.
+ * Idempotent per invoice through the NotificationLog dedupe key, so the
+ * payment.settled job, its retries and the inline fallback send it once.
+ * Throws when the notification could not be queued (the job retries).
+ */
+export async function queuePaymentReceivedNotice(invoiceId: string) {
+  const invoice = await db.invoice.findUnique({
+    where: { id: invoiceId },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      customerId: true,
+      status: true,
+      totalAmount: true,
+      paidAmount: true,
+      paidAt: true,
+      updatedAt: true,
+    },
+  });
 
-    if (!invoice) {
-      return;
-    }
+  if (!invoice || invoice.status !== "PAID") {
+    return { skipped: true as const };
+  }
 
-    const customer = await loadCustomerRecipient(invoice.customerId);
-    if (!customer) {
-      return;
-    }
-
-    const paidAmount = Math.max(Number(invoice.paidAmount), Number(invoice.totalAmount));
-
-    await sendPaymentReceivedEmail({
-      customer,
+  await sendNotification({
+    userId: invoice.customerId,
+    template: "billing.payment-received",
+    data: {
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
-      paidAmount,
+      paidAmount: toNumber(maxMoney(invoice.paidAmount, invoice.totalAmount)),
       paidAt: invoice.paidAt ?? invoice.updatedAt,
-    });
+    },
+    dedupeKey: `payment.received:${invoice.id}`,
+  });
+  return { skipped: false as const };
+}
 
-    await sendSmsNotification({
-      customerId: invoice.customerId,
-      message: `Faturanız ödendi: ${invoice.invoiceNumber}`,
-      template: "payment_received",
-    });
+/** Same as `queuePaymentReceivedNotice`, never throws (inline fallbacks). */
+export async function notifyInvoicePaymentReceived(invoiceId: string) {
+  try {
+    await queuePaymentReceivedNotice(invoiceId);
   } catch (error) {
     console.error("[Fulfillment] Ödeme bildirimi gönderilemedi:", error);
   }

@@ -35,6 +35,9 @@ export const JOBS = [
   { name: "KLEACORE: Gecikmiş Faturalar", cron: "0 5 * * *", job: "overdue-invoices" },
   { name: "KLEACORE: Hizmet Askıya Alma", cron: "0 6 * * *", job: "suspend-services" },
   { name: "KLEACORE: Provisioning Retry", cron: "*/15 * * * *", job: "retry-provisioning" },
+  { name: "KLEACORE: E-Fatura Durumları", cron: "*/15 * * * *", job: "efatura-status" },
+  // Invoice created / due-3 / overdue notices + notification outbox reconcile (daytime only).
+  { name: "KLEACORE: Bildirimler", cron: "20 8-21 * * *", job: "notifications" },
   // Fallback queue worker (docs/ops-jobs.md). Keep it even with a worker service.
   { name: "KLEACORE: İş Kuyruğu", cron: "* * * * *", job: "jobs-drain" },
 ];

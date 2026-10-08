@@ -6,6 +6,7 @@ import {
 } from "@/lib/integrations/registrar";
 import { mapProductSubTypeToSslType } from "@/lib/integrations/ssl";
 import { queueProvisioningAttempt } from "@/lib/provisioning/queue";
+import { openManualProvisioningTask, requiresManualProvisioning } from "@/lib/provisioning/manual";
 import { decryptSecret } from "@/lib/secrets/crypto";
 import { checkDomainName } from "@/lib/validations/domain-name";
 
@@ -211,12 +212,14 @@ async function recordProvisioningNeedsAction(
 export type PreparedProvisioning =
   | { type: "domain" | "ssl" | "service"; identifier: string; status: "QUEUED"; jobId: string }
   | { type: "service"; identifier: string; status: "EXISTING" }
+  | { type: "service"; identifier: string; status: "MANUAL"; taskId: string }
   | { type: "domain" | "ssl"; identifier: null; status: "NEEDS_ACTION"; jobId: string; error: string };
 
 /**
  * Local half of provisioning a paid order, run inside the payment
  * transaction: creates the customer's records (domain PENDING, SSL
- * certificate PENDING, service ACTIVE) and a PROVISION job. Never calls a
+ * certificate PENDING, service ACTIVE) and a PROVISION job — or, for a
+ * product without automation, a PENDING service and a MANUAL admin task. Never calls a
  * registrar, SSL vendor or WHM, and never throws for bad order data — the
  * remote half runs in the provisioning.run job after commit
  * (retry-queue.ts → executeProvisioningJob), with retries.
@@ -229,6 +232,7 @@ export async function prepareOrderProvisioning(
     where: { id: orderId },
     include: {
       product: { include: { category: true } },
+      customer: true,
       items: true,
     },
   });
@@ -269,12 +273,38 @@ export async function prepareOrderProvisioning(
     return { type: "service", identifier: order.serviceId, status: "EXISTING" };
   }
 
-  const service = await createServiceForOrder(tx, order, resolved.domain);
+  // No automation module (VDS in Faz 1, unconfigured WHM/Virtualizor,
+  // datacenter): the service waits as PENDING ("Kurulum sürüyor") and an
+  // admin task (MANUAL job, never queued) is opened instead of remote
+  // provisioning. Its billing period starts on activation.
+  const manual = await requiresManualProvisioning(slug);
+  const service = await createServiceForOrder(tx, order, resolved.domain, { manual });
+
+  if (manual) {
+    const task = await openManualProvisioningTask(tx, {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      serviceId: service.id,
+      productName: order.product.name,
+      customerName:
+        order.customer.companyName ||
+        `${order.customer.name} ${order.customer.surname}`.trim() ||
+        order.customer.email,
+      customerEmail: order.customer.email,
+      domain: resolved.domain,
+    });
+    return { type: "service", identifier: service.id, status: "MANUAL", taskId: task.id };
+  }
+
   const job = await scheduleProvisioning(tx, order.id, service.id);
   return { type: "service", identifier: service.id, status: "QUEUED", jobId: job.id };
 }
 
-/** The customer's service row for a paid hosting/server order (local only). */
+/**
+ * The customer's service row for a paid hosting/server order (local only).
+ * A manually provisioned service starts PENDING without dates; activation
+ * (/yonetim/kurulumlar) starts its billing period.
+ */
 export async function createServiceForOrder(
   client: DbClient,
   order: {
@@ -286,8 +316,10 @@ export async function createServiceForOrder(
     basePrice: Prisma.Decimal;
     product: { name: string };
   },
-  domain: string | null
+  domain: string | null,
+  options: { manual?: boolean } = {}
 ) {
+  const manual = options.manual ?? false;
   const expiresAt = addMonths(new Date(), billingMonths[order.billingPeriod] ?? 1);
 
   const service = await client.service.create({
@@ -302,9 +334,9 @@ export async function createServiceForOrder(
       // added again by every renewal (cron + renewService), so storing the
       // tax-inclusive total here would charge KDV twice on renewal.
       amount: order.basePrice,
-      nextDueDate: expiresAt,
-      expiresAt,
-      status: "ACTIVE",
+      nextDueDate: manual ? null : expiresAt,
+      expiresAt: manual ? null : expiresAt,
+      status: manual ? "PENDING" : "ACTIVE",
     },
   });
 

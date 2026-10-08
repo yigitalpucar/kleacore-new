@@ -14,16 +14,9 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-vi.mock("@/lib/integrations/settings", () => ({
-  getSettingValue: vi.fn().mockResolvedValue("false"),
-  isEnabled: (value: string | undefined | null) =>
-    ["1", "true", "yes", "on", "active"].includes((value ?? "").toLowerCase()),
-}));
+const { notifyOverdueInvoices } = vi.hoisted(() => ({ notifyOverdueInvoices: vi.fn() }));
 
-vi.mock("@/lib/notifications/sms", () => ({
-  dispatchSmsNotification: vi.fn(),
-  sendSmsNotification: vi.fn(),
-}));
+vi.mock("@/lib/notifications/billing-notices", () => ({ notifyOverdueInvoices }));
 
 import { markOverdueInvoices } from "./mark-overdue-invoices";
 
@@ -31,6 +24,7 @@ describe("markOverdueInvoices", () => {
   beforeEach(() => {
     findMany.mockReset();
     updateMany.mockReset();
+    notifyOverdueInvoices.mockReset();
     updateMany.mockResolvedValue({ count: 0 });
   });
 
@@ -48,6 +42,7 @@ describe("markOverdueInvoices", () => {
       select: { id: true },
     });
     expect(updateMany).not.toHaveBeenCalled();
+    expect(notifyOverdueInvoices).not.toHaveBeenCalled();
   });
 
   it("marks pending invoices past due date as overdue", async () => {
@@ -63,5 +58,6 @@ describe("markOverdueInvoices", () => {
       where: { id: { in: ["inv-1", "inv-2"] } },
       data: { status: "OVERDUE" },
     });
+    expect(notifyOverdueInvoices).toHaveBeenCalledWith(["inv-1", "inv-2"], expect.any(Date));
   });
 });

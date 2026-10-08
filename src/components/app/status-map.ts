@@ -20,6 +20,7 @@ export type StatusKind =
   | "payment"
   | "backup"
   | "provisioning"
+  | "notification"
   | "cronRun"
   | "queueJob"
   | "cancellation"
@@ -40,6 +41,7 @@ type Entry = { label: string; tone: StatusTone };
 type Map = Record<string, Entry>;
 
 const service: Map = {
+  PENDING: { label: "Kurulum sürüyor", tone: "info" },
   ACTIVE: { label: "Aktif", tone: "success" },
   SUSPENDED: { label: "Askıda", tone: "warning" },
   CANCELLED: { label: "İptal edildi", tone: "muted" },
@@ -116,6 +118,13 @@ const provisioning: Map = {
   PROCESSING: { label: "İşleniyor", tone: "info" },
   COMPLETED: { label: "Tamamlandı", tone: "success" },
   FAILED: { label: "Başarısız", tone: "danger" },
+};
+
+const notification: Map = {
+  QUEUED: { label: "Sırada", tone: "info" },
+  SENT: { label: "Gönderildi", tone: "success" },
+  FAILED: { label: "Başarısız", tone: "danger" },
+  SKIPPED: { label: "Atlandı", tone: "muted" },
 };
 
 const cronRun: Map = {
@@ -218,6 +227,7 @@ const MAPS: Record<StatusKind, Map> = {
   payment,
   backup,
   provisioning,
+  notification,
   cronRun,
   queueJob,
   cancellation,

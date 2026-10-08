@@ -27,7 +27,9 @@ describe("Dokploy cron schedules", () => {
   it("covers every cron route", () => {
     expect((JOBS as Job[]).map((j) => j.job).sort()).toEqual([
       "daily-billing",
+      "efatura-status",
       "jobs-drain",
+      "notifications",
       "overdue-invoices",
       "retry-provisioning",
       "run-backups",
