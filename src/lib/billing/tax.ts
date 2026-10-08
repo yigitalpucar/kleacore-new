@@ -1,4 +1,7 @@
 import { db } from "@/lib/db";
+import { add, money, percent, roundHalfUp, toNumber, type MoneyInput } from "@/lib/money";
+
+export { calculateInvoiceTotals } from "./invoice-totals";
 
 const DEFAULT_TAX_RATE = 20;
 const TAX_RATE_CACHE_TTL_MS = 60_000;
@@ -6,21 +9,23 @@ const TAX_RATE_CACHE_TTL_MS = 60_000;
 let cachedTaxRate: number | null = null;
 let cachedTaxRateExpiresAt = 0;
 
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
-}
-
-export function calculateTax(subtotal: number, taxRate?: number) {
+/**
+ * KDV for a VAT-exclusive subtotal: subtotal and tax are rounded half-up to
+ * kuruş with Decimal arithmetic, total = subtotal + tax. Returns numbers so
+ * existing callers keep working; they are exact kuruş values and can be
+ * written to the numeric(14,2) columns as-is.
+ */
+export function calculateTax(subtotal: MoneyInput, taxRate?: MoneyInput) {
   const rate = taxRate ?? DEFAULT_TAX_RATE;
-  const normalizedSubtotal = roundMoney(subtotal);
-  const taxAmount = roundMoney(normalizedSubtotal * (rate / 100));
-  const totalAmount = roundMoney(normalizedSubtotal + taxAmount);
+  const normalizedSubtotal = roundHalfUp(subtotal);
+  const taxAmount = percent(normalizedSubtotal, rate);
+  const totalAmount = add(normalizedSubtotal, taxAmount);
 
   return {
-    subtotal: normalizedSubtotal,
-    taxRate: rate,
-    taxAmount,
-    totalAmount,
+    subtotal: toNumber(normalizedSubtotal),
+    taxRate: money(rate).toNumber(),
+    taxAmount: toNumber(taxAmount),
+    totalAmount: toNumber(totalAmount),
   };
 }
 
