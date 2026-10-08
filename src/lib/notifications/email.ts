@@ -1,8 +1,9 @@
 /**
  * Legacy notification helpers, kept so existing call sites stay unchanged.
  * Each one is now a thin wrapper over `sendNotification` (typed templates +
- * NotificationLog + "notification.send" queue job). New code should call
- * `sendNotification` from "@/lib/notifications/send" directly.
+ * NotificationLog + "notification.send" queue job) or, for business events,
+ * over `emitEvent` (outbox). New code should emit a domain event
+ * (src/lib/events) or call `sendNotification` directly.
  */
 import type { PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -40,7 +41,6 @@ export interface InvoiceEmailInput {
   dueDate: Date;
 }
 
-export type InvoiceCreatedEmailInput = InvoiceEmailInput;
 export type InvoiceOverdueEmailInput = InvoiceEmailInput;
 export type InvoicePaymentReminderEmailInput = InvoiceEmailInput;
 
@@ -54,14 +54,6 @@ export interface TicketReplyEmailInput {
   messagePreview: string;
   recipientRole: "CUSTOMER" | "ADMIN";
   customerId?: string;
-}
-
-export interface ServiceSuspendedEmailInput {
-  customer: CustomerRecipient;
-  serviceId: string;
-  serviceLabel: string;
-  reason: string;
-  suspendedAt: Date;
 }
 
 export interface AffiliatePayoutCompletedEmailInput {
@@ -117,16 +109,6 @@ function invoiceData(input: InvoiceEmailInput) {
   };
 }
 
-/** Once per invoice (the hourly billing-notices sweep uses the same key). */
-export async function sendInvoiceCreatedEmail(input: InvoiceCreatedEmailInput) {
-  return sendNotification({
-    userId: input.customer.customerId,
-    template: "billing.invoice-created",
-    data: invoiceData(input),
-    dedupeKey: `invoice.created:${input.invoiceId}`,
-  });
-}
-
 /** Manual reminder from the admin invoice screen: not deduplicated on purpose. */
 export async function sendInvoicePaymentReminderEmail(input: InvoicePaymentReminderEmailInput) {
   return sendNotification({
@@ -147,39 +129,28 @@ export async function sendInvoiceOverdueEmail(input: InvoiceOverdueEmailInput) {
   });
 }
 
+/**
+ * Records ticket.replied (outbox); the notifications subscriber sends
+ * "destek talebiniz yanıtlandı" to the customer (staff reply) or the
+ * customer's reply to the support address (customer reply).
+ */
 export async function sendTicketReplyEmail(input: TicketReplyEmailInput) {
-  const data = {
-    ticketId: input.ticketId,
-    ticketNumber: input.ticketNumber,
-    ticketSubject: input.ticketSubject,
-    senderName: input.senderName,
-    messagePreview: input.messagePreview,
-  };
-
-  if (input.recipientRole === "ADMIN") {
-    return sendNotification({ template: "admin.ticket-customer-reply", data, to: input.recipientEmail, channel: "EMAIL" });
-  }
-
-  return sendNotification({
-    userId: input.customerId ?? null,
-    template: "support.ticket-replied",
-    data: { ...data, recipientName: input.recipientName },
-    to: input.customerId ? undefined : input.recipientEmail,
-    channel: "EMAIL",
-  });
-}
-
-export async function sendServiceSuspendedEmail(input: ServiceSuspendedEmailInput) {
-  return sendNotification({
-    userId: input.customer.customerId,
-    template: "service.suspended",
-    data: {
-      serviceId: input.serviceId,
-      serviceLabel: input.serviceLabel.trim() || "Hizmetiniz",
-      reason: input.reason,
-      suspendedAt: input.suspendedAt,
-    },
-  });
+  const { emitEvent } = await import("@/lib/events/emit");
+  return emitEvent(
+    db,
+    "ticket.replied",
+    {
+      ticketId: input.ticketId,
+      ticketNumber: input.ticketNumber,
+      subject: input.ticketSubject,
+      customerId: input.customerId ?? null,
+      authorRole: input.recipientRole === "ADMIN" ? "CUSTOMER" : "STAFF",
+      senderName: input.senderName,
+      messagePreview: input.messagePreview,
+      recipientEmail: input.recipientEmail,
+      recipientName: input.recipientName,
+    }
+  );
 }
 
 export async function sendAffiliatePayoutCompletedEmail(input: AffiliatePayoutCompletedEmailInput) {

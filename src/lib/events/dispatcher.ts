@@ -1,3 +1,8 @@
+/**
+ * Legacy in-process dispatcher, used only by "payment.settled" jobs queued
+ * before the outbox deploy (src/lib/payments/follow-ups.ts). New code emits
+ * catalogue events with emitEvent (./emit.ts); ./dispatch.ts delivers them.
+ */
 import { logActivity } from "@/lib/activity-log";
 import { dispatchOutboundWebhook } from "@/lib/integrations/webhooks/outbound";
 import type { KleacoreEvent } from "./types";
@@ -40,16 +45,4 @@ export async function dispatchEvent(
   } catch (error) {
     console.error(`[EventDispatcher] Activity log failed for ${event.type}:`, error);
   }
-}
-
-export function dispatchEvents(events: KleacoreEvent[], options: DispatchEventOptions) {
-  if (events.length === 0) {
-    return;
-  }
-
-  void (async () => {
-    for (const event of events) {
-      await dispatchEvent(event, options);
-    }
-  })();
 }

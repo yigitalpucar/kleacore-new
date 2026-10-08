@@ -5,9 +5,11 @@ import {
   billingBankTransferApproved,
   billingBankTransferRejected,
   billingInvoiceCreated,
+  billingInvoiceFinalWarning,
   billingInvoiceOverdue,
   billingInvoiceReminder,
   billingOrderReceived,
+  billingPaymentFailed,
   billingPaymentReceived,
   billingRefundIssued,
 } from "./billing";
@@ -22,6 +24,7 @@ import {
 } from "./services";
 import {
   adminDomainRenewalFailed,
+  adminEventAlert,
   adminManualProvisioning,
   adminTicketCustomerReply,
   supportTicketReplied,
@@ -38,6 +41,8 @@ const definitions = [
   billingInvoiceCreated,
   billingInvoiceReminder,
   billingInvoiceOverdue,
+  billingInvoiceFinalWarning,
+  billingPaymentFailed,
   billingBankTransferApproved,
   billingBankTransferRejected,
   billingRefundIssued,
@@ -55,6 +60,7 @@ const definitions = [
   adminTicketCustomerReply,
   adminManualProvisioning,
   adminDomainRenewalFailed,
+  adminEventAlert,
 ] as const;
 
 export type RegisteredTemplate = (typeof definitions)[number];

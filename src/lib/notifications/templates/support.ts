@@ -139,3 +139,42 @@ export const adminDomainRenewalFailed = defineTemplate({
   }),
   sms: (data) => `KLEACORE: ${data.domain} registrar yenilemesi başarısız, elle yenileme gerekli.`,
 });
+
+/**
+ * Generic staff alert for domain events (src/lib/events/subscribers/admin-alert.ts):
+ * new ticket, bank transfer notice, failed provisioning, failed automatic charge.
+ */
+export const adminEventAlert = defineTemplate({
+  key: "admin.event-alert",
+  label: "Yönetim uyarısı (olay)",
+  group: "Yönetim",
+  audience: "admin",
+  schema: templateSchema({
+    title: z.string().min(1),
+    message: z.string().min(1),
+    details: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
+    /** Admin path, e.g. /yonetim/destek/<id> */
+    path: z.string().startsWith("/").optional(),
+    eventType: z.string().optional(),
+  }),
+  sample: {
+    title: "Yeni destek talebi: T-2026-000042",
+    message: "Ayşe Yılmaz yeni bir destek talebi açtı: E-posta hesabı oluşturma",
+    details: [
+      { label: "Departman", value: "Teknik" },
+      { label: "Öncelik", value: "Yüksek" },
+    ],
+    path: "/yonetim/destek/ornek",
+    eventType: "ticket.opened",
+  },
+  render: (data, { baseUrl }) => ({
+    subject: data.title,
+    heading: data.title,
+    greetingName: null,
+    intro: [data.message],
+    details: data.details?.length ? data.details : undefined,
+    action: data.path ? { label: "Yönetim panelinde aç", url: `${baseUrl}${data.path}` } : undefined,
+    note: data.eventType ? `Olay: ${data.eventType}` : undefined,
+  }),
+  sms: (data) => `KLEACORE: ${data.title}`,
+});

@@ -1,3 +1,9 @@
+/**
+ * Legacy outbound webhook contract (settings webhook_orders / webhook_payments).
+ * External receivers depend on these three types and payload shapes, so the
+ * outbox "webhooks" subscriber maps the new catalogue events onto them
+ * (invoice.paid → payment.completed, order.paid, service.renewed).
+ */
 export type PaymentCompletedContext = "invoice" | "order" | "renewal";
 
 export type PaymentCompletedPayload = {

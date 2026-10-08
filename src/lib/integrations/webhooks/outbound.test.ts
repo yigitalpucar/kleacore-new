@@ -151,7 +151,7 @@ describe("dispatchOutboundWebhook", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("does not throw when fetch fails", async () => {
+  it("throws when fetch fails so the event delivery is retried", async () => {
     mockedGetSettingMap.mockResolvedValue({
       webhook_orders: "",
       webhook_payments: "https://example.com/payments",
@@ -166,6 +166,15 @@ describe("dispatchOutboundWebhook", () => {
         amount: 75,
         context: "invoice",
       })
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("network down");
+  });
+
+  it("throws on a non-2xx answer", async () => {
+    mockedGetSettingMap.mockResolvedValue({ webhook_orders: "https://example.com/orders", webhook_payments: "" });
+    fetchMock.mockResolvedValue({ ok: false, status: 502 });
+
+    await expect(
+      dispatchOutboundWebhook("order.paid", { orderId: "o", orderNumber: "S-1", customerId: "c", totalAmount: 1 })
+    ).rejects.toThrow("WEBHOOK_HTTP_502");
   });
 });

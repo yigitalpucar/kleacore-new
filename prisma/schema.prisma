@@ -2101,3 +2101,110 @@ model ImportRow {
   @@index([runId, status])
   @@map("import_rows")
 }
+
+// =====================
+// DOMAIN EVENTS (transactional outbox, Faz 3.1)
+// =====================
+
+enum EventDeliveryStatus {
+  PENDING
+  DELIVERED
+  SKIPPED
+  FAILED
+}
+
+/// One business fact ("invoice.paid"), written in the same transaction as the
+/// change that caused it (src/lib/events/emit.ts). The events.dispatch job hands
+/// it to every subscriber registered in code; processedAt is set once all of
+/// them delivered (or skipped).
+model DomainEvent {
+  id            String          @id @default(cuid())
+  /// Catalogue key, e.g. "invoice.paid" (src/lib/events/catalog.ts)
+  type          String
+  aggregateType String
+  aggregateId   String
+  /// Validated payload; keys the catalogue marks sensitive are encrypted (enc:v1:)
+  payload       Json            @default("{}")
+  /// User who caused the event (admin, customer, or null for cron/system)
+  actorId       String?
+  occurredAt    DateTime        @default(now())
+  processedAt   DateTime?
+  attempts      Int             @default(0)
+  lastError     String?
+  deliveries    EventDelivery[]
+
+  @@index([processedAt, occurredAt])
+  @@index([type, occurredAt])
+  @@index([aggregateType, aggregateId])
+  @@index([occurredAt])
+  @@map("domain_events")
+}
+
+/// Per-subscriber delivery record: a retry skips subscribers already DELIVERED/SKIPPED.
+model EventDelivery {
+  id          String              @id @default(cuid())
+  eventId     String
+  event       DomainEvent         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  subscriber  String
+  status      EventDeliveryStatus @default(PENDING)
+  attempts    Int                 @default(0)
+  lastError   String?
+  result      Json?
+  deliveredAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([eventId, subscriber])
+  @@index([status, updatedAt])
+  @@map("event_deliveries")
+}
+
+// =====================
+// NOTIFICATION TEMPLATES (admin overrides, Faz 3.2)
+// =====================
+
+/// Admin override of a typed TS template (src/lib/notifications/templates). The
+/// TS template stays the default; an active row replaces its subject/body for
+/// that channel. Bodies use the safe {{variable}} syntax (overrides.ts).
+model NotificationTemplate {
+  id        String                        @id @default(cuid())
+  key       String
+  channel   NotificationChannel
+  locale    String                        @default("tr")
+  /// E-mail subject (empty for SMS)
+  subject   String                        @default("")
+  /// E-mail: inner HTML placed into the branded layout
+  bodyHtml  String                        @default("")
+  /// E-mail: plain-text alternative; SMS: the message
+  bodyText  String                        @default("")
+  /// Variables documented at save time (name → description)
+  variables Json                          @default("{}")
+  isActive  Boolean                       @default(true)
+  version   Int                           @default(1)
+  updatedBy String?
+  createdAt DateTime                      @default(now())
+  updatedAt DateTime                      @updatedAt
+  versions  NotificationTemplateVersion[]
+
+  @@unique([key, channel, locale])
+  @@map("notification_templates")
+}
+
+/// Snapshot of every saved version (history + restore).
+model NotificationTemplateVersion {
+  id         String               @id @default(cuid())
+  templateId String
+  template   NotificationTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version    Int
+  subject    String               @default("")
+  bodyHtml   String               @default("")
+  bodyText   String               @default("")
+  isActive   Boolean              @default(true)
+  /// "save" | "revert" | "restore"
+  action     String               @default("save")
+  updatedBy  String?
+  createdAt  DateTime             @default(now())
+
+  @@unique([templateId, version])
+  @@map("notification_template_versions")
+}
