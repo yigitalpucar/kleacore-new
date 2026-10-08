@@ -4,3 +4,15 @@ allowBuilds:
   prisma: true
   sharp: true
   unrs-resolver: true
+minimumReleaseAgeExclude:
+  - nodemailer@10.0.16
+# Security: force patched transitive versions (pnpm audit --prod).
+overrides:
+  browserslist: ^4.28.7
+  source-map-js: ^1.2.2
+  baseline-browser-mapping: ^2.11.0
+# next-auth only uses nodemailer for its Email provider, which we don't use;
+# the app's own nodemailer is on v10 for the addressparser/raw-file fixes.
+peerDependencyRules:
+  allowedVersions:
+    nodemailer: "10"
