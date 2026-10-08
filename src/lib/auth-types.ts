@@ -1,10 +1,11 @@
 import "next-auth";
+import type { AppRole } from "@/lib/auth/permissions";
 
 declare module "next-auth" {
   interface Session {
     user: {
       id: string;
-      role: "ADMIN" | "CUSTOMER";
+      role: AppRole;
       name?: string | null;
       email?: string | null;
       image?: string | null;
@@ -12,6 +13,6 @@ declare module "next-auth" {
   }
 
   interface User {
-    role: "ADMIN" | "CUSTOMER";
+    role: AppRole;
   }
 }

@@ -6,6 +6,7 @@ import {
   clearFailedLogins,
   recordFailedLogin,
 } from "@/lib/auth/login-captcha";
+import type { AppRole } from "@/lib/auth/permissions";
 import { userRequiresTwoFactor } from "@/lib/auth/two-factor-settings";
 import { db } from "@/lib/db";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
@@ -18,7 +19,7 @@ export type AuthorizedUser = {
   id: string;
   email: string;
   name: string;
-  role: "ADMIN" | "CUSTOMER";
+  role: AppRole;
   sessionVersion: number;
 };
 
@@ -59,7 +60,7 @@ async function completeLogin(user: {
   email: string;
   name: string;
   surname: string;
-  role: "ADMIN" | "CUSTOMER";
+  role: AppRole;
   sessionVersion: number;
 }): Promise<AuthorizedUser> {
   await db.user.update({

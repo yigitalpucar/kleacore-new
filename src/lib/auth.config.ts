@@ -1,4 +1,6 @@
 import type { NextAuthConfig } from "next-auth";
+import { NextResponse } from "next/server";
+import { canAccessRoute, isStaffRole } from "@/lib/auth/permissions";
 import { refreshSessionToken } from "@/lib/auth/session-refresh";
 
 export const authConfig = {
@@ -28,8 +30,14 @@ export const authConfig = {
       const { pathname } = nextUrl;
 
       if (pathname.startsWith("/yonetim")) {
-        if (!isLoggedIn || role !== "ADMIN") {
+        // Any staff role; per-page permissions are checked server-side.
+        if (!isLoggedIn || !isStaffRole(role)) {
           return false;
+        }
+        // Real 403 status for routes the role cannot open (the page itself
+        // also calls requirePermission; streaming would otherwise send 200).
+        if (!canAccessRoute(role, pathname)) {
+          return NextResponse.rewrite(new URL("/yonetim/yetkisiz", nextUrl), { status: 403 });
         }
       }
 

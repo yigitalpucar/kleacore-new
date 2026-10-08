@@ -13,6 +13,9 @@ datasource db {
 enum UserRole {
   ADMIN
   CUSTOMER
+  // Staff roles (3.6): permissions live in src/lib/auth/permissions.ts
+  SUPPORT
+  BILLING
 }
 
 enum UserStatus {
