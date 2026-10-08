@@ -8,40 +8,38 @@ import { CookieConsent } from "@/components/cookie-consent";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
+const defaultTitle = "KLEACORE | Alan Adı, Hosting ve Sunucu";
+const defaultDescription =
+  "KLEACORE; alan adı kaydı, cPanel ve LiteSpeed ile web hosting, NVMe SSD diskli VDS sunucu ve SSL sertifikası hizmetleri sunar. KLEAWORK DIGITAL LLC.";
+
+/**
+ * Site-wide SEO defaults. Pages override with their own `export const
+ * metadata` (or `generateMetadata`) in page.tsx — set `title` (the
+ * template adds " | KLEACORE"), `description` and `alternates.canonical`.
+ * See docs/ui-kit.md › "Sayfa şablonu".
+ */
 export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://kleacore.com"
   ),
-  title: "KLEACORE - Domain, Hosting & Server Solutions",
-  description:
-    "Reliable hosting provider. Domain registration, web hosting, VDS and dedicated server services by KLEAWORK DIGITAL LLC.",
-  alternates: {
-    canonical: "/",
+  title: {
+    default: defaultTitle,
+    template: "%s | KLEACORE",
   },
+  description: defaultDescription,
+  applicationName: "KLEACORE",
   openGraph: {
     type: "website",
     locale: "tr_TR",
     siteName: "KLEACORE",
-    title: "KLEACORE - Domain, Hosting & Server Solutions",
-    description:
-      "Domain registration, web hosting, VDS and dedicated server services by KLEAWORK DIGITAL LLC.",
-    url: "/",
+    title: defaultTitle,
+    description: defaultDescription,
   },
   twitter: {
     card: "summary_large_image",
-    title: "KLEACORE - Domain, Hosting & Server Solutions",
-    description:
-      "Domain registration, web hosting, VDS and dedicated server services by KLEAWORK DIGITAL LLC.",
+    title: defaultTitle,
+    description: defaultDescription,
   },
-  keywords: [
-    "hosting",
-    "domain",
-    "server",
-    "vds",
-    "web hosting",
-    "ssl",
-    "kleacore",
-  ],
   icons: {
     icon: "/favicon.png",
     shortcut: "/favicon.png",
@@ -56,10 +54,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="tr" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://images.unsplash.com" />
-        <link rel="dns-prefetch" href="https://images.unsplash.com" />
-      </head>
       <body
         className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}
       >
