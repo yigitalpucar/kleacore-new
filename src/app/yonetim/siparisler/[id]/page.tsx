@@ -56,7 +56,7 @@ export default async function OrderDetailPage({
       />
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           <SectionCard title="Ürün" description={order.product.category?.name ?? undefined}>
             <div className="flex items-start gap-3">
               <IconTile>
@@ -135,7 +135,7 @@ export default async function OrderDetailPage({
                     </div>
                     <p className="text-xs text-muted-foreground">
                       IP: <span className="font-mono">{consent.ipAddress || "—"}</span>
-                      {consent.userAgent ? <span className="block truncate">{consent.userAgent}</span> : null}
+                      {consent.userAgent ? <span className="block break-all">{consent.userAgent}</span> : null}
                     </p>
                     <p className="break-all font-mono text-[11px] text-muted-foreground">sha256: {consent.snapshotHash}</p>
                     <details className="text-xs">
