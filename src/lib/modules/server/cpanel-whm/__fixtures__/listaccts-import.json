@@ -1,0 +1,33 @@
+{
+  "metadata": { "result": 1, "reason": "OK", "command": "listaccts", "version": 1 },
+  "data": {
+    "acct": [
+      {
+        "user": "ornekweb",
+        "domain": "ornek-web.test",
+        "plan": "kleacore_Baslangic",
+        "email": "Ayse.Yilmaz@musteri.test",
+        "diskused": "150M",
+        "disklimit": "5120M",
+        "suspended": 0,
+        "suspendreason": "not suspended",
+        "unix_startdate": "1704103200",
+        "ip": "192.0.2.10",
+        "owner": "kleacore"
+      },
+      {
+        "user": "askidaki",
+        "domain": "askida.test",
+        "plan": "kleacore_Pro",
+        "email": "*unknown*",
+        "diskused": "none",
+        "disklimit": "unlimited",
+        "suspended": 1,
+        "suspendreason": "Ödeme gecikti",
+        "unix_startdate": 1717200000,
+        "ip": "192.0.2.10",
+        "owner": "kleacore"
+      }
+    ]
+  }
+}

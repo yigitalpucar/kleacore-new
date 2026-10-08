@@ -12,7 +12,7 @@ import { releaseIp } from "@/lib/ipam";
 import { createLogger } from "@/lib/logger";
 import type { OperationResult, ServerAccountContext, ServerModule } from "./contracts";
 import { parseProductOptions } from "./product-options";
-import { createServiceModuleState } from "./service-state";
+import { createServiceModuleState, patchServiceModuleState } from "./service-state";
 import type { AnyModuleManifest, ResolvedModuleInstance } from "./types";
 
 const log = createLogger("modules.server-bridge");
@@ -142,6 +142,21 @@ export function createModuleProvisioningProvider(binding: ServerBinding): Provis
           if (released.length) log.info("released service IPs", { serviceId: service.id, released });
         } catch (error) {
           log.error("IP release after terminate failed", { serviceId: service.id, error });
+        }
+        // The remote id is free again on the panel / hypervisor (WHM may hand
+        // the username out again, PVE reuses VMIDs). services has a unique
+        // (moduleInstanceId, remoteId): detach it so a new service can take
+        // it; the old value stays in moduleData for history.
+        if (service.remoteId) {
+          try {
+            await patchServiceModuleState(service.id, "bridge", {
+              terminatedRemoteId: service.remoteId,
+              terminatedAt: new Date().toISOString(),
+            });
+            await db.service.update({ where: { id: service.id }, data: { remoteId: null } });
+          } catch (error) {
+            log.error("detaching remote id after terminate failed", { serviceId: service.id, error });
+          }
         }
       }
       return result;

@@ -311,12 +311,24 @@ export async function assignServiceModuleAction(
     if (!instance || instance.kind !== "server") return { success: false, error: "Sunucu modülü örneği bulunamadı." };
     if (!remoteId) return { success: false, error: "Uzak kimlik (ör. WHM kullanıcı adı) gerekli.", fieldErrors: { remoteId: "Gerekli" } };
   }
+  let duplicate = false;
   const service = await db.service
     .update({
       where: { id: serviceId },
       data: { moduleInstanceId: input.moduleInstanceId, remoteId: input.moduleInstanceId ? remoteId : null },
     })
-    .catch(() => null);
+    .catch((error: { code?: string }) => {
+      // services(moduleInstanceId, remoteId) is unique: one remote account backs one service.
+      duplicate = error?.code === "P2002";
+      return null;
+    });
+  if (duplicate) {
+    return {
+      success: false,
+      error: "Bu uzak kimlik bu örnekte başka bir hizmete bağlı.",
+      fieldErrors: { remoteId: "Başka bir hizmette kullanılıyor" },
+    };
+  }
   if (!service) return { success: false, error: "Hizmet bulunamadı." };
   await logActivity({
     userId: session.user.id,

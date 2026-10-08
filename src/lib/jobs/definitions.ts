@@ -222,6 +222,42 @@ export const dnsServiceSetupJob = defineJob({
   },
 });
 
+export const IMPORT_FETCH_JOB = "import.fetch";
+
+/**
+ * Lists an import source (WHM / Proxmox / registrar) read-only and writes the
+ * preview rows (src/lib/imports/fetch.ts). Errors are recorded on the
+ * ImportRun (FAILED) instead of retried; the admin re-runs from the screen.
+ */
+export const importFetchJob = defineJob({
+  name: IMPORT_FETCH_JOB,
+  label: "İçe aktarma: kaynak listeleme",
+  schema: z.object({ importRunId: z.string().min(1) }).strict(),
+  queue: { policy: "exclusive", retryLimit: 0, expireInSeconds: 15 * 60 },
+  handler: async ({ importRunId }) => {
+    const { runImportFetch } = await import("@/lib/imports/fetch");
+    return runImportFetch(importRunId);
+  },
+});
+
+export const IMPORT_APPLY_JOB = "import.apply";
+
+/**
+ * Creates Service / Domain rows for the selected preview rows
+ * (src/lib/imports/apply.ts). Idempotent per row, so a retry after a crash
+ * only continues where it stopped.
+ */
+export const importApplyJob = defineJob({
+  name: IMPORT_APPLY_JOB,
+  label: "İçe aktarma: kayıtları oluşturma",
+  schema: z.object({ importRunId: z.string().min(1) }).strict(),
+  queue: { policy: "exclusive", retryLimit: 2, retryDelay: 60, expireInSeconds: 30 * 60 },
+  handler: async ({ importRunId }) => {
+    const { runImportApply } = await import("@/lib/imports/apply");
+    return runImportApply(importRunId);
+  },
+});
+
 const definitions = [
   provisioningRunJob,
   domainRenewJob,
@@ -231,6 +267,8 @@ const definitions = [
   serverReinstallJob,
   hostingUsageSyncJob,
   dnsServiceSetupJob,
+  importFetchJob,
+  importApplyJob,
 ] as const;
 
 export type RegisteredJob = (typeof definitions)[number];

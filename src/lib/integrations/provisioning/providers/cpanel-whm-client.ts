@@ -56,7 +56,12 @@ export interface WhmAccountRow {
   disklimit?: string | number;
   suspended?: number | string;
   unix_startdate?: number | string;
+  suspendreason?: string;
+  owner?: string;
 }
+
+/** listaccts row as read by importers (same shape as WhmAccountRow). */
+export type WhmListAccount = WhmAccountRow;
 
 /** One row of WHM `showbw` (current month). */
 export interface WhmBandwidthRow {
@@ -276,10 +281,10 @@ export function createCpanelWhmClient(config: CpanelWhmConfig) {
       const rows = ((payload.data ?? {}) as { acct?: WhmAccountRow[] }).acct;
       return Array.isArray(rows) && rows[0] ? rows[0] : null;
     },
-    /** Every account the token can see (a reseller sees its own accounts). */
+    /** Read-only: every account the token can see (a reseller sees its own accounts). */
     listAccounts: async (): Promise<WhmAccountRow[]> => {
       const payload = await requestWhm("listaccts", {
-        want: "user,domain,email,plan,ip,diskused,disklimit,suspended,unix_startdate",
+        want: "user,domain,email,plan,ip,diskused,disklimit,suspended,suspendreason,unix_startdate,owner",
       });
       const rows = ((payload.data ?? {}) as { acct?: WhmAccountRow[] }).acct;
       return Array.isArray(rows) ? rows : [];

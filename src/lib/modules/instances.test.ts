@@ -27,6 +27,7 @@ const state = vi.hoisted(() => ({
   settings: new Map<string, string>(),
   serviceUpdates: [] as unknown[],
   releaseIp: vi.fn(async () => ["192.0.2.10"]),
+  patchState: vi.fn(async () => undefined),
 }));
 
 function matchesWhere(row: InstanceRow, where: Record<string, unknown>) {
@@ -59,6 +60,10 @@ vi.mock("@/lib/integrations/settings", () => ({
     Object.fromEntries(keys.map((item) => [item.key, state.settings.get(item.key) || item.fallback || ""])),
 }));
 vi.mock("@/lib/ipam", () => ({ releaseIp: state.releaseIp }));
+vi.mock("./service-state", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./service-state")>()),
+  patchServiceModuleState: state.patchState,
+}));
 
 import type { ServiceWithProduct } from "@/lib/integrations/provisioning/types";
 import { getProvisioningProviderForService } from "@/lib/integrations/provisioning";
@@ -215,6 +220,9 @@ describe("getProvisioningProviderForService routing", () => {
     const provider = await getProvisioningProviderForService(bound);
     expect(await provider.terminateService(bound)).toMatchObject({ ok: true, reference: "acct9" });
     expect(state.releaseIp).toHaveBeenCalledWith("svc-1");
+    // The username / VMID may be reused remotely: detached (unique per instance), kept as history.
+    expect(state.patchState).toHaveBeenCalledWith("svc-1", "bridge", expect.objectContaining({ terminatedRemoteId: "acct9" }));
+    expect(state.serviceUpdates).toContainEqual({ where: { id: "svc-1" }, data: { remoteId: null } });
   });
 
   it("fails (never skips) when the bound instance is gone or its options are invalid", async () => {

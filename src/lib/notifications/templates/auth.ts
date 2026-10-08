@@ -75,3 +75,39 @@ export const authPasswordChanged = defineTemplate({
   sms: (data, { brand }) =>
     `${brand.siteName}: Hesap şifreniz ${dateTime(data.changedAt)} tarihinde değiştirildi. Siz yapmadıysanız destek ile iletişime geçin.`,
 });
+
+/**
+ * Customer created by the infrastructure import (2.7) without a password:
+ * the link sets the first password (a PasswordResetToken with a longer TTL).
+ */
+export const accountInvite = defineTemplate({
+  key: "account.invite",
+  label: "Hesap daveti (içe aktarılan müşteri)",
+  group: "Hesap",
+  audience: "customer",
+  schema: templateSchema({
+    inviteUrl: z.string().url(),
+    expiresInDays: z.number().int().positive(),
+    /** e.g. "2 hizmet, 1 alan adı" */
+    summary: z.string().optional(),
+  }),
+  sensitive: ["inviteUrl"],
+  sample: {
+    recipientName: "Ayşe Yılmaz",
+    inviteUrl: "https://kleacore.com/musteri/sifre-sifirla?token=ornek",
+    expiresInDays: 7,
+    summary: "1 hosting hizmeti",
+  },
+  render: (data, { brand }) => ({
+    subject: `${brand.siteName} müşteri panelinize davetlisiniz`,
+    heading: "Müşteri paneliniz hazır",
+    greetingName: data.recipientName,
+    intro: [
+      `Mevcut hizmetleriniz${data.summary ? ` (${data.summary})` : ""} ${brand.siteName} müşteri paneline taşındı. Hizmetlerinizde bir değişiklik yapılmadı.`,
+      "Panele giriş yapabilmek için aşağıdaki butondan şifrenizi belirleyin.",
+    ],
+    action: { label: "Şifremi belirle", url: data.inviteUrl },
+    outro: [`Bu bağlantı ${data.expiresInDays} gün boyunca geçerlidir ve yalnızca bir kez kullanılabilir. Süresi dolarsa giriş sayfasındaki "Şifremi unuttum" ile yeni bağlantı isteyebilirsiniz.`],
+    note: `Bu e-postayı beklemiyorsanız ${brand.supportEmail} adresine yazın.`,
+  }),
+});

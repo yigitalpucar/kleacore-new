@@ -117,6 +117,13 @@ export interface ProxmoxServiceState {
   lastError?: string;
   lastErrorAt?: string;
   completedAt?: string;
+  /**
+   * Bound by the importer (/yonetim/ice-aktar) to a VM KLEACORE did not
+   * create: no owner marker in its description and no initial password. The
+   * admin's import is the ownership proof for `vmid`; reinstall is refused.
+   */
+  imported?: boolean;
+  importedAt?: string;
   /** Provisioning given up (retries exhausted): IP released, VM left for the admin. */
   abandonedAt?: string;
   needsAdmin?: string;
@@ -319,7 +326,9 @@ export function createProxmoxModule(
     const vm = (await listVms()).find((row) => row.vmid === vmid);
     if (!vm) throw new ProxmoxApiError(`VM ${vmid} Proxmox'ta bulunamadı`, 404, "/cluster/resources");
     const vmConfig = await getConfig(vm.node, vmid);
-    if (!isOwnedBy(vmConfig, ctx.service.id)) {
+    const state = ctx.state ? ((await ctx.state.get()) as ProxmoxServiceState) : {};
+    const importedHere = state.imported === true && state.vmid === vmid;
+    if (!importedHere && !isOwnedBy(vmConfig, ctx.service.id)) {
       throw new Error(`VM ${vmid} bu hizmete ait değil (açıklamada ${ownerMarker(ctx.service.id)} yok); işlem yapılmadı`);
     }
     return { vmid, node: vm.node, config: vmConfig };
@@ -691,6 +700,11 @@ export function createProxmoxModule(
         state = (await store.get()) as ProxmoxServiceState;
       } catch (error) {
         return fail("resolve", error);
+      }
+      if (state.imported) {
+        // Not cloned from our template: destroying it would lose the customer's
+        // system and its IP is not ours to re-plan.
+        return fail("resolve", new Error("İçe aktarılmış VM yeniden kurulamaz; işlem yapılmadı"));
       }
       const now = () => new Date(runtime.now()).toISOString();
       let reinstall = state.reinstall;

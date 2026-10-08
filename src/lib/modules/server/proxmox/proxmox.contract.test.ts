@@ -347,6 +347,23 @@ describe("proxmox: operations on an existing VM", () => {
     expect(pve.paths("POST").concat(pve.paths("DELETE"))).toEqual([]);
   });
 
+  it("operates an imported VM (state.imported + same VMID) but refuses to reinstall it", async () => {
+    const { pve, subject, ctx } = setup({ state: { vmid: 1005, node: "pve", step: "done", imported: true } });
+    pve.addVm({ vmid: 1005, status: "running", config: { name: "legacy-vds", description: "migrated by hand" } });
+    const imported = ctx({ remoteId: "1005" });
+
+    expect(await subject.powerAction!(imported, "stop")).toMatchObject({ ok: true, reference: "1005" });
+    expect(pve.vms.get(1005)!.status).toBe("stopped");
+    const reinstall = await subject.reinstall!(imported, {});
+    expect(reinstall).toMatchObject({ ok: false });
+    expect(reinstall.error).toMatch(/İçe aktarılmış VM yeniden kurulamaz/);
+    expect(pve.paths("DELETE")).toEqual([]);
+
+    // The import vouches only for its own VMID.
+    pve.addVm({ vmid: 1006, status: "running", config: { name: "other", description: "not ours" } });
+    expect((await subject.powerAction!(ctx({ remoteId: "1006" }), "stop")).error).toMatch(/bu hizmete ait değil/);
+  });
+
   it("suspend stops the VM and disables onboot; unsuspend reverses it", async () => {
     const { pve, subject, state, vmCtx } = await provisioned();
     expect(await subject.suspend(vmCtx(), "Ödenmemiş fatura")).toMatchObject({ ok: true });

@@ -103,7 +103,8 @@ export async function getVdsPanelView(service: ServiceForPanel): Promise<VdsPane
     capabilities: {
       power: capabilities.includes("power"),
       usage: capabilities.includes("usage"),
-      reinstall: capabilities.includes("reinstall"),
+      // Imported VMs were not cloned from our template: no reinstall.
+      reinstall: capabilities.includes("reinstall") && !state.imported,
       // noVNC needs a PVE user ticket in the browser; not exposed (docs/modules/proxmox.md).
       console: capabilities.includes("console"),
     },
