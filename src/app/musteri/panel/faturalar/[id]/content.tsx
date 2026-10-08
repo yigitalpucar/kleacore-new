@@ -75,6 +75,7 @@ interface SerializedInvoice {
     documentNumber: string | null;
     sentAt: string | null;
     errorMessage: string | null;
+    pdfAvailable: boolean;
   } | null;
 }
 
@@ -90,6 +91,8 @@ export function FaturaDetayContent({ invoice }: FaturaDetayContentProps) {
   const description = invoice.items[0]?.description ?? invoice.invoiceNumber;
   const lastPayment = invoice.payments[0];
   const invoicePdfUrl = `/api/faturalar/${invoice.id}/pdf`;
+  const officialPdfUrl =
+    invoice.status === "PAID" && invoice.eInvoice?.pdfAvailable ? `/api/faturalar/${invoice.id}/e-belge` : null;
   const outstanding = Math.max(invoice.totalAmount - invoice.paidAmount, 0);
   const [isPaying, setIsPaying] = useState(false);
   const [isSendingCopy, setIsSendingCopy] = useState(false);
@@ -397,6 +400,12 @@ export function FaturaDetayContent({ invoice }: FaturaDetayContentProps) {
 
           <SectionCard title="İşlemler">
             <div className="grid gap-2">
+              {officialPdfUrl ? (
+                <a href={officialPdfUrl} className={appButton({ className: "justify-start" })}>
+                  <Download aria-hidden />
+                  Resmi faturayı indir
+                </a>
+              ) : null}
               <button
                 type="button"
                 onClick={() => window.open(invoicePdfUrl, "_blank")}

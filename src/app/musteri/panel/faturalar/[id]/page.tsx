@@ -79,6 +79,10 @@ export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
             ? invoice.eInvoiceRecord.sentAt.toISOString()
             : null,
           errorMessage: invoice.eInvoiceRecord.errorMessage,
+          pdfAvailable:
+            Boolean(invoice.eInvoiceRecord.documentUuid) &&
+            invoice.eInvoiceRecord.provider !== "parasut" &&
+            ["SENT", "ACCEPTED"].includes(invoice.eInvoiceRecord.status),
         }
       : null,
   };

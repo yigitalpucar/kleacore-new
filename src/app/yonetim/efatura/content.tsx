@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
-import { AlertTriangle, FileText, Plug, RefreshCw } from "lucide-react";
+import { useState, useTransition } from "react";
+import { AlertTriangle, Ban, Download, FileText, Plug, RefreshCw } from "lucide-react";
 import {
   DataTable,
   EmptyState,
@@ -19,7 +19,20 @@ import { LinkTabs } from "@/components/admin-b/icerik/link-tabs";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/format/date";
 import { formatTRY } from "@/lib/format/price";
-import { retryEInvoiceRecordAction } from "@/lib/actions/admin/efatura";
+import {
+  cancelEInvoiceRecordAction,
+  retryEInvoiceRecordAction,
+  syncEInvoiceStatusesAction,
+} from "@/lib/actions/admin/efatura";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/lib/toast";
 import type { getEInvoiceRecordsForAdmin, getEInvoiceStats } from "@/lib/dal/e-invoices";
 
@@ -30,12 +43,18 @@ interface EfaturaContentProps {
   records: EInvoiceRecordItem[];
   stats: EInvoiceStats;
   statusFilter: string;
+  configProblem: string | null;
+  testMode: boolean;
 }
 
 const money = (n: number) => formatTRY(Number(n), { keepDecimals: true });
 const invoiceHref = (r: EInvoiceRecordItem) => `/yonetim/faturalar/${r.invoiceId}`;
 const typeLabel = (type: string) => (type === "e-fatura" ? "E-Fatura" : "E-Arşiv");
 const canRetry = (status: string) => ["FAILED", "DRAFT", "QUEUED"].includes(status);
+const hasPdf = (r: EInvoiceRecordItem) =>
+  Boolean(r.documentUuid) && r.provider !== "parasut" && ["SENT", "ACCEPTED", "CANCELLED"].includes(r.status);
+const canCancel = (r: EInvoiceRecordItem) => r.type === "e-arsiv" && ["SENT", "ACCEPTED"].includes(r.status);
+const pdfHref = (r: EInvoiceRecordItem) => `/api/faturalar/${r.invoiceId}/e-belge`;
 
 function customerName(record: EInvoiceRecordItem) {
   const c = record.invoice.customer;
@@ -68,6 +87,123 @@ function RetryButton({ recordId }: { recordId: string }) {
       <RefreshCw aria-hidden className={cn(isPending && "animate-spin")} />
       {isPending ? "Gönderiliyor…" : "Yeniden gönder"}
     </button>
+  );
+}
+
+function PdfLink({ record }: { record: EInvoiceRecordItem }) {
+  return (
+    <a
+      href={pdfHref(record)}
+      className={appButton({ variant: "ghost", size: "icon-sm" })}
+      aria-label={`${record.documentNumber ?? "E-belge"} PDF indir`}
+    >
+      <Download aria-hidden />
+    </a>
+  );
+}
+
+function CancelButton({ record }: { record: EInvoiceRecordItem }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  const handleCancel = () => {
+    startTransition(async () => {
+      const result = await cancelEInvoiceRecordAction(record.id, reason);
+      if (!result.success) {
+        toast.error(result.error || "E-Arşiv iptal edilemedi");
+        return;
+      }
+      toast.success("E-Arşiv fatura iptal edildi");
+      setOpen(false);
+      router.refresh();
+    });
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={appButton({ variant: "ghost", size: "icon-sm" })}
+        aria-label={`${record.documentNumber ?? "E-Arşiv"} iptal et`}
+      >
+        <Ban aria-hidden />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>E-Arşiv faturayı iptal et</DialogTitle>
+            <DialogDescription>
+              {record.documentNumber} numaralı belge GİB&apos;e iptal olarak bildirilir. Bu işlem geri alınamaz; KLEACORE
+              faturası ve ödeme kaydı değişmez.
+            </DialogDescription>
+          </DialogHeader>
+          <label htmlFor={`cancel-${record.id}`} className="text-sm font-medium">
+            İptal nedeni
+          </label>
+          <Textarea
+            id={`cancel-${record.id}`}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ör. hatalı alıcı bilgisi"
+            className="min-h-20"
+          />
+          <DialogFooter>
+            <button type="button" onClick={() => setOpen(false)} className={appButton({ variant: "outline" })}>
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              disabled={isPending || reason.trim().length < 3}
+              onClick={handleCancel}
+              className={appButton({ variant: "destructive" })}
+            >
+              {isPending ? "İptal ediliyor…" : "İptal et"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function SyncStatusesButton() {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  const handleSync = () => {
+    startTransition(async () => {
+      const result = await syncEInvoiceStatusesAction();
+      if (!result.success) {
+        toast.error(result.error || "Durumlar güncellenemedi");
+        return;
+      }
+      toast.success(
+        result.checked
+          ? `${result.checked.toLocaleString("tr-TR")} belge sorgulandı, ${result.changed.toLocaleString("tr-TR")} durum değişti`
+          : "Sorgulanacak belge yok"
+      );
+      router.refresh();
+    });
+  };
+
+  return (
+    <button type="button" disabled={isPending} onClick={handleSync} className={appButton({ variant: "outline" })}>
+      <RefreshCw aria-hidden className={cn(isPending && "animate-spin")} />
+      {isPending ? "Sorgulanıyor…" : "Durumları güncelle"}
+    </button>
+  );
+}
+
+function RowActions({ record }: { record: EInvoiceRecordItem }) {
+  return (
+    <div className="flex items-center justify-end gap-1">
+      {hasPdf(record) ? <PdfLink record={record} /> : null}
+      {canCancel(record) ? <CancelButton record={record} /> : null}
+      {canRetry(record.status) ? <RetryButton recordId={record.id} /> : null}
+    </div>
   );
 }
 
@@ -120,7 +256,12 @@ const columns: ColumnDef<EInvoiceRecordItem>[] = [
     accessorKey: "documentNumber",
     header: "Belge no",
     cell: ({ row }) => (
-      <span className="font-mono text-xs text-muted-foreground">{row.original.documentNumber || "—"}</span>
+      <div className="min-w-0">
+        <span className="font-mono text-xs text-muted-foreground">{row.original.documentNumber || "—"}</span>
+        {row.original.attempts > 1 ? (
+          <p className="text-xs tabular-nums text-muted-foreground">{row.original.attempts}. deneme</p>
+        ) : null}
+      </div>
     ),
   },
   {
@@ -130,6 +271,8 @@ const columns: ColumnDef<EInvoiceRecordItem>[] = [
     cell: ({ row }) =>
       row.original.errorMessage ? (
         <ErrorDetails message={row.original.errorMessage} />
+      ) : row.original.cancelReason ? (
+        <span className="text-[13px] text-muted-foreground">İptal: {row.original.cancelReason}</span>
       ) : (
         <span className="text-muted-foreground">—</span>
       ),
@@ -147,31 +290,47 @@ const columns: ColumnDef<EInvoiceRecordItem>[] = [
     header: () => <span className="sr-only">İşlem</span>,
     enableSorting: false,
     meta: { align: "right", className: "w-px" },
-    cell: ({ row }) => (canRetry(row.original.status) ? <RetryButton recordId={row.original.id} /> : null),
+    cell: ({ row }) => <RowActions record={row.original} />,
   },
 ];
 
-export function EfaturaContent({ records, stats, statusFilter }: EfaturaContentProps) {
+export function EfaturaContent({ records, stats, statusFilter, configProblem, testMode }: EfaturaContentProps) {
   const tabs = [
     { value: "all", label: "Tümü", href: "/yonetim/efatura", count: stats.total },
     { value: "FAILED", label: "Başarısız", href: "/yonetim/efatura?status=FAILED", count: stats.failed },
     { value: "QUEUED", label: "Kuyrukta", href: "/yonetim/efatura?status=QUEUED", count: stats.queued },
     { value: "SENT", label: "Gönderildi", href: "/yonetim/efatura?status=SENT", count: stats.sent },
-    { value: "DRAFT", label: "Taslak", href: "/yonetim/efatura?status=DRAFT", count: stats.draft },
+    { value: "ACCEPTED", label: "Onaylandı", href: "/yonetim/efatura?status=ACCEPTED", count: stats.accepted },
+    { value: "REJECTED", label: "Reddedildi", href: "/yonetim/efatura?status=REJECTED", count: stats.rejected },
+    { value: "CANCELLED", label: "İptal", href: "/yonetim/efatura?status=CANCELLED", count: stats.cancelled },
   ];
 
   return (
     <>
       <PageHeader
         title="E-Fatura / E-Arşiv"
-        description="Ödenen faturalar için oluşturulan e-fatura ve e-arşiv kayıtları."
+        description={
+          testMode
+            ? "Ödenen faturalar için kesilen e-belgeler. Uyumsoft test ortamı açık: belgelerin yasal geçerliliği yok."
+            : "Ödenen faturalar için kesilen e-fatura ve e-arşiv belgeleri."
+        }
         actions={
-          <Link href="/yonetim/entegrasyonlar?tab=efatura" className={appButton({ variant: "outline" })}>
-            <Plug aria-hidden />
-            Entegrasyon ayarları
-          </Link>
+          <>
+            <SyncStatusesButton />
+            <Link href="/yonetim/entegrasyonlar?tab=efatura" className={appButton({ variant: "outline" })}>
+              <Plug aria-hidden />
+              Entegrasyon ayarları
+            </Link>
+          </>
         }
       />
+
+      {configProblem ? (
+        <p className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+          <AlertTriangle aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+          Yeni e-belge kesilmiyor: {configProblem}
+        </p>
+      ) : null}
 
       <StatGrid columns={4}>
         <StatCard
@@ -230,14 +389,14 @@ export function EfaturaContent({ records, stats, statusFilter }: EfaturaContentP
                 }
               />
               {r.errorMessage ? <ErrorDetails message={r.errorMessage} /> : null}
-              {canRetry(r.status) ? <RetryButton recordId={r.id} /> : null}
+              <RowActions record={r} />
             </div>
           )}
           emptyState={
             <EmptyState
               icon={FileText}
               title="Bu filtrede e-fatura kaydı yok"
-              description="Ödeme tamamlandığında taslaklar otomatik oluşturulur."
+              description="Ödeme tamamlandığında e-belge otomatik kesilir."
             />
           }
         />

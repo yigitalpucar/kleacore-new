@@ -5,6 +5,7 @@ import {
   getIntegrationModulesOverview,
 } from "@/lib/integrations/module-status";
 import { getSettings, getApiKeys } from "@/lib/dal/settings";
+import { getEInvoiceConfig, getEInvoiceConfigProblem } from "@/lib/integrations/efatura";
 import { EntegrasyonlarContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -127,10 +128,7 @@ export default async function EntegrasyonlarPage({ searchParams }: Entegrasyonla
   const paytrMerchantKey = getSettingValue(settings, "paytr_merchant_key", "");
   const paytrMerchantSalt = getSettingValue(settings, "paytr_merchant_salt", "");
 
-  const efaturaEnabled = getSettingValue(settings, "efatura_enabled", "false") === "true";
-  const efaturaProvider = getSettingValue(settings, "efatura_provider", "disabled");
-  const efaturaApiKey = getSettingValue(settings, "efatura_api_key", "");
-  const efaturaCompanyVkn = getSettingValue(settings, "efatura_company_vkn", "");
+  const efatura = await getEInvoiceConfig();
 
   const sslEnabled = getSettingValue(settings, "ssl_enabled", "false") === "true";
   const sslProvider = getSettingValue(settings, "ssl_provider", "disabled");
@@ -229,10 +227,31 @@ export default async function EntegrasyonlarPage({ searchParams }: Entegrasyonla
         },
       }}
       efatura={{
-        enabled: efaturaEnabled,
-        provider: efaturaProvider,
-        hasApiKey: Boolean(efaturaApiKey),
-        companyVkn: efaturaCompanyVkn,
+        enabled: efatura.enabled,
+        provider: efatura.provider,
+        hasApiKey: Boolean(efatura.apiKey),
+        companyVkn: efatura.companyVkn,
+        defaultProfile: efatura.defaultProfile,
+        problem: getEInvoiceConfigProblem(efatura),
+        uyumsoft: {
+          username: efatura.uyumsoft.username,
+          hasPassword: Boolean(efatura.uyumsoft.password),
+          testMode: efatura.uyumsoft.testMode,
+          earsivPrefix: efatura.uyumsoft.earsivPrefix,
+          efaturaPrefix: efatura.uyumsoft.efaturaPrefix,
+        },
+        supplier: {
+          name: efatura.supplier.name,
+          taxOffice: efatura.supplier.taxOffice,
+          street: efatura.supplier.street,
+          district: efatura.supplier.district,
+          city: efatura.supplier.city,
+          postalZone: efatura.supplier.postalZone,
+          phone: efatura.supplier.phone,
+          email: efatura.supplier.email,
+          website: efatura.supplier.website,
+          mersisNo: efatura.supplier.mersisNo ?? "",
+        },
       }}
       ssl={{
         enabled: sslEnabled,
