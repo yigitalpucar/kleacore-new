@@ -18,6 +18,7 @@ import {
   Newspaper,
   Package,
   Plug,
+  Radio,
   RefreshCw,
   ScrollText,
   Server,
@@ -112,6 +113,7 @@ export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
         { title: "Provisioning kuyruğu", href: `${ADMIN_ROOT}/provisioning`, icon: RefreshCw },
         { title: "Arka plan işleri", href: `${ADMIN_ROOT}/isler`, icon: ListChecks },
         { title: "Bildirimler", href: `${ADMIN_ROOT}/bildirimler`, icon: Mail },
+        { title: "Olaylar", href: `${ADMIN_ROOT}/olaylar`, icon: Radio },
         { title: "Aktivite kayıtları", href: `${ADMIN_ROOT}/aktivite`, icon: ScrollText },
         { title: "Modüller", href: `${ADMIN_ROOT}/moduller`, icon: Blocks },
         { title: "Entegrasyonlar", href: `${ADMIN_ROOT}/entegrasyonlar`, icon: Plug },
@@ -278,4 +280,5 @@ export const ADMIN_SEGMENT_LABELS: Record<string, string> = {
   "bilgi-bankasi": "Bilgi bankası",
   durum: "Sistem durumu",
   sablonlar: "Şablonlar",
+  hatirlatmalar: "Hatırlatma takvimi",
 };
