@@ -75,13 +75,14 @@ const ticketCustomer: Map = {
   OPEN: { label: "Açık", tone: "info" },
   CUSTOMER_REPLY: { label: "Yanıt bekliyor", tone: "warning" },
   ADMIN_REPLY: { label: "Yanıtlandı", tone: "success" },
-  WAITING: { label: "Beklemede", tone: "neutral" },
+  WAITING: { label: "Yanıtınız bekleniyor", tone: "warning" },
   CLOSED: { label: "Kapalı", tone: "muted" },
 };
 
 const ticketAdmin: Map = {
   ...ticketCustomer,
   CUSTOMER_REPLY: { label: "Müşteri yanıtladı", tone: "warning" },
+  WAITING: { label: "Müşteri yanıtı bekleniyor", tone: "neutral" },
 };
 
 const ticketPriority: Map = {

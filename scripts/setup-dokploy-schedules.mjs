@@ -41,6 +41,10 @@ export const JOBS = [
   { name: "KLEACORE: Domain Süre Bildirimleri", cron: "0 10 * * *", job: "domain-notices" },
   { name: "KLEACORE: Provisioning Retry", cron: "*/15 * * * *", job: "retry-provisioning" },
   { name: "KLEACORE: E-Fatura Durumları", cron: "*/15 * * * *", job: "efatura-status" },
+  // destek@ IMAP kutuları → ticket (docs/ops-support-mail.md); "5 dk içinde ticket" kabul kriteri.
+  { name: "KLEACORE: Destek E-postaları", cron: "*/2 * * * *", job: "support-mail" },
+  // Müşteri yanıtı beklenen talepler: uyarı (gün-1) ve otomatik kapatma.
+  { name: "KLEACORE: Destek Otomatik Kapatma", cron: "15 * * * *", job: "support-autoclose" },
   // Invoice created / due-3 / overdue notices + notification outbox reconcile (daytime only).
   { name: "KLEACORE: Bildirimler", cron: "20 8-21 * * *", job: "notifications" },
   // Fallback queue worker (docs/ops-jobs.md). Keep it even with a worker service.

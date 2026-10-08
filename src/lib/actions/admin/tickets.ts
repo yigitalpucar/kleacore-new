@@ -1,86 +1,20 @@
 "use server";
 
+import type { TicketStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { dispatchNotification, sendTicketReplyEmail } from "@/lib/notifications/email";
+import { emitEvent } from "@/lib/events/emit";
+import { statusChange } from "@/lib/support/tickets";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
 
-export async function replyToTicket(ticketId: string, message: string) {
-  const session = await requireAdmin();
+// Staff replies (with attachments) go through POST
+// /api/admin/support/tickets/[id]/messages (src/lib/support/web.ts).
 
-  try {
-    if (!message || message.trim().length === 0) {
-      return { success: false, error: "Mesaj boş olamaz" };
-    }
-
-    const ticket = await db.supportTicket.findUnique({
-      where: { id: ticketId },
-      include: {
-        customer: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            surname: true,
-          },
-        },
-      },
-    });
-    if (!ticket) {
-      return { success: false, error: "Destek talebi bulunamadı" };
-    }
-
-    if (ticket.status === "CLOSED") {
-      return { success: false, error: "Kapalı destek taleplerine yanıt verilemez" };
-    }
-
-    const admin = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { name: true, surname: true },
-    });
-
-    const senderName = admin
-      ? `${admin.name} ${admin.surname}`.trim()
-      : "Admin";
-
-    const trimmedMessage = message.trim();
-
-    await db.$transaction([
-      db.ticketMessage.create({
-        data: {
-          ticketId,
-          senderId: session.user.id,
-          senderName,
-          senderRole: "ADMIN",
-          message: trimmedMessage,
-        },
-      }),
-      db.supportTicket.update({
-        where: { id: ticketId },
-        data: { status: "ADMIN_REPLY" },
-      }),
-    ]);
-
-    dispatchNotification(async () => {
-      await sendTicketReplyEmail({
-        recipientEmail: ticket.customer.email,
-        recipientName: `${ticket.customer.name} ${ticket.customer.surname}`.trim(),
-        ticketId: ticket.id,
-        ticketNumber: ticket.ticketNumber,
-        ticketSubject: ticket.subject,
-        senderName,
-        messagePreview: trimmedMessage,
-        recipientRole: "CUSTOMER",
-        customerId: ticket.customer.id,
-      });
-    });
-
-    revalidatePath(`/yonetim/destek/${ticketId}`);
-    revalidatePath("/yonetim/destek");
-    return { success: true };
-  } catch {
-    return { success: false, error: "Yanıt gönderilirken bir hata oluştu" };
-  }
+function revalidateTicket(ticketId: string) {
+  revalidatePath(`/yonetim/destek/${ticketId}`);
+  revalidatePath("/yonetim/destek");
+  revalidatePath(`/musteri/panel/destek/${ticketId}`);
+  revalidatePath("/musteri/panel/destek");
 }
 
 export async function assignTicket(ticketId: string, adminId: string) {
@@ -129,18 +63,12 @@ export async function closeTicket(ticketId: string) {
       return { success: false, error: "Bu talep zaten kapalı" };
     }
 
-    await db.supportTicket.update({
-      where: { id: ticketId },
-      data: {
-        status: "CLOSED",
-        closedAt: new Date(),
-      },
+    await db.$transaction(async (tx) => {
+      await tx.supportTicket.update({ where: { id: ticketId }, data: statusChange("CLOSED") });
+      await emitEvent(tx, "ticket.closed", { ticketId, reason: "staff" });
     });
 
-    revalidatePath(`/yonetim/destek/${ticketId}`);
-    revalidatePath("/yonetim/destek");
-    revalidatePath(`/musteri/panel/destek/${ticketId}`);
-    revalidatePath("/musteri/panel/destek");
+    revalidateTicket(ticketId);
     return { success: true };
   } catch {
     return { success: false, error: "Talep kapatılırken bir hata oluştu" };
@@ -162,20 +90,54 @@ export async function reopenTicket(ticketId: string) {
       return { success: false, error: "Sadece kapalı talepler yeniden açılabilir" };
     }
 
-    await db.supportTicket.update({
-      where: { id: ticketId },
-      data: {
-        status: "OPEN",
-        closedAt: null,
-      },
-    });
+    await db.supportTicket.update({ where: { id: ticketId }, data: statusChange("OPEN") });
 
-    revalidatePath(`/yonetim/destek/${ticketId}`);
-    revalidatePath("/yonetim/destek");
-    revalidatePath(`/musteri/panel/destek/${ticketId}`);
-    revalidatePath("/musteri/panel/destek");
+    revalidateTicket(ticketId);
     return { success: true };
   } catch {
     return { success: false, error: "Talep yeniden açılırken bir hata oluştu" };
   }
+}
+
+const SETTABLE_STATUSES: TicketStatus[] = ["OPEN", "ADMIN_REPLY", "WAITING"];
+
+/**
+ * Status change without a reply, e.g. "Müşteri yanıtı bekleniyor" (WAITING):
+ * starts the auto-close clock. Closing has its own action.
+ */
+export async function setTicketStatus(ticketId: string, status: TicketStatus) {
+  await requireAdmin();
+  if (!SETTABLE_STATUSES.includes(status)) return { success: false, error: "Geçersiz durum" };
+
+  const result = await db.supportTicket.updateMany({
+    where: { id: ticketId, status: { not: "CLOSED" } },
+    data: statusChange(status),
+  });
+  if (result.count === 0) return { success: false, error: "Talep bulunamadı veya kapalı" };
+
+  revalidateTicket(ticketId);
+  return { success: true };
+}
+
+/**
+ * Attaches a guest (e-mail) ticket to the customer account with that
+ * address, after the staff member checked the sender.
+ */
+export async function linkTicketToCustomer(ticketId: string, customerEmail: string) {
+  await requireAdmin();
+  const email = customerEmail.trim().toLowerCase();
+  const customer = await db.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" }, role: "CUSTOMER" },
+    select: { id: true },
+  });
+  if (!customer) return { success: false, error: "Bu e-posta adresiyle kayıtlı müşteri bulunamadı" };
+
+  const result = await db.supportTicket.updateMany({
+    where: { id: ticketId, customerId: null },
+    data: { customerId: customer.id },
+  });
+  if (result.count === 0) return { success: false, error: "Talep bulunamadı veya zaten bir müşteriye bağlı" };
+
+  revalidateTicket(ticketId);
+  return { success: true };
 }

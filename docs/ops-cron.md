@@ -35,12 +35,20 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 | KLEACORE: Domain Süre Bildirimleri | `0 10 * * *` | `/app/cron-run.sh domain-notices` |
 | KLEACORE: Provisioning Retry | `*/15 * * * *` | `/app/cron-run.sh retry-provisioning` |
 | KLEACORE: E-Fatura Durumları | `*/15 * * * *` | `/app/cron-run.sh efatura-status` |
+| KLEACORE: Destek E-postaları | `*/2 * * * *` | `/app/cron-run.sh support-mail` |
+| KLEACORE: Destek Otomatik Kapatma | `15 * * * *` | `/app/cron-run.sh support-autoclose` |
 | KLEACORE: Bildirimler | `20 8-21 * * *` | `/app/cron-run.sh notifications` |
 | KLEACORE: İş Kuyruğu | `* * * * *` | `/app/cron-run.sh jobs-drain` |
 
 - `efatura-status`: `syncEInvoiceStatuses({ limit: 100 })` — Uyumsoft'ta `SENT`
   durumundaki belgelerin durumunu sorgular (en eski kontrol edilen önce). e-Fatura
   kapalıyken kayıt olmadığı için hemen biter.
+- `support-mail`: etkin destek posta kutularını (IMAP) okur, okunmamış iletileri
+  talebe / yanıta çevirir (ayrıntı: `docs/ops-support-mail.md`). Posta kutusu
+  yoksa hemen biter. Okuma süresi kilit içinde geçer; üst üste binen çalıştırma
+  `locked` döner.
+- `support-autoclose`: müşteri yanıtı beklenen talepler için gün-1 uyarısı ve
+  otomatik kapatma (Ayarlar: `/yonetim/destek/ayarlar`, varsayılan 5 gün).
 - `usage-sync`: cPanel/WHM hesaplarının disk ve bu ayki bant genişliği
   kullanımı. Cron yalnızca örnek başına bir `hosting.usage-sync` kuyruk işi açar
   (ayrıntı: `docs/ops-jobs.md`); WHM yavaşsa kilidi tutmaz. Hiç bağlı hizmet
