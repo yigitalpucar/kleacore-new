@@ -11,8 +11,17 @@ import { buttonClasses } from "@/components/site";
 import { cn } from "@/lib/utils";
 import { AuthAlert, authIconClass, authInputClass } from "./auth-shell";
 import { PasswordRequirements, passwordMeetsRules } from "./password-requirements";
+import Link from "next/link";
+import { Checkbox } from "@/components/ui/checkbox";
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 
-export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
+export function RegisterForm({
+  onSwitch,
+  turnstileSiteKey,
+}: {
+  onSwitch: () => void;
+  turnstileSiteKey: string | null;
+}) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,6 +32,9 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
     password: "",
     confirmPassword: "",
   });
+  const [kvkkAccepted, setKvkkAccepted] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +53,11 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
       return;
     }
 
+    if (!kvkkAccepted) {
+      setError("Devam etmek için KVKK Aydınlatma Metni'ni okuduğunuzu onaylayın.");
+      return;
+    }
+
     setLoading(true);
 
     const registerPayload = new FormData();
@@ -49,7 +66,11 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
     registerPayload.set("email", formData.email);
     registerPayload.set("password", formData.password);
     registerPayload.set("confirmPassword", formData.confirmPassword);
+    registerPayload.set("kvkkAccepted", "true");
+    if (captchaToken) registerPayload.set("cf-turnstile-response", captchaToken);
     const registerResult = await registerAction(registerPayload);
+    // The Turnstile token is single-use; a retry needs a fresh one.
+    setCaptchaReset((value) => value + 1);
 
     if (!registerResult.success) {
       const errorMessage = registerResult.error || "Kayıt başarısız";
@@ -69,7 +90,7 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
       toast.info("Kayıt başarılı. Otomatik giriş yapılamadı, lütfen giriş yapın.");
       setLoading(false);
     } else {
-      toast.success("Kayıt başarılı, hoş geldiniz.");
+      toast.success("Kayıt başarılı. E-posta adresinize bir doğrulama bağlantısı gönderdik.");
       router.push("/musteri/panel");
       router.refresh();
     }
@@ -190,7 +211,40 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
         ) : null}
       </div>
 
-      <button type="submit" className={buttonClasses({ className: "w-full" })} disabled={loading}>
+      <div className="flex items-start gap-3">
+        <Checkbox
+          id="kvkkAccepted"
+          checked={kvkkAccepted}
+          onCheckedChange={(value) => setKvkkAccepted(value === true)}
+          disabled={loading}
+          className="mt-0.5"
+          aria-required
+        />
+        <Label htmlFor="kvkkAccepted" className="text-sm font-normal leading-snug text-muted-foreground">
+          <Link
+            href="/yasal/kvkk"
+            target="_blank"
+            rel="noopener"
+            className="font-medium text-foreground underline underline-offset-4 hover:no-underline"
+          >
+            KVKK Aydınlatma Metni
+          </Link>
+          &apos;ni okudum, kişisel verilerimin bu metin kapsamında işleneceği konusunda bilgilendirildim.
+        </Label>
+      </div>
+
+      <TurnstileWidget
+        siteKey={turnstileSiteKey}
+        action="register"
+        onToken={setCaptchaToken}
+        resetKey={captchaReset}
+      />
+
+      <button
+        type="submit"
+        className={buttonClasses({ className: "w-full" })}
+        disabled={loading || !kvkkAccepted || (Boolean(turnstileSiteKey) && !captchaToken)}
+      >
         {loading ? (
           <Loader2 className="size-4 animate-spin" aria-label="Hesap oluşturuluyor" />
         ) : (

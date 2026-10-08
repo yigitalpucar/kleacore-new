@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { getCustomerDashboardStats } from "@/lib/dal/dashboard";
 import { getNotifications } from "@/lib/dal/notifications";
 import { isResellerUser } from "@/lib/reseller";
+import { isEmailVerified } from "@/lib/auth/email-verification";
+import { EmailVerificationBanner } from "@/components/auth/email-verification-banner";
 
 export const metadata: Metadata = {
   title: {
@@ -18,13 +20,14 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const user = session?.user;
   const userId = user?.id;
 
-  const [isReseller, stats, notifications] = userId
+  const [isReseller, stats, notifications, emailVerified] = userId
     ? await Promise.all([
         isResellerUser(userId),
         getCustomerDashboardStats(userId),
         getNotifications(userId),
+        isEmailVerified(userId),
       ])
-    : [false, null, []];
+    : [false, null, [], true];
 
   return (
     <CustomerShell
@@ -44,6 +47,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
         type: n.type,
       }))}
     >
+      {emailVerified ? null : <EmailVerificationBanner email={user?.email} className="mb-6" />}
       {children}
     </CustomerShell>
   );

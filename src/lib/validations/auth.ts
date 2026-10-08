@@ -46,6 +46,10 @@ export const registerApiSchema = z.object({
   surname: personNameSchema("Soyad"),
   email: emailSchema,
   password: passwordSchema,
+  /** KVKK aydınlatma acknowledgement; must be true. */
+  kvkkAccepted: z.boolean().optional(),
+  /** Cloudflare Turnstile token (required when Turnstile is configured). */
+  turnstileToken: z.string().max(2048).optional(),
 });
 
 export const passwordResetRequestSchema = z.object({

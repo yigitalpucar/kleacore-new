@@ -33,7 +33,38 @@ export const provisioningRunJob = defineJob({
   },
 });
 
-const definitions = [provisioningRunJob] as const;
+export const NOTIFICATION_SEND_JOB = "notification.send";
+
+/**
+ * One customer notification (template + data). STUB owned by the notify agent:
+ * the handler lives in src/lib/notifications/send.ts and will be replaced by
+ * the real template/NotificationLog implementation.
+ */
+export const notificationSendJob = defineJob({
+  name: NOTIFICATION_SEND_JOB,
+  label: "Bildirim gönderimi",
+  schema: z
+    .object({
+      userId: z.string().min(1),
+      template: z.string().min(1),
+      data: z.record(z.unknown()),
+      channel: z.enum(["email", "sms"]).optional(),
+    })
+    .strict(),
+  queue: {
+    retryLimit: 4,
+    retryDelay: 60,
+    retryBackoff: true,
+    retryDelayMax: 60 * 60,
+    expireInSeconds: 5 * 60,
+  },
+  handler: async (payload) => {
+    const { handleNotificationSendJob } = await import("@/lib/notifications/send");
+    return handleNotificationSendJob(payload);
+  },
+});
+
+const definitions = [provisioningRunJob, notificationSendJob] as const;
 
 export type RegisteredJob = (typeof definitions)[number];
 export type JobName = RegisteredJob["name"];

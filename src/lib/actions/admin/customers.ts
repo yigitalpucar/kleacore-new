@@ -54,6 +54,8 @@ export async function createCustomer(formData: FormData) {
           role: "CUSTOMER",
           status: "ACTIVE",
           affiliateCode,
+          // Created by an admin: the address is vouched for, no verification mail.
+          emailVerifiedAt: new Date(),
         },
       });
     });
@@ -159,6 +161,42 @@ export async function activateCustomer(id: string) {
     return { success: true };
   } catch {
     return { success: false, error: "Müşteri aktifleştirilirken bir hata oluştu" };
+  }
+}
+
+/** Marks a customer's e-mail as verified (e.g. verified by phone/support). */
+export async function markCustomerEmailVerified(id: string) {
+  const session = await requireAdmin();
+
+  try {
+    const user = await db.user.findUnique({
+      where: { id },
+      select: { id: true, email: true, emailVerifiedAt: true },
+    });
+    if (!user) {
+      return { success: false, error: "Müşteri bulunamadı" };
+    }
+    if (user.emailVerifiedAt) {
+      return { success: true };
+    }
+
+    await db.$transaction([
+      db.user.update({ where: { id }, data: { emailVerifiedAt: new Date() } }),
+      db.emailVerificationToken.deleteMany({ where: { userId: id, usedAt: null } }),
+    ]);
+
+    await logActivity({
+      userId: session.user.id,
+      action: "MARK_EMAIL_VERIFIED",
+      entity: "User",
+      entityId: id,
+      details: { email: user.email },
+    });
+
+    revalidatePath(`/yonetim/musteriler/${id}`);
+    return { success: true };
+  } catch {
+    return { success: false, error: "E-posta doğrulaması kaydedilemedi" };
   }
 }
 

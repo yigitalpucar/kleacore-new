@@ -1,5 +1,6 @@
 "use server";
 
+import { getPurchaseBlock } from "@/lib/auth/email-verification";
 import { db } from "@/lib/db";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
 import {
@@ -57,6 +58,11 @@ function addMonths(date: Date, months: number) {
 
 export async function renewService(input: RenewServiceInput) {
   const session = await requireCustomer();
+
+  const purchaseBlock = await getPurchaseBlock(session.user.id);
+  if (purchaseBlock) {
+    return purchaseBlock;
+  }
 
   if (!CUSTOMER_PAYMENT_METHODS.includes(input.paymentMethod)) {
     return { success: false, error: "Geçersiz ödeme yöntemi" };

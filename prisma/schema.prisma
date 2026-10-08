@@ -332,24 +332,26 @@ model User {
   resellerCustomers       User[]  @relation("ResellerCustomers")
 
   // Relations
-  orders               Order[]
-  services             Service[]
-  invoices             Invoice[]
-  payments             Payment[]
-  tickets              SupportTicket[]
-  domains              Domain[]
-  sslCertificates      SslCertificate[]
-  transactions         Transaction[]
-  notifications        Notification[]
-  activityLogs         ActivityLog[]
-  apiKeys              ApiKey[]
-  sessions             Session[]
-  passwordResetTokens  PasswordResetToken[]
-  backups              Backup[]
-  emailMessages        EmailMessage[]
-  emailAccounts        EmailAccount[]
-  cancellationRequests CancellationRequest[]
-  planChanges          ServicePlanChange[]
+  orders                  Order[]
+  services                Service[]
+  invoices                Invoice[]
+  payments                Payment[]
+  tickets                 SupportTicket[]
+  domains                 Domain[]
+  sslCertificates         SslCertificate[]
+  transactions            Transaction[]
+  notifications           Notification[]
+  activityLogs            ActivityLog[]
+  apiKeys                 ApiKey[]
+  sessions                Session[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  consentRecords          ConsentRecord[]
+  backups                 Backup[]
+  emailMessages           EmailMessage[]
+  emailAccounts           EmailAccount[]
+  cancellationRequests    CancellationRequest[]
+  planChanges             ServicePlanChange[]
 
   // Affiliate relations
   affiliateReferrals AffiliateReferral[] @relation("AffiliateReferrals")
@@ -390,6 +392,21 @@ model PasswordResetToken {
 
   @@index([userId, expiresAt])
   @@map("password_reset_tokens")
+}
+
+/// Single-use e-mail verification link token. Only the sha256 of the random
+/// token is stored (like PasswordResetToken).
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+  @@map("email_verification_tokens")
 }
 
 // =====================
@@ -577,6 +594,7 @@ model Order {
   cancellationRequests CancellationRequest[]
   provisioningJob      ProvisioningJob?
   planChanges          ServicePlanChange[]
+  consentRecords       ConsentRecord[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1454,4 +1472,61 @@ model JobWorkerHeartbeat {
   info       Json?
 
   @@map("job_worker_heartbeats")
+}
+
+// =====================
+// LEGAL DOCUMENTS / CONSENT RECORDS
+// =====================
+
+enum LegalDocumentType {
+  DISTANCE_SALES_CONTRACT
+  PRELIMINARY_INFORMATION
+  KVKK_NOTICE
+}
+
+/// Versioned legal text. `content` is an HTML template; `{{...}}` variables are
+/// filled per order (see src/lib/legal/render.ts). A published version is never
+/// edited: publish a new version instead, consent records point at the exact one.
+model LegalDocument {
+  id            String            @id @default(cuid())
+  type          LegalDocumentType
+  version       Int
+  title         String
+  content       String            @db.Text
+  /// True for placeholder texts that still need legal review.
+  isPlaceholder Boolean           @default(false)
+  publishedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  consents ConsentRecord[]
+
+  @@unique([type, version])
+  @@index([type, publishedAt])
+  @@map("legal_documents")
+}
+
+/// Proof that a user accepted a specific legal document version: at checkout
+/// one row per (order, document), at registration one KVKK row (orderId null).
+model ConsentRecord {
+  id              String            @id @default(cuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId         String?
+  order           Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  documentId      String
+  document        LegalDocument     @relation(fields: [documentId], references: [id])
+  documentType    LegalDocumentType
+  documentVersion Int
+  /// sha256 (hex) of `snapshot`, the exact text the user was shown/accepted.
+  snapshotHash    String
+  snapshot        String            @db.Text
+  ipAddress       String?
+  userAgent       String?
+  acceptedAt      DateTime          @default(now())
+
+  @@unique([orderId, documentId])
+  @@index([userId, acceptedAt])
+  @@index([documentId])
+  @@map("consent_records")
 }
