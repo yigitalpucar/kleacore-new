@@ -110,9 +110,21 @@ export function Footer() {
       </Container>
 
       <div aria-hidden className="relative select-none overflow-hidden">
-        <p className="-mb-[0.22em] bg-gradient-to-b from-white/[0.14] to-transparent bg-clip-text text-center font-semibold leading-none tracking-tighter text-transparent [font-size:clamp(4rem,19vw,17rem)]">
-          KLEACORE
-        </p>
+        <Container>
+          <div
+            className="aspect-[674/145] w-full translate-y-[18%] bg-gradient-to-b from-white/[0.16] to-transparent"
+            style={{
+              maskImage: "url(/logo.svg)",
+              WebkitMaskImage: "url(/logo.svg)",
+              maskSize: "contain",
+              WebkitMaskSize: "contain",
+              maskRepeat: "no-repeat",
+              WebkitMaskRepeat: "no-repeat",
+              maskPosition: "center",
+              WebkitMaskPosition: "center",
+            }}
+          />
+        </Container>
       </div>
     </footer>
   );
