@@ -238,7 +238,9 @@ export async function fulfillInvoicePayment(
   // the WHERE after commit, matches 0 rows and becomes an idempotent no-op —
   // so provisioning, renewal and affiliate commission run exactly once.
   const transition = await tx.invoice.updateMany({
-    where: { id: invoice.id, status: { notIn: ["PAID", "CANCELLED"] } },
+    // Refunded invoices were paid once already; a late callback must not
+    // re-open and re-provision them (gateways owner: refunds module).
+    where: { id: invoice.id, status: { notIn: ["PAID", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"] } },
     data: {
       status: "PAID",
       paidAt: invoice.paidAt ?? now,

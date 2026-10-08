@@ -1,10 +1,15 @@
 import { randomBytes } from "crypto";
 import { getAppBaseUrl } from "@/lib/stripe";
 import { toFixed2, toKurus, toNumber } from "@/lib/money";
-import { buildPaytrToken } from "../paytr-hash";
+import { buildPaytrRefundToken, buildPaytrToken } from "../paytr-hash";
 import { persistGatewayCheckout } from "../persist";
 import type { PaymentGatewayConfig } from "../config";
-import type { CheckoutSessionInput, CheckoutSessionResult, PaymentGatewayProvider } from "../types";
+import type {
+  CheckoutSessionInput,
+  CheckoutSessionResult,
+  GatewayRefundResult,
+  PaymentGatewayProvider,
+} from "../types";
 
 const PAYTR_GET_TOKEN_URL = "https://www.paytr.com/odeme/api/get-token";
 
@@ -130,4 +135,83 @@ export function createPaytrPaymentGatewayProvider(
       };
     },
   };
+}
+export const PAYTR_REFUND_URL = "https://www.paytr.com/odeme/iade";
+
+/** Form body of PayTR's refund API. `return_amount` is TL with a dot ("12.50"). */
+export function buildPaytrRefundRequest(
+  config: Pick<PaymentGatewayConfig["paytr"], "merchantId" | "merchantKey" | "merchantSalt">,
+  input: { merchantOid: string; amount: number | string; referenceNo: string }
+) {
+  const returnAmount = toFixed2(input.amount);
+  return new URLSearchParams({
+    merchant_id: config.merchantId,
+    merchant_oid: input.merchantOid,
+    return_amount: returnAmount,
+    paytr_token: buildPaytrRefundToken(
+      config.merchantId,
+      input.merchantOid,
+      returnAmount,
+      config.merchantSalt,
+      config.merchantKey
+    ),
+    // Alphanumeric, ≤64 chars; lets PayTR's panel show which refund this was.
+    reference_no: input.referenceNo.replace(/[^A-Za-z0-9]/g, "").slice(0, 64),
+  });
+}
+
+interface PaytrRefundResponse {
+  status?: string;
+  is_test?: string | number;
+  merchant_oid?: string;
+  return_amount?: string;
+  reference_no?: string;
+  err_no?: string;
+  err_msg?: string;
+}
+
+export function parsePaytrRefundResponse(text: string): GatewayRefundResult {
+  let payload: PaytrRefundResponse;
+  try {
+    payload = JSON.parse(text) as PaytrRefundResponse;
+  } catch {
+    return { ok: false, uncertain: true, message: "PayTR yanıtı okunamadı." };
+  }
+  if (payload.status === "success") {
+    return {
+      ok: true,
+      gatewayRef: payload.reference_no ?? payload.merchant_oid,
+      message: "PayTR iadeyi onayladı.",
+      data: { ...payload },
+    };
+  }
+  return {
+    ok: false,
+    message: `PayTR iadeyi reddetti: ${payload.err_msg ?? payload.err_no ?? "bilinmeyen hata"}`,
+    data: { ...payload },
+  };
+}
+
+export async function refundPaytrPayment(
+  config: PaymentGatewayConfig,
+  input: { merchantOid: string; amount: number | string; referenceNo: string }
+): Promise<GatewayRefundResult> {
+  const body = buildPaytrRefundRequest(config.paytr, input);
+  let text: string;
+  try {
+    const response = await fetch(PAYTR_REFUND_URL, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    text = await response.text();
+    if (!response.ok) {
+      return { ok: false, uncertain: response.status >= 500, message: `PayTR HTTP ${response.status}` };
+    }
+  } catch {
+    return { ok: false, uncertain: true, message: "PayTR'ye ulaşılamadı; iade durumu PayTR panelinden kontrol edilmeli." };
+  }
+  return parsePaytrRefundResponse(text);
 }

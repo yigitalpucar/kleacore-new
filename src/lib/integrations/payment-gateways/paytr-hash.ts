@@ -28,3 +28,15 @@ export function buildPaytrCallbackHash(
   const hashStr = `${merchantOid}${merchantSalt}${status}${totalAmount}`;
   return createHmac("sha256", merchantKey).update(hashStr, "utf8").digest("base64");
 }
+
+/** paytr_token of the refund (iade) API: HMAC-SHA256(merchant_id + merchant_oid + return_amount + salt). */
+export function buildPaytrRefundToken(
+  merchantId: string,
+  merchantOid: string,
+  returnAmount: string,
+  merchantSalt: string,
+  merchantKey: string
+) {
+  const hashStr = `${merchantId}${merchantOid}${returnAmount}${merchantSalt}`;
+  return createHmac("sha256", merchantKey).update(hashStr, "utf8").digest("base64");
+}

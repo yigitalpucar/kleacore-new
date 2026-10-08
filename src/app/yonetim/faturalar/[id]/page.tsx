@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getInvoiceById } from "@/lib/dal/invoices";
+import { getInvoiceRefundSummary } from "@/lib/payments/refunds";
+import { getInvoiceBankTransferNotices } from "@/lib/dal/bank-transfer";
 import { InvoiceDetailContent, type AdminInvoiceDetail } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +27,8 @@ export default async function InvoiceDetailPage({
     taxAmount: Number(invoice.taxAmount),
     totalAmount: Number(invoice.totalAmount),
     paidAmount: Number(invoice.paidAmount),
+    refundedAmount: Number(invoice.refundedAmount),
+    hasService: Boolean(invoice.order?.serviceId),
     createdAt: invoice.createdAt.toISOString(),
     issuedAt: invoice.issuedAt.toISOString(),
     dueDate: invoice.dueDate.toISOString(),
@@ -65,5 +69,16 @@ export default async function InvoiceDetailPage({
       : null,
   };
 
-  return <InvoiceDetailContent invoice={data} />;
+  const [refundSummary, bankTransferNotices] = await Promise.all([
+    getInvoiceRefundSummary(invoice.id),
+    getInvoiceBankTransferNotices(invoice.id),
+  ]);
+
+  return (
+    <InvoiceDetailContent
+      invoice={data}
+      refundSummary={refundSummary}
+      bankTransferNotices={bankTransferNotices}
+    />
+  );
 }
