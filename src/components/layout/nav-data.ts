@@ -123,6 +123,7 @@ export const companyLinks: { title: string; href: string }[] = [
   { title: "Kariyer", href: "/kurumsal/kariyer" },
   { title: "API Dokümantasyonu", href: "/api-docs" },
   { title: "Sistem Durumu", href: "/musteri/durum" },
+  { title: "Yenilikler", href: "/degisiklikler" },
 ];
 
 export const legalLinks: { title: string; href: string }[] = [

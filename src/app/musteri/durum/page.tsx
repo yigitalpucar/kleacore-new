@@ -1,55 +1,65 @@
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import {
-  getStatuses,
-  getActiveIncidents,
-  getRecentIncidents,
-} from "@/lib/dal/system-status";
-import { DurumContent } from "./content";
+import type { Metadata } from "next";
+import { getStatuses, getIncidents } from "@/lib/dal/system-status";
+import { DurumContent, type StatusIncident, type StatusComponent } from "./content";
 
 export const dynamic = "force-dynamic";
 
-export default async function DurumPage() {
-  const [statuses, activeIncidents, recentIncidents] = await Promise.all([
-    getStatuses(),
-    getActiveIncidents(),
-    getRecentIncidents(10),
-  ]);
+export const metadata: Metadata = {
+  title: "Sistem Durumu",
+  description:
+    "KLEACORE hizmetlerinin güncel durumu, devam eden olaylar, planlı bakımlar ve son 90 günün olay geçmişi.",
+  alternates: { canonical: "/musteri/durum" },
+  openGraph: {
+    title: "Sistem Durumu | KLEACORE",
+    description: "KLEACORE hizmetlerinin güncel durumu ve olay geçmişi.",
+    url: "/musteri/durum",
+  },
+};
 
-  const serializedStatuses = statuses.map((s) => ({
+const HISTORY_DAYS = 90;
+
+export default async function DurumPage() {
+  const [statuses, incidents] = await Promise.all([getStatuses(), getIncidents()]);
+
+  const now = Date.now();
+  const since = now - HISTORY_DAYS * 24 * 60 * 60 * 1000;
+
+  const components: StatusComponent[] = statuses.map((s) => ({
     id: s.id,
     serviceName: s.serviceName,
     status: s.status,
     description: s.description,
     updatedAt: s.updatedAt.toISOString(),
+    createdAt: s.createdAt.toISOString(),
   }));
 
-  const serializeIncident = (i: (typeof activeIncidents)[number]) => ({
-    id: i.id,
-    title: i.title,
-    description: i.description,
-    severity: i.severity,
-    status: i.status,
-    serviceName: i.serviceName,
-    startedAt: i.startedAt.toISOString(),
-    resolvedAt: i.resolvedAt?.toISOString() ?? null,
-    updates: i.updates,
-    createdAt: i.createdAt.toISOString(),
-  });
+  // Unresolved incidents always count; resolved ones only inside the window.
+  const recent: StatusIncident[] = incidents
+    .filter(
+      (i) =>
+        i.status !== "RESOLVED" ||
+        (i.resolvedAt ?? i.startedAt).getTime() >= since
+    )
+    .map((i) => ({
+      id: i.id,
+      title: i.title,
+      description: i.description,
+      severity: i.severity,
+      status: i.status,
+      serviceName: i.serviceName,
+      startedAt: i.startedAt.toISOString(),
+      resolvedAt: i.resolvedAt?.toISOString() ?? null,
+      updates: i.updates,
+      updatedAt: i.updatedAt.toISOString(),
+    }))
+    .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-      <main className="flex-1">
-        <DurumContent
-          statuses={serializedStatuses}
-          activeIncidents={activeIncidents.map(serializeIncident)}
-          recentIncidents={recentIncidents.map(serializeIncident)}
-        />
-      </main>
-      <Footer />
-    </div>
+    <DurumContent
+      components={components}
+      incidents={recent}
+      historyDays={HISTORY_DAYS}
+      generatedAt={new Date(now).toISOString()}
+    />
   );
 }
