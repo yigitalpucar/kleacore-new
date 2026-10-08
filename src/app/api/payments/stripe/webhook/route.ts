@@ -8,6 +8,9 @@ import {
   notifyInvoicePaymentReceived,
 } from "@/lib/payments/fulfillment";
 import { getStripe } from "@/lib/stripe";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("payments.stripe");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +42,8 @@ export async function POST(request: NextRequest) {
 
   try {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-  } catch {
+  } catch (error) {
+    log.warn("stripe webhook signature verification failed", { error });
     return NextResponse.json({ error: "Invalid Stripe signature" }, { status: 400 });
   }
 

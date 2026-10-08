@@ -12,6 +12,9 @@ import {
   isStripePaymentMethod,
   roundMoney,
 } from "@/lib/payments/orchestrator";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("customer.invoices");
 
 interface PayInvoiceInput {
   invoiceId: string;
@@ -243,7 +246,8 @@ export async function sendInvoiceCopy(invoiceId: string) {
 
     revalidatePath("/musteri/panel/e-posta");
     return { success: true, message: "Fatura ozeti e-posta kutunuza gonderildi" };
-  } catch {
+  } catch (error) {
+    log.error("send invoice summary failed", { error });
     return { success: false, error: "Fatura ozeti gonderilemedi" };
   }
 }

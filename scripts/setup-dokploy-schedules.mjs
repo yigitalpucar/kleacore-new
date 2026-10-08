@@ -1,45 +1,73 @@
 #!/usr/bin/env node
 /**
- * Register KLEACORE cron jobs as Dokploy application scheduled tasks.
+ * Register (or repair) KLEACORE cron jobs as Dokploy application scheduled tasks.
+ *
+ * Each schedule runs inside the app container (node:22-alpine: busybox sh +
+ * wget, no bash/curl) as `/app/cron-run.sh <job>`. That script reads
+ * CRON_SECRET from the container env and calls the app on 127.0.0.1, so the
+ * secret is never stored in Dokploy or written to its schedule logs.
+ *
+ * Idempotent: schedules are matched by name; existing ones are updated in
+ * place (fixing the old `bash` + `curl` commands), missing ones are created.
  *
  * Usage:
- *   DOKPLOY_URL=... DOKPLOY_API_KEY=... CRON_SECRET=... node scripts/setup-dokploy-schedules.mjs
- *   node scripts/setup-dokploy-schedules.mjs --application-id wJ-OFQk0M8mJsgGVvXbu7
+ *   node scripts/setup-dokploy-schedules.mjs --dry-run          # print payloads only
+ *   DOKPLOY_URL=https://host/api DOKPLOY_API_KEY=... node scripts/setup-dokploy-schedules.mjs
+ *   node scripts/setup-dokploy-schedules.mjs --application-id=wJ-OFQk0M8mJsgGVvXbu7
+ *
+ * See docs/ops-cron.md.
  */
 import "dotenv/config";
 
 const DOKPLOY_URL = process.env.DOKPLOY_URL?.replace(/\/$/, "");
 const DOKPLOY_API_KEY = process.env.DOKPLOY_API_KEY;
-const CRON_SECRET = process.env.CRON_SECRET?.trim() ?? "";
-const APP_URL = (process.env.CRON_BASE_URL ?? "https://kleacore.com").replace(/\/$/, "");
+const DRY_RUN = process.argv.includes("--dry-run");
 const APPLICATION_ID =
   process.argv.find((a) => a.startsWith("--application-id="))?.split("=")[1] ??
   process.env.DOKPLOY_APPLICATION_ID ??
   "wJ-OFQk0M8mJsgGVvXbu7";
 const TIMEZONE = process.env.CRON_TIMEZONE ?? "Europe/Istanbul";
 
-const JOBS = [
-  { name: "KLEACORE: Günlük Faturalama", cron: "0 2 * * *", path: "/api/cron/daily-billing" },
-  { name: "KLEACORE: Yedeklemeler", cron: "0 3 * * *", path: "/api/cron/run-backups" },
-  { name: "KLEACORE: SSL Süre Kontrolü", cron: "0 4 * * *", path: "/api/cron/ssl-expiry" },
-  { name: "KLEACORE: Gecikmiş Faturalar", cron: "0 5 * * *", path: "/api/cron/overdue-invoices" },
-  { name: "KLEACORE: Hizmet Askıya Alma", cron: "0 6 * * *", path: "/api/cron/suspend-services" },
-  { name: "KLEACORE: Provisioning Retry", cron: "*/15 * * * *", path: "/api/cron/retry-provisioning" },
+export const JOBS = [
+  { name: "KLEACORE: Günlük Faturalama", cron: "0 2 * * *", job: "daily-billing" },
+  { name: "KLEACORE: Yedeklemeler", cron: "0 3 * * *", job: "run-backups" },
+  { name: "KLEACORE: SSL Süre Kontrolü", cron: "0 4 * * *", job: "ssl-expiry" },
+  { name: "KLEACORE: Gecikmiş Faturalar", cron: "0 5 * * *", job: "overdue-invoices" },
+  { name: "KLEACORE: Hizmet Askıya Alma", cron: "0 6 * * *", job: "suspend-services" },
+  { name: "KLEACORE: Provisioning Retry", cron: "*/15 * * * *", job: "retry-provisioning" },
 ];
 
-function curlCommand(path) {
-  const url = `${APP_URL}${path}`;
-  return `curl -sS -X POST "${url}" -H "Authorization: Bearer ${CRON_SECRET}"`;
+/**
+ * Dokploy wraps the command as `docker exec <id> sh -c '<command>'` (remote
+ * servers, inside a double-quoted echo too) or passes it as an argv element
+ * (local). Keep it free of quotes and `$` so both paths run it verbatim.
+ */
+export function scheduleCommand(job) {
+  return `/app/cron-run.sh ${job}`;
 }
 
-async function api(path, body) {
+export function schedulePayload(job) {
+  return {
+    applicationId: APPLICATION_ID,
+    name: job.name,
+    cronExpression: job.cron,
+    command: scheduleCommand(job.job),
+    shellType: "sh",
+    scheduleType: "application",
+    enabled: true,
+    timezone: TIMEZONE,
+    description: `/api/cron/${job.job}`,
+  };
+}
+
+async function api(method, path, body) {
   const response = await fetch(`${DOKPLOY_URL}/${path}`, {
-    method: "POST",
+    method,
     headers: {
       "content-type": "application/json",
       "x-api-key": DOKPLOY_API_KEY,
     },
-    body: JSON.stringify(body),
+    body: body ? JSON.stringify(body) : undefined,
   });
   const text = await response.text();
   if (!response.ok) {
@@ -49,36 +77,39 @@ async function api(path, body) {
 }
 
 async function main() {
-  if (!DOKPLOY_URL || !DOKPLOY_API_KEY) {
-    console.error("DOKPLOY_URL and DOKPLOY_API_KEY required");
-    process.exit(1);
+  if (DRY_RUN) {
+    for (const job of JOBS) console.log(JSON.stringify(schedulePayload(job)));
+    return;
   }
-  if (!CRON_SECRET) {
-    console.error("CRON_SECRET required");
+  if (!DOKPLOY_URL || !DOKPLOY_API_KEY) {
+    console.error("DOKPLOY_URL and DOKPLOY_API_KEY required (or use --dry-run)");
     process.exit(1);
   }
 
-  console.log(`Creating ${JOBS.length} Dokploy schedules for ${APPLICATION_ID}...\n`);
+  const query = new URLSearchParams({ id: APPLICATION_ID, scheduleType: "application" });
+  const existing = (await api("GET", `schedule.list?${query}`)) ?? [];
+  const byName = new Map(existing.map((s) => [s.name, s]));
+
+  console.log(`Syncing ${JOBS.length} Dokploy schedules for ${APPLICATION_ID}...\n`);
 
   for (const job of JOBS) {
-    const result = await api("schedule.create", {
-      applicationId: APPLICATION_ID,
-      name: job.name,
-      cronExpression: job.cron,
-      command: curlCommand(job.path),
-      shellType: "bash",
-      scheduleType: "application",
-      enabled: true,
-      timezone: TIMEZONE,
-      description: job.path,
-    });
-    console.log(`✓ ${job.name} (${result.scheduleId})`);
+    const payload = schedulePayload(job);
+    const current = byName.get(job.name);
+    if (current) {
+      await api("POST", "schedule.update", { ...payload, scheduleId: current.scheduleId });
+      console.log(`↻ ${job.name} (${current.scheduleId}) updated`);
+    } else {
+      const created = await api("POST", "schedule.create", payload);
+      console.log(`✓ ${job.name} (${created?.scheduleId ?? "created"})`);
+    }
   }
 
-  console.log("\nDone. Verify: CRON_SECRET=... node scripts/cron-healthcheck.mjs");
+  console.log("\nDone. Trigger one run from the Dokploy UI (Run now) and check its log.");
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
+}

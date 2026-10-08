@@ -16,6 +16,9 @@ import {
 import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod } from "@prisma/client";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("admin.services");
 
 interface ServiceInput {
   customerId: string;
@@ -86,7 +89,8 @@ export async function createService(data: ServiceInput) {
 
     revalidatePath("/yonetim/hizmetler");
     return { success: true, data: { id: service.id, integration } };
-  } catch {
+  } catch (error) {
+    log.error("create service failed", { error });
     return { success: false, error: "Hizmet oluşturulurken bir hata oluştu" };
   }
 }
@@ -161,7 +165,8 @@ export async function suspendService(id: string, reason: string) {
     revalidatePath("/musteri/panel/hizmetlerim");
     revalidatePath("/musteri/panel/e-posta");
     return { success: true, integration };
-  } catch {
+  } catch (error) {
+    log.error("suspend service failed", { error });
     return { success: false, error: "Hizmet askıya alınırken bir hata oluştu" };
   }
 }
@@ -203,7 +208,8 @@ export async function activateService(id: string) {
 
     revalidatePath("/yonetim/hizmetler");
     return { success: true, integration };
-  } catch {
+  } catch (error) {
+    log.error("activate service failed", { error });
     return { success: false, error: "Hizmet aktifleştirilirken bir hata oluştu" };
   }
 }
@@ -244,7 +250,8 @@ export async function cancelService(id: string) {
 
     revalidatePath("/yonetim/hizmetler");
     return { success: true, integration };
-  } catch {
+  } catch (error) {
+    log.error("cancel service failed", { error });
     return { success: false, error: "Hizmet iptal edilirken bir hata oluştu" };
   }
 }
