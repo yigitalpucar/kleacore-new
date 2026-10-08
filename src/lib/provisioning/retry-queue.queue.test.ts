@@ -28,6 +28,11 @@ vi.mock("@/lib/integrations/provisioning-provider", () => ({
   changeRemoteServicePlan: mocks.changeRemoteServicePlan,
 }));
 vi.mock("@/lib/integrations/ssl", () => ({ mapProductSubTypeToSslType: vi.fn(), provisionSslCertificate: vi.fn() }));
+const notice = vi.hoisted(() => ({ queueServiceActivatedNotice: vi.fn() }));
+vi.mock("@/lib/provisioning/activation-notice", () => ({
+  activationKindForCategory: (slug: string) => (slug === "hosting" ? "hosting" : "other"),
+  queueServiceActivatedNotice: notice.queueServiceActivatedNotice,
+}));
 
 import {
   enqueueProvisioningRetry,
@@ -205,5 +210,42 @@ describe("reconcileProvisioningQueue (retry-provisioning cron)", () => {
 
     expect(mocks.queueProvisioningAttempt).not.toHaveBeenCalled();
     expect(mocks.db.provisioningJob.update).toHaveBeenCalledWith({ where: { id: "pj-done" }, data: { status: "FAILED" } });
+  });
+});
+
+describe("hosting provisioning → activation notice", () => {
+  it("includes the generated panel password once (decrypted from the service row)", async () => {
+    process.env.ENCRYPTION_KEY = "test-encryption-key-test-encryption-key";
+    const { encryptSecret } = await import("@/lib/secrets/crypto");
+    const { createRemoteService } = await import("@/lib/integrations/provisioning-provider");
+    vi.mocked(createRemoteService).mockResolvedValue({ ok: true, provider: "cpanel-whm", reference: "ornekcom" });
+
+    const provisionJob = {
+      ...unsuspendJob,
+      id: "pj-9",
+      kind: "PROVISION",
+      lastError: null,
+      order: { id: "ord-9", serviceId: "svc-9", product: { category: { slug: "hosting" } }, customer: {} },
+    };
+    Object.values(mocks.db.provisioningJob).forEach((fn) => fn.mockReset());
+    mocks.db.provisioningJob.findUnique.mockResolvedValue(provisionJob);
+    mocks.db.provisioningJob.updateMany.mockResolvedValue({ count: 1 });
+    mocks.db.provisioningJob.update.mockResolvedValue({});
+    (mocks.db.service as Record<string, ReturnType<typeof vi.fn>>).update = vi.fn().mockResolvedValue({});
+    mocks.db.service.findUnique
+      .mockResolvedValueOnce({ id: "svc-9", status: "ACTIVE", username: null, serverName: null, product: {}, customer: {} })
+      .mockResolvedValueOnce({ username: "ornekcom", remoteId: "ornekcom", panelPassword: encryptSecret("Ilk-Sifre-123") });
+
+    await runQueuedProvisioningJob("pj-9", ctx(0));
+
+    expect(notice.queueServiceActivatedNotice).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        kind: "hosting",
+        password: "Ilk-Sifre-123",
+        passwordDelivery: "included",
+        service: expect.objectContaining({ username: "ornekcom" }),
+      })
+    );
   });
 });

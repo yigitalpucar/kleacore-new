@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ServiceDetailContent } from "./content";
 import { serializeMoney } from "@/lib/money";
 import { getServiceModuleView } from "@/lib/modules/admin-view";
+import { getPanelCapabilities } from "@/lib/services/panel-access";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,15 @@ export default async function ServiceDetailPage({
 
   if (!service) return notFound();
 
-  const moduleView = await getServiceModuleView(service);
+  const [moduleView, panel] = await Promise.all([getServiceModuleView(service), getPanelCapabilities(service)]);
+  // The encrypted panel password never goes to the browser.
+  const { panelPassword, ...rest } = service;
 
-  return <ServiceDetailContent service={serializeMoney(service)} moduleView={moduleView} />;
+  return (
+    <ServiceDetailContent
+      service={serializeMoney({ ...rest, hasPanelPassword: Boolean(panelPassword) })}
+      moduleView={moduleView}
+      panelLogin={panel.sso && (service.status === "ACTIVE" || service.status === "SUSPENDED")}
+    />
+  );
 }

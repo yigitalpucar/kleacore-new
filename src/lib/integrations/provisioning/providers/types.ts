@@ -3,9 +3,10 @@ import type { ServerAction, ServiceWithProduct } from "../types";
 
 export interface ProvisioningProvider {
   readonly name: string;
+  /** `data.password`: initial panel password, persisted encrypted by createRemoteService. */
   createService(
     service: ServiceWithProduct
-  ): Promise<IntegrationResult<{ reference?: string }>>;
+  ): Promise<IntegrationResult<{ reference?: string; password?: string }>>;
   suspendService(
     service: ServiceWithProduct,
     reason?: string

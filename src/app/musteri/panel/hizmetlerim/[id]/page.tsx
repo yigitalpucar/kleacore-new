@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getServiceById } from "@/lib/dal/services";
 import { getManualEtaText } from "@/lib/provisioning/manual";
+import { activationKindForCategory } from "@/lib/provisioning/activation-notice";
+import { getPanelCapabilities } from "@/lib/services/panel-access";
 import { HizmetDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +39,10 @@ export default async function HizmetDetayPage(props: Props) {
     },
   });
 
-  // Serialize for client component
+  const isHosting = activationKindForCategory(service.product.category?.slug ?? "") === "hosting";
+  const panel = isHosting ? await getPanelCapabilities(service) : null;
+
+  // Serialize for client component (never the stored panel password itself)
   const serialized = {
     id: service.id,
     label: service.label,
@@ -56,6 +61,18 @@ export default async function HizmetDetayPage(props: Props) {
     bandwidthLimit: service.bandwidthLimit != null ? Number(service.bandwidthLimit) : null,
     cpuUsage: service.cpuUsage != null ? Number(service.cpuUsage) : null,
     ramUsage: service.ramUsage != null ? Number(service.ramUsage) : null,
+    usageSyncedAt: service.usageSyncedAt ? service.usageSyncedAt.toISOString() : null,
+    hostingAccess: panel
+      ? {
+          serviceId: service.id,
+          status: service.status,
+          username: service.username ?? service.remoteId,
+          sso: panel.sso,
+          passwordReset: panel.passwordReset,
+          hasStoredPassword: Boolean(service.panelPassword),
+          passwordSetAt: service.panelPasswordSetAt ? service.panelPasswordSetAt.toISOString() : null,
+        }
+      : null,
     product: {
       id: service.product.id,
       name: service.product.name,

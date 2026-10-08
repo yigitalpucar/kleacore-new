@@ -29,6 +29,7 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 | KLEACORE: Günlük Faturalama | `0 2 * * *` | `/app/cron-run.sh daily-billing` |
 | KLEACORE: Yedeklemeler | `0 3 * * *` | `/app/cron-run.sh run-backups` |
 | KLEACORE: SSL Süre Kontrolü | `0 4 * * *` | `/app/cron-run.sh ssl-expiry` |
+| KLEACORE: Hosting Kullanım Senkronu | `30 4 * * *` | `/app/cron-run.sh usage-sync` |
 | KLEACORE: Gecikmiş Faturalar | `0 5 * * *` | `/app/cron-run.sh overdue-invoices` |
 | KLEACORE: Hizmet Askıya Alma | `0 6 * * *` | `/app/cron-run.sh suspend-services` |
 | KLEACORE: Domain Süre Bildirimleri | `0 10 * * *` | `/app/cron-run.sh domain-notices` |
@@ -40,6 +41,11 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 - `efatura-status`: `syncEInvoiceStatuses({ limit: 100 })` — Uyumsoft'ta `SENT`
   durumundaki belgelerin durumunu sorgular (en eski kontrol edilen önce). e-Fatura
   kapalıyken kayıt olmadığı için hemen biter.
+- `usage-sync`: cPanel/WHM hesaplarının disk ve bu ayki bant genişliği
+  kullanımı. Cron yalnızca örnek başına bir `hosting.usage-sync` kuyruk işi açar
+  (ayrıntı: `docs/ops-jobs.md`); WHM yavaşsa kilidi tutmaz. Hiç bağlı hizmet
+  yoksa `processed: 0` ile biter. Yeni görevi eklemek için §Operatör adımları 4
+  (`setup-dokploy-schedules.mjs`) yeniden çalıştırılmalı.
 - `notifications`: saat başı (08–21) "fatura oluştu" (yenileme / elle oluşturulan
   faturalar), "vade -3 gün" hatırlatması ve gözden kaçan "gecikti" bildirimleri;
   hepsi fatura × tür başına **bir kez** (`NotificationLog.dedupeKey`). Ayrıca kuyruğa

@@ -39,6 +39,7 @@ import { formatTRY } from "@/lib/format/price";
 import { billingPeriodLabel, billingPeriodUnit, formatDate, formatDateTime } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
 import { ServiceModuleCard, type ServiceModuleView } from "@/components/admin/modules/service-module-card";
+import { AdminPanelLoginButtons } from "@/components/admin/modules/admin-panel-login";
 
 type DateLike = Date | string;
 
@@ -61,6 +62,8 @@ interface ServiceDetailData {
   diskLimit: number | null;
   bandwidthUsed: number | null;
   bandwidthLimit: number | null;
+  usageSyncedAt: DateLike | null;
+  hasPanelPassword: boolean;
   createdAt: DateLike;
   customer: {
     id: string;
@@ -92,6 +95,8 @@ interface ServiceDetailData {
 interface ServiceDetailContentProps {
   service: ServiceDetailData;
   moduleView: ServiceModuleView;
+  /** Show "cPanel'e giriş (müşteri olarak)" (bound to an SSO-capable module, active/suspended). */
+  panelLogin?: boolean;
 }
 
 type BackupRow = ServiceDetailData["backups"][number];
@@ -131,7 +136,7 @@ const backupColumns: ColumnDef<BackupRow>[] = [
   },
 ];
 
-export function ServiceDetailContent({ service, moduleView }: ServiceDetailContentProps) {
+export function ServiceDetailContent({ service, moduleView, panelLogin = false }: ServiceDetailContentProps) {
   const router = useRouter();
 
   const handleSuspendService = async () => {
@@ -208,6 +213,7 @@ export function ServiceDetailContent({ service, moduleView }: ServiceDetailConte
         }
         actions={
           <>
+            {panelLogin ? <AdminPanelLoginButtons serviceId={service.id} /> : null}
             <UnavailableAction label="Düzenle" icon={<Pencil aria-hidden />} reason="Yakında" size="sm" />
             <UnavailableAction label="Yükselt / düşür" icon={<ArrowUpDown aria-hidden />} reason="Yakında" size="sm" />
             <Link href="/yonetim/faturalar/olustur" className={appButton({ variant: "outline", size: "sm" })}>
@@ -274,7 +280,7 @@ export function ServiceDetailContent({ service, moduleView }: ServiceDetailConte
             />
           </SectionCard>
 
-          {service.serverName || service.ipAddress || hasUsage ? (
+          {service.serverName || service.ipAddress || hasUsage || service.usageSyncedAt ? (
             <SectionCard title="Sunucu ve kullanım">
               <div className="space-y-5">
                 <DetailList
@@ -282,6 +288,11 @@ export function ServiceDetailContent({ service, moduleView }: ServiceDetailConte
                   items={[
                     { label: "Sunucu", value: service.serverName, mono: true },
                     { label: "IP adresi", value: service.ipAddress, mono: true, copy: service.ipAddress ?? undefined },
+                    {
+                      label: "Kullanım senkronu",
+                      value: service.usageSyncedAt ? formatDateTime(service.usageSyncedAt) : null,
+                    },
+                    { label: "Panel şifresi", value: service.hasPanelPassword ? "Kayıtlı (şifreli)" : null },
                   ]}
                 />
                 {hasUsage ? (

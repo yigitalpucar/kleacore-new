@@ -248,9 +248,23 @@ async function retryServiceProvisioning(
     const { activationKindForCategory, queueServiceActivatedNotice } = await import(
       "@/lib/provisioning/activation-notice"
     );
+    // Provisioning wrote the panel username / remote id and the generated
+    // password (encrypted); the notice shows the password once — it is
+    // encrypted in the queue/log and redacted in the inbox copy.
+    const fresh = await db.service.findUnique({
+      where: { id: service.id },
+      select: { username: true, remoteId: true, panelPassword: true },
+    });
+    const { readStoredPanelPassword } = await import("@/lib/services/panel-access");
+    const password = readStoredPanelPassword(fresh?.panelPassword) ?? undefined;
     await queueServiceActivatedNotice(undefined, {
-      service: { ...service, serverName: provisioning.reference ?? service.serverName },
+      service: {
+        ...service,
+        username: fresh?.username ?? fresh?.remoteId ?? service.username,
+        serverName: provisioning.reference ?? service.serverName,
+      },
       kind: activationKindForCategory(order.product.category.slug),
+      ...(password ? { password, passwordDelivery: "included" as const } : {}),
     });
   }
 
