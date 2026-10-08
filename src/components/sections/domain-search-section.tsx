@@ -1,18 +1,15 @@
 "use client";
 
 import { useId, useState } from "react";
-import Link from "next/link";
-import { Check, Loader2, Search, ShoppingCart, X } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { Loader2, Search } from "lucide-react";
 import { searchDomainAvailability } from "@/lib/actions/public/domains";
 import { toast } from "@/lib/toast";
-import { useCartStore } from "@/store/cart-store";
 import { formatTRY } from "@/lib/format/price";
 import { buttonClasses } from "@/components/site/button-classes";
 import { Section } from "@/components/site/section";
 import { SectionHeading } from "@/components/site/section-heading";
 import { CornerTicks } from "@/components/site/grid-lines";
+import { DomainResultList } from "@/components/site/domain/domain-results";
 
 interface DomainResult {
   domain: string;
@@ -38,7 +35,6 @@ export function DomainSearchSection({ tlds, id = "alan-adi" }: DomainSearchSecti
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<DomainResult[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
-  const addDomain = useCartStore((state) => state.addDomain);
   const inputId = useId();
   const hintId = useId();
 
@@ -68,24 +64,12 @@ export function DomainSearchSection({ tlds, id = "alan-adi" }: DomainSearchSecti
           renewPrice: item.renewPrice,
         })),
       );
+    } catch {
+      setResults([]);
+      toast.error("Domain sorgusu şu anda tamamlanamadı. Lütfen tekrar deneyin.");
     } finally {
       setIsSearching(false);
     }
-  };
-
-  const handleAddToCart = (result: DomainResult) => {
-    const wasAdded = addDomain({
-      domain: result.domain,
-      price: result.price,
-      renewPrice: result.renewPrice,
-    });
-
-    if (wasAdded) {
-      toast.success(`${result.domain} sepete eklendi.`);
-      return;
-    }
-
-    toast.info("Bu domain zaten sepetinizde.");
   };
 
   return (
@@ -94,7 +78,7 @@ export function DomainSearchSection({ tlds, id = "alan-adi" }: DomainSearchSecti
         align="center"
         eyebrow="Alan adı"
         title="Markanıza uygun alan adını bulun"
-        description="Alan adınızı yazın, desteklenen uzantılarda müsaitliği ve yıllık fiyatı tek seferde görün."
+        description="Alan adınızı yazın, desteklenen uzantılarda kayıt durumunu ve yıllık fiyatı tek seferde görün."
         className="mb-10"
       />
 
@@ -183,75 +167,7 @@ export function DomainSearchSection({ tlds, id = "alan-adi" }: DomainSearchSecti
         ) : null}
 
         {!isSearching && hasSearched && results.length > 0 ? (
-          <ul className="mt-8 divide-y divide-dashed overflow-hidden rounded-xl border bg-background">
-            <AnimatePresence initial>
-              {results.map((result, idx) => (
-                <motion.li
-                  key={result.domain}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.03 }}
-                  className={cn(
-                    "flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between",
-                    !result.available && "text-muted-foreground"
-                  )}
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-full border",
-                        result.available
-                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                          : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {result.available ? (
-                        <Check aria-hidden className="size-4" />
-                      ) : (
-                        <X aria-hidden className="size-4" />
-                      )}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="break-words font-mono text-base font-medium text-foreground">
-                        {result.domain}
-                      </p>
-                      <p className="text-xs">{result.available ? "Müsait" : "Kayıtlı"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 sm:justify-end">
-                    {result.available ? (
-                      <>
-                        <div className="text-left sm:text-right">
-                          <p className="font-semibold tabular-nums text-foreground">
-                            {formatTRY(result.price)}
-                            <span className="text-xs font-normal text-muted-foreground"> /yıl +KDV</span>
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Yenileme: {formatTRY(result.renewPrice)}/yıl
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className={buttonClasses({ size: "md" })}
-                          onClick={() => handleAddToCart(result)}
-                        >
-                          <ShoppingCart aria-hidden className="size-4" />
-                          Sepete ekle
-                        </button>
-                      </>
-                    ) : (
-                      <Link
-                        href={`/domain/whois?domain=${encodeURIComponent(result.domain)}`}
-                        className={buttonClasses({ variant: "outline", size: "md" })}
-                      >
-                        Whois sorgula
-                      </Link>
-                    )}
-                  </div>
-                </motion.li>
-              ))}
-            </AnimatePresence>
-          </ul>
+          <DomainResultList results={results} className="mt-8" />
         ) : null}
       </div>
     </Section>

@@ -1,81 +1,106 @@
 "use client";
 
-import { useState } from "react";
-import { PageHero } from "@/components/sections/page-hero";
-import { TrustStrip, domainTrustItems } from "@/components/sections/trust-strip";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useId, useRef, useState } from "react";
+import { ChevronDown, FileCheck2, Headphones, Loader2, Network, Search, UserCheck } from "lucide-react";
+import { Topbar } from "@/components/layout/topbar";
+import { Header } from "@/components/layout/header";
+import { Footer } from "@/components/layout/footer";
+import {
+  CtaBand,
+  FaqSection,
+  FeatureGrid,
+  PageHeader,
+  Price,
+  Section,
+  SectionHeading,
+  TrustBar,
+  buttonClasses,
+  type FaqItem,
+  type FeatureItem,
+  type TrustBarItem,
+} from "@/components/site";
+import { CornerTicks } from "@/components/site/grid-lines";
+import { DomainResultList, type DomainResultItem } from "@/components/site/domain/domain-results";
 import { searchDomainAvailability } from "@/lib/actions/public/domains";
+import { formatTRY } from "@/lib/format/price";
 import { toast } from "@/lib/toast";
-import { BorderBeam } from "@/components/magicui/border-beam";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
-  Check,
-  Search,
-  Loader2,
-  FileX,
-  Zap,
-  Clock,
-  Shield,
-  HeartHandshake,
-  Globe,
-} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface BelgesizTld {
   ext: string;
   registerPrice: number;
+  renewPrice: number;
   description: string;
 }
 
-interface BelgesizTRContentProps {
-  tlds: BelgesizTld[];
-}
+const trustItems: TrustBarItem[] = [
+  { icon: FileCheck2, label: "Belge gerekmez", description: "Marka/şirket belgesi istenmez" },
+  { icon: UserCheck, label: "Kimlik doğrulama", description: "TRABİS kurallarına göre" },
+  { icon: Network, label: "DNS yönetimi", description: "Müşteri panelinden" },
+  { icon: Headphones, label: "7/24 Destek", description: "Destek talebi ve e-posta" },
+];
 
-const features = [
+const features: FeatureItem[] = [
   {
-    icon: FileX,
-    title: "Belge Gerektirmez",
-    description: "Kimlik veya şirket belgesi olmadan kayıt",
+    icon: FileCheck2,
+    title: "Belge yükleme yok",
+    description: "Bu uzantılarda marka tescili, ticaret sicili veya vergi levhası gibi belgeler istenmez; ilk başvuran kaydeder.",
   },
   {
-    icon: Zap,
-    title: "Anında Aktivasyon",
-    description: "Ödeme sonrası hemen aktif",
+    icon: UserCheck,
+    title: "Kimlik bilgisi gerekir",
+    description:
+      ".tr alan adları TRABİS üzerinden kaydedilir. Kayıt sırasında T.C. kimlik veya vergi numarası gibi bilgilerin doğrulanması istenebilir.",
   },
   {
-    icon: Clock,
-    title: "Dakikalar İçinde",
-    description: "Hızlı kayıt süreci",
-  },
-  {
-    icon: Shield,
-    title: "Türkiye Uzantısı",
-    description: "Yerel güvenilirlik",
+    icon: Network,
+    title: "Panelden yönetim",
+    description: "Kayıttan sonra DNS kayıtlarını ve nameserver'ları müşteri panelinden yönetirsiniz.",
   },
 ];
 
-export const BelgesizTRContent = ({ tlds }: BelgesizTRContentProps) => {
+const faqs: FaqItem[] = [
+  {
+    question: "Belgesiz .tr alan adı nedir?",
+    answer:
+      "Kaydı için marka, şirket veya kurum belgesi istenmeyen .tr uzantılarıdır. Bu sayfada listelenen uzantılar ilk başvuran esasına göre kaydedilir.",
+  },
+  {
+    question: "Kayıt için hangi bilgiler gerekiyor?",
+    answer:
+      ".tr alan adları TRABİS (.tr Ağ Bilgi Sistemi) üzerinden kaydedilir. Belge istenmese de kayıt sahibinin kimlik veya vergi bilgilerinin doğrulanması gerekebilir. Bilgilerinizin güncel ve doğru olduğundan emin olun.",
+  },
+  {
+    question: "Kayıt ne kadar sürer?",
+    answer:
+      "Ödemeniz onaylandıktan sonra başvuru TRABİS'e iletilir. Süre, kimlik doğrulamasının tamamlanmasına bağlıdır; doğrulama bekleyen başvurular tamamlanana kadar aktif olmaz.",
+  },
+  {
+    question: ".com.tr de belgesiz alınabilir mi?",
+    answer:
+      ".com.tr, .net.tr ve .org.tr için kayıt koşulları farklıdır. Bu uzantılar Alan adı kaydı sayfasında listelenir; koşullar hakkında destek ekibimize danışabilirsiniz.",
+  },
+  {
+    question: "Fiyatlara KDV dahil mi?",
+    answer: "Hayır. Gösterilen fiyatlara KDV dahil değildir; %20 KDV ödeme adımında eklenir.",
+  },
+];
+
+export const BelgesizTRContent = ({ tlds }: { tlds: BelgesizTld[] }) => {
   const [domain, setDomain] = useState("");
   const [selectedTld, setSelectedTld] = useState(tlds[0]?.ext ?? ".gen.tr");
   const [isSearching, setIsSearching] = useState(false);
-  const [result, setResult] = useState<null | {
-    domain: string;
-    available: boolean;
-    price: number;
-  }>(null);
+  const [results, setResults] = useState<DomainResultItem[]>([]);
+  const inputId = useId();
+  const selectId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const lowest = tlds.length > 0 ? Math.min(...tlds.map((t) => t.registerPrice)) : null;
 
   const handleSearch = async () => {
     if (!domain.trim()) return;
 
     setIsSearching(true);
-    setResult(null);
+    setResults([]);
 
     try {
       const response = await searchDomainAvailability(domain, [selectedTld]);
@@ -90,418 +115,196 @@ export const BelgesizTRContent = ({ tlds }: BelgesizTRContentProps) => {
         return;
       }
 
-      setResult({
-        domain: firstResult.domain,
-        available: firstResult.available,
-        price: firstResult.price,
-      });
+      setResults([
+        {
+          domain: firstResult.domain,
+          available: firstResult.available,
+          price: firstResult.price,
+          renewPrice: firstResult.renewPrice,
+        },
+      ]);
+    } catch {
+      toast.error("Domain sorgusu şu anda tamamlanamadı. Lütfen tekrar deneyin.");
     } finally {
       setIsSearching(false);
     }
   };
 
+  const pickTld = (ext: string) => {
+    setSelectedTld(ext);
+    setResults([]);
+    inputRef.current?.focus({ preventScroll: true });
+    document.getElementById("belgesiz-ara")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   return (
-    <main className="flex-1">
-      <PageHero
-        badge="Belge Gerektirmez"
-        badgeIcon={FileX}
-        title="Belgesiz .TR Domain"
-        description="Kimlik veya şirket belgesi olmadan Türkiye uzantılı domain kaydedin. Anında aktivasyon, uygun fiyat."
-      >
-        <Card className="max-w-2xl mx-auto relative overflow-hidden">
-          <BorderBeam size={150} duration={10} />
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Input
-                  placeholder="Domain adınız"
-                  value={domain}
-                  onChange={(e) => setDomain(e.target.value)}
-                  className="pr-24"
-                />
-                <select
-                  value={selectedTld}
-                  onChange={(e) => setSelectedTld(e.target.value)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-2 rounded bg-muted border-0 text-sm focus:ring-0"
+    <div className="flex min-h-screen flex-col">
+      <Topbar />
+      <Header />
+      <main id="main" className="flex-1">
+        <PageHeader
+          eyebrow="Alan adı"
+          title="Belgesiz .tr alan adı"
+          description={
+            lowest !== null
+              ? `Marka veya şirket belgesi gerektirmeyen .tr uzantıları, yıllık ${formatTRY(lowest)} + KDV'den başlayan fiyatlarla.`
+              : "Marka veya şirket belgesi gerektirmeyen .tr uzantıları."
+          }
+          breadcrumbs={[{ label: "Domain", href: "/domain/kayit" }, { label: "Belgesiz .tr" }]}
+        >
+          <div id="belgesiz-ara" className="mx-auto max-w-3xl scroll-mt-24 text-left">
+            <form
+              role="search"
+              aria-label="Belgesiz .tr alan adı sorgulama"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSearch();
+              }}
+              className="relative rounded-xl border bg-background p-2 shadow-[0_16px_32px_-20px_rgba(0,0,0,0.25)] dark:shadow-none"
+            >
+              <CornerTicks />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="flex flex-1 items-center">
+                  <label htmlFor={inputId} className="sr-only">
+                    Alan adı
+                  </label>
+                  <input
+                    ref={inputRef}
+                    id={inputId}
+                    type="text"
+                    inputMode="url"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    placeholder="ornek-isim"
+                    className="h-12 min-w-0 flex-1 rounded-lg bg-transparent px-4 text-base outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring sm:h-14 sm:text-lg"
+                    value={domain}
+                    onChange={(e) => setDomain(e.target.value)}
+                  />
+                  <label htmlFor={selectId} className="sr-only">
+                    Uzantı
+                  </label>
+                  <div className="relative shrink-0">
+                    <select
+                      id={selectId}
+                      value={selectedTld}
+                      onChange={(e) => {
+                        setSelectedTld(e.target.value);
+                        setResults([]);
+                      }}
+                      className="h-11 appearance-none rounded-md border bg-muted/50 pl-3 pr-8 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {tlds.map((tld) => (
+                        <option key={tld.ext} value={tld.ext}>
+                          {tld.ext}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      aria-hidden
+                      className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className={buttonClasses({ size: "lg", className: "h-12 sm:h-14 sm:px-8" })}
+                  disabled={isSearching || !domain.trim()}
                 >
-                  {tlds.map((tld) => (
-                    <option key={tld.ext} value={tld.ext}>
-                      {tld.ext}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Button
-                onClick={handleSearch}
-                disabled={isSearching || !domain.trim()}
-              >
-                {isSearching ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Search className="mr-2 h-4 w-4" />
-                    Sorgula
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {result && (
-              <div
-                className={`mt-4 p-4 rounded-lg flex items-center justify-between ${
-                  result.available
-                    ? "bg-primary/10 border border-primary/30"
-                    : "bg-destructive/10 border border-destructive/30"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  {result.available ? (
-                    <Check className="h-5 w-5 text-primary" />
+                  {isSearching ? (
+                    <>
+                      <Loader2 aria-hidden className="size-4 animate-spin" />
+                      Sorgulanıyor…
+                    </>
                   ) : (
-                    <FileX className="h-5 w-5 text-destructive" />
+                    <>
+                      <Search aria-hidden className="size-4" />
+                      Sorgula
+                    </>
                   )}
-                  <div>
-                    <p className="font-semibold">{result.domain}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {result.available
-                        ? "Bu domain müsait!"
-                        : "Bu domain alınmış"}
-                    </p>
-                  </div>
-                </div>
-                {result.available && (
-                  <Button>₺{result.price} - Satın Al</Button>
-                )}
+                </button>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </PageHero>
-
-      <TrustStrip items={domainTrustItems} />
-
-      <section className="py-12 md:py-16 border-b">
-        <div className="container">
-          <BlurFade delay={0.1} inView>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
-              {features.map((feature) => (
-                <div key={feature.title} className="text-center p-4">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 mb-3">
-                    <feature.icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <p className="font-medium text-sm">{feature.title}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {feature.description}
-                  </p>
-                </div>
-              ))}
+            </form>
+            <div aria-live="polite">
+              {results.length > 0 && !isSearching ? <DomainResultList results={results} className="mt-6" /> : null}
             </div>
-          </BlurFade>
-        </div>
-      </section>
+          </div>
+        </PageHeader>
 
-      {/* TLD Options */}
-      <section className="py-16 md:py-24">
-        <div className="container">
-          <BlurFade delay={0.1} inView>
-            <div className="text-center mb-10">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Belgesiz .TR Uzantıları
-              </h2>
-              <p className="mt-4 text-muted-foreground">
-                Tüm uzantılar aynı fiyat, belge gerektirmez
-              </p>
-            </div>
-          </BlurFade>
+        <TrustBar items={trustItems} bordered={false} />
 
-          <BlurFade delay={0.2} inView>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
-              {tlds.map((tld) => (
-                <Card
+        <Section tone="muted" divider>
+          <SectionHeading
+            eyebrow="Uzantılar"
+            title="Belgesiz .tr uzantıları"
+            description="Fiyatlar yıllıktır ve KDV hariçtir. Yenileme fiyatı ilk yıl kayıt fiyatından farklı olabilir."
+            className="mb-10"
+          />
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {tlds.map((tld) => {
+              const active = tld.ext === selectedTld;
+              return (
+                <li
                   key={tld.ext}
-                  className="hover:border-primary/50 transition-colors cursor-pointer"
-                  onClick={() => setSelectedTld(tld.ext)}
+                  className={cn(
+                    "flex flex-col rounded-2xl p-1.5 ring-1",
+                    active ? "bg-muted ring-foreground/30" : "bg-muted/60 ring-border dark:bg-muted/30"
+                  )}
                 >
-                  <CardContent className="p-6 text-center">
-                    <p className="text-2xl font-bold text-primary">{tld.ext}</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {tld.description}
+                  <div className="rounded-xl bg-background px-5 py-4 shadow-[0_6px_10px_-6px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.05)]">
+                    <h3 className="font-mono text-xl font-semibold">{tld.ext}</h3>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{tld.description}</p>
+                  </div>
+                  <div className="flex flex-1 flex-col px-5 pb-4 pt-5">
+                    <Price amount={tld.registerPrice} period="yıl" size="md" />
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Yenileme: {formatTRY(tld.renewPrice)}/yıl
                     </p>
-                    <p className="text-3xl font-bold mt-4">
-                      ₺{tld.registerPrice}
-                    </p>
-                    <p className="text-xs text-muted-foreground">/yıl</p>
-                    <Button className="w-full mt-4" variant="outline">
-                      Kaydet
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </BlurFade>
-        </div>
-      </section>
+                    <button
+                      type="button"
+                      onClick={() => pickTld(tld.ext)}
+                      aria-label={`${tld.ext} uzantısında alan adı sorgula`}
+                      className={buttonClasses({ variant: active ? "primary" : "outline", className: "mt-4 w-full" })}
+                    >
+                      {tld.ext} sorgula
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-6 text-xs text-muted-foreground">
+            Fiyatlara KDV dahil değildir; %20 KDV ödeme adımında eklenir.
+          </p>
+        </Section>
 
-      {/* Comparison */}
-      <section className="py-16 md:py-24 bg-muted/30">
-        <div className="container max-w-4xl">
-          <BlurFade delay={0.1} inView>
-            <h2 className="text-3xl font-bold tracking-tight text-center mb-10">
-              Belgeli vs Belgesiz Karşılaştırma
-            </h2>
-          </BlurFade>
+        <Section divider>
+          <SectionHeading
+            eyebrow="Kayıt koşulları"
+            title="Belge gerekmez, bilgileriniz doğru olmalı"
+            description="Belgesiz uzantılar hızlı başlamak için uygundur. Kayıt yine de TRABİS kurallarına tabidir."
+            className="mb-12"
+          />
+          <FeatureGrid items={features} columns={3} />
+        </Section>
 
-          <BlurFade delay={0.2} inView>
-            <div className="grid md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Belgeli .TR Uzantıları</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3 text-sm">
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary" />
-                      .com.tr, .net.tr, .org.tr
-                    </li>
-                    <li className="flex items-center gap-2 text-muted-foreground">
-                      Kimlik/Vergi levhası gerekli
-                    </li>
-                    <li className="flex items-center gap-2 text-muted-foreground">
-                      1-2 iş günü aktivasyon
-                    </li>
-                    <li className="flex items-center gap-2 text-muted-foreground">
-                      Daha kurumsal görünüm
-                    </li>
-                  </ul>
-                </CardContent>
-              </Card>
+        <FaqSection
+          items={faqs}
+          title="Belgesiz .tr hakkında sorular"
+          description="Kayıt koşulları ve süreç hakkında merak edilenler."
+          tone="muted"
+          divider
+        />
 
-              <Card className="border-primary">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    Belgesiz .TR Uzantıları
-                    <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">
-                      Önerilen
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3 text-sm">
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary" />
-                      .gen.tr, .web.tr, .tv.tr
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary" />
-                      Belge gerektirmez
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary" />
-                      Anında aktivasyon
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary" />
-                      Uygun fiyat: ₺{tlds[0]?.registerPrice ?? 79}/yıl
-                    </li>
-                  </ul>
-                </CardContent>
-              </Card>
-            </div>
-          </BlurFade>
-        </div>
-      </section>
-
-      {/* Why Choose Us */}
-      <section className="py-16 md:py-24">
-        <div className="container">
-          <BlurFade delay={0.1} inView>
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Neden KLEACORE?
-              </h2>
-              <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                Belgesiz .TR domain kaydında güvenilir çözüm ortağınız
-              </p>
-            </div>
-          </BlurFade>
-
-          <BlurFade delay={0.2} inView>
-            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-              <div className="text-center p-6 rounded-xl bg-card border">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-                  <FileX className="h-7 w-7 text-primary" />
-                </div>
-                <h3 className="font-semibold mb-2">Belge Gerektirmez</h3>
-                <p className="text-sm text-muted-foreground">
-                  Kimlik veya şirket belgesi olmadan kayıt
-                </p>
-              </div>
-              <div className="text-center p-6 rounded-xl bg-card border">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-500/10">
-                  <Zap className="h-7 w-7 text-green-500" />
-                </div>
-                <h3 className="font-semibold mb-2">Anında Aktivasyon</h3>
-                <p className="text-sm text-muted-foreground">
-                  Ödeme sonrası domain hemen aktif olur
-                </p>
-              </div>
-              <div className="text-center p-6 rounded-xl bg-card border">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-500/10">
-                  <Globe className="h-7 w-7 text-blue-500" />
-                </div>
-                <h3 className="font-semibold mb-2">Türkiye Uzantısı</h3>
-                <p className="text-sm text-muted-foreground">
-                  .TR ile yerel güvenilirlik sağlayın
-                </p>
-              </div>
-              <div className="text-center p-6 rounded-xl bg-card border">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-purple-500/10">
-                  <HeartHandshake className="h-7 w-7 text-purple-500" />
-                </div>
-                <h3 className="font-semibold mb-2">7/24 Destek</h3>
-                <p className="text-sm text-muted-foreground">
-                  Uzman ekibimiz her zaman yanınızda
-                </p>
-              </div>
-            </div>
-          </BlurFade>
-
-          <BlurFade delay={0.3} inView>
-            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                `Uygun fiyat: ₺${tlds[0]?.registerPrice ?? 79}/yıl`,
-                "Kolay DNS yönetimi",
-                "Ücretsiz WHOIS gizliliği",
-                "Otomatik yenileme",
-                "E-posta yönlendirme",
-                "Domain kilitleme",
-                "Hızlı kayıt süreci",
-                "Güvenli ödeme",
-              ].map((item) => (
-                <div
-                  key={item}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border"
-                >
-                  <Check className="h-5 w-5 text-green-500 shrink-0" />
-                  <span className="text-sm">{item}</span>
-                </div>
-              ))}
-            </div>
-          </BlurFade>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="py-16 md:py-24 bg-muted/30">
-        <div className="container">
-          <BlurFade delay={0.1} inView>
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Sıkça Sorulan Sorular
-              </h2>
-              <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                Belgesiz .TR domain hakkında merak edilenler
-              </p>
-            </div>
-          </BlurFade>
-
-          <BlurFade delay={0.2} inView>
-            <div className="max-w-3xl mx-auto">
-              <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value="item-1">
-                  <AccordionTrigger>
-                    Belgesiz .TR domain nedir?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    Belgesiz .TR domainler (.gen.tr, .web.tr, .tv.tr vb.),
-                    kimlik veya şirket belgesi gerektirmeden
-                    kaydedebileceğiniz Türkiye uzantılı alan adlarıdır.
-                    Normal .com.tr, .net.tr gibi uzantıların aksine herhangi
-                    bir evrak yüklemeden anında kayıt yapabilirsiniz.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="item-2">
-                  <AccordionTrigger>
-                    Hangi uzantılar belge gerektirmez?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    .gen.tr, .web.tr, .tv.tr, .name.tr, .info.tr ve .bbs.tr
-                    uzantıları belge gerektirmez. Bu uzantıları herkes kimlik
-                    veya şirket belgesi olmadan kaydedebilir.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="item-3">
-                  <AccordionTrigger>
-                    Kayıt işlemi ne kadar sürer?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    Belgesiz .TR domain kayıtları anında gerçekleşir.
-                    Ödemenizi tamamladıktan sonra domain adınız hemen aktif
-                    hale gelir ve kullanmaya başlayabilirsiniz. Belgeli
-                    uzantıların aksine bekleme süresi yoktur.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="item-4">
-                  <AccordionTrigger>
-                    Belgesiz ve belgeli uzantılar arasındaki fark nedir?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    Belgeli uzantılar (.com.tr, .net.tr, .org.tr) için kimlik
-                    veya vergi levhası gerekir ve aktivasyon 1-2 iş günü
-                    sürer. Belgesiz uzantılar ise anında aktif olur ve evrak
-                    gerektirmez. Fonksiyonel olarak ikisi de aynı şekilde
-                    çalışır.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="item-5">
-                  <AccordionTrigger>
-                    SEO açısından bir fark var mı?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    Hayır, arama motorları açısından belgeli veya belgesiz .TR
-                    uzantıları arasında bir fark yoktur. Her iki uzantı türü
-                    de Türkiye odaklı aramalarda yerel avantaj sağlar. Önemli
-                    olan domain yaşı ve içerik kalitesidir.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="item-6">
-                  <AccordionTrigger>
-                    Yabancı uyruklu kişiler kaydedebilir mi?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    Evet, belgesiz .TR domainleri herkes kaydedebilir. Türk
-                    vatandaşı olmanız veya Türkiye&apos;de şirketinizin olması
-                    gerekmez. Yurt dışından da rahatlıkla kayıt yapabilirsiniz.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="item-7">
-                  <AccordionTrigger>
-                    Domain süresini uzatabilir miyim?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    Evet, belgesiz .TR domainleri diğer domainler gibi
-                    yenilenebilir. Süresi dolmadan önce otomatik yenileme
-                    özelliğini aktif edebilir veya manuel olarak
-                    uzatabilirsiniz. Yenileme ücreti kayıt ücreti ile
-                    aynıdır.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="item-8">
-                  <AccordionTrigger>
-                    Hangi uzantıyı tercih etmeliyim?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    .gen.tr genel kullanım için en popüler seçenektir. Web
-                    projeleri için .web.tr, kişisel siteler için .name.tr,
-                    medya ve yayıncılık için .tv.tr tercih edilebilir. Hepsi
-                    aynı fiyattır, projenize en uygun olanı seçebilirsiniz.
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </div>
-          </BlurFade>
-        </div>
-      </section>
-    </main>
+        <CtaBand
+          eyebrow="Diğer uzantılar"
+          title=".com veya .com.tr mi arıyorsunuz?"
+          description="Tüm uzantıların kayıt, yenileme ve transfer fiyatlarını tek listede karşılaştırın."
+          primary={{ label: "Alan adı sorgula", href: "/domain/kayit" }}
+          secondary={{ label: "Fiyat listesi", href: "/domain/kayit#fiyatlar" }}
+        />
+      </main>
+      <Footer />
+    </div>
   );
 };

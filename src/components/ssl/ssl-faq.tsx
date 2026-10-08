@@ -9,7 +9,12 @@ export const sslFaqs: FaqItem[] = [
   {
     question: "DV, OV ve EV SSL arasındaki fark nedir?",
     answer:
-      "DV (Domain Validation) yalnızca alan adı sahipliğini doğrular ve genellikle dakikalar içinde düzenlenir. OV (Organization Validation) kurum bilgilerini de doğrular. EV (Extended Validation) en kapsamlı doğrulamadır. OV ve EV'de süre, kurum doğrulamasına bağlıdır.",
+      "DV (Domain Validation) yalnızca alan adı sahipliğini doğrular. OV (Organization Validation) kurum bilgilerini de doğrular. EV (Extended Validation) en kapsamlı kurum doğrulamasıdır. Üçü de aynı şifrelemeyi sağlar; fark, sertifikada doğrulanan bilgidedir.",
+  },
+  {
+    question: "Sertifikam ne zaman teslim edilir?",
+    answer:
+      "Ödemeden sonra ekibimiz CSR ve doğrulama adımları için sizinle iletişime geçer. Sertifika, doğrulama tamamlandıktan sonra sertifika otoritesi tarafından düzenlenir. DV'de bu genellikle kısa sürer; OV ve EV'de süre kurum doğrulamasına bağlıdır. Sipariş anında otomatik sertifika üretilmez.",
   },
   {
     question: "Wildcard SSL nedir?",
