@@ -113,7 +113,9 @@ export const serviceActivated = defineTemplate({
           ? "Güvenliğiniz için ilk girişte şifrenizi değiştirin ve bu e-postayı saklamayın."
           : data.kind === "hosting"
             ? "Kontrol paneli şifrenizi müşteri panelinizden veya destek talebiyle sıfırlayabilirsiniz."
-            : null;
+            : data.passwordDelivery === "panel"
+              ? "İlk giriş şifrenizi müşteri panelinde hizmet sayfasından bir kez görüntüleyebilirsiniz; ilk girişte değiştirin."
+              : null;
 
     return {
       subject: `Hizmetiniz aktif: ${data.serviceLabel}`,

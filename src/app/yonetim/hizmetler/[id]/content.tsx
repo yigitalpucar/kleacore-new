@@ -39,6 +39,8 @@ import { formatTRY } from "@/lib/format/price";
 import { billingPeriodLabel, billingPeriodUnit, formatDate, formatDateTime } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
 import { ServiceModuleCard, type ServiceModuleView } from "@/components/admin/modules/service-module-card";
+import { ProxmoxServiceCard } from "@/components/admin/modules/proxmox-service-card";
+import type { ProxmoxAdminView } from "@/lib/modules/server-panel";
 
 type DateLike = Date | string;
 
@@ -92,6 +94,7 @@ interface ServiceDetailData {
 interface ServiceDetailContentProps {
   service: ServiceDetailData;
   moduleView: ServiceModuleView;
+  proxmoxView?: ProxmoxAdminView | null;
 }
 
 type BackupRow = ServiceDetailData["backups"][number];
@@ -131,7 +134,7 @@ const backupColumns: ColumnDef<BackupRow>[] = [
   },
 ];
 
-export function ServiceDetailContent({ service, moduleView }: ServiceDetailContentProps) {
+export function ServiceDetailContent({ service, moduleView, proxmoxView }: ServiceDetailContentProps) {
   const router = useRouter();
 
   const handleSuspendService = async () => {
@@ -160,7 +163,11 @@ export function ServiceDetailContent({ service, moduleView }: ServiceDetailConte
   };
 
   const handleCancelService = async () => {
-    const confirmed = window.confirm("Bu hizmeti iptal etmek istediğinize emin misiniz?");
+    const confirmed = window.confirm(
+      proxmoxView?.vmid
+        ? `Hizmet iptal edilecek ve Proxmox'taki VM ${proxmoxView.vmid} diskleriyle birlikte KALICI olarak silinecek. Geri alınamaz. Devam edilsin mi?`
+        : "Bu hizmeti iptal etmek istediğinize emin misiniz?"
+    );
     if (!confirmed) return;
 
     const result = await cancelService(service.id);
@@ -169,6 +176,12 @@ export function ServiceDetailContent({ service, moduleView }: ServiceDetailConte
       return;
     }
 
+    const integration = (result as { integration?: { ok: boolean; skipped?: boolean; error?: string } }).integration;
+    if (integration && !integration.ok && !integration.skipped) {
+      toast.error(`Hizmet iptal edildi ancak uzak sunucuda kapatılamadı: ${integration.error ?? "bilinmeyen hata"}`);
+      router.refresh();
+      return;
+    }
     toast.success("Hizmet iptal edildi");
     router.refresh();
   };
@@ -299,6 +312,8 @@ export function ServiceDetailContent({ service, moduleView }: ServiceDetailConte
           ) : null}
 
           <ServiceModuleCard serviceId={service.id} view={moduleView} legacyServerName={service.serverName} />
+
+          {proxmoxView ? <ProxmoxServiceCard serviceId={service.id} view={proxmoxView} /> : null}
 
           <SectionCard
             title="Yedekler"

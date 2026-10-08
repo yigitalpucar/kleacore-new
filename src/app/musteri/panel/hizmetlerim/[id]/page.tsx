@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getServiceById } from "@/lib/dal/services";
 import { getManualEtaText } from "@/lib/provisioning/manual";
+import { getVdsPanelView, refreshServiceUsage } from "@/lib/modules/server-panel";
 import { HizmetDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,23 @@ export default async function HizmetDetayPage(props: Props) {
   // Not found or not owned by this customer
   if (!service || service.customerId !== session!.user.id) {
     notFound();
+  }
+
+  // Module-bound VDS: pull fresh usage (throttled to once per 5 min) but never
+  // hold the page longer than 3 s for a slow hypervisor.
+  let vds = await getVdsPanelView(service);
+  if (vds && service.remoteId) {
+    const refreshed = await Promise.race([
+      refreshServiceUsage(service),
+      new Promise<{ refreshed: false }>((resolve) => setTimeout(() => resolve({ refreshed: false }), 3_000)),
+    ]);
+    if (refreshed.refreshed) {
+      const fresh = await getServiceById(params.id);
+      if (fresh) {
+        Object.assign(service, fresh);
+        vds = await getVdsPanelView(service);
+      }
+    }
   }
 
   const pendingCancellation = await db.cancellationRequest.findFirst({
@@ -84,6 +102,8 @@ export default async function HizmetDetayPage(props: Props) {
         }
       : null,
     provisioningEta: service.status === "PENDING" ? await getManualEtaText() : null,
+    suspendReason: service.suspendReason ?? null,
+    vds,
   };
 
   return <HizmetDetayContent service={serialized} />;

@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { ServiceDetailContent } from "./content";
 import { serializeMoney } from "@/lib/money";
 import { getServiceModuleView } from "@/lib/modules/admin-view";
+import { getProxmoxAdminView } from "@/lib/modules/server-panel";
+import { omitModuleData } from "@/lib/modules/service-state";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +21,10 @@ export default async function ServiceDetailPage({
 
   if (!service) return notFound();
 
-  const moduleView = await getServiceModuleView(service);
+  const [moduleView, proxmoxView] = await Promise.all([getServiceModuleView(service), getProxmoxAdminView(service)]);
 
-  return <ServiceDetailContent service={serializeMoney(service)} moduleView={moduleView} />;
+  // moduleData may hold encrypted credentials: never ship it to the browser.
+  return (
+    <ServiceDetailContent service={serializeMoney(omitModuleData(service))} moduleView={moduleView} proxmoxView={proxmoxView} />
+  );
 }

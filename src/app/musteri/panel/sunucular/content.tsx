@@ -34,6 +34,8 @@ interface ServerServiceItem {
   ipAddress: string | null;
   status: string;
   suspendReason: string | null;
+  /** Bound to an automation module (Proxmox): reinstall etc. live on the detail page. */
+  managed: boolean;
   cpuUsage: number;
   ramUsage: number;
   diskUsed: number;
@@ -163,7 +165,9 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
             disabledReason: busy ?? customerStartBlockReason(s) ?? undefined,
           },
       { label: "Snapshot al", icon: <Camera aria-hidden />, disabledReason: "Yakında", separator: true },
-      { label: "İşletim sistemini yeniden kur", icon: <HardDrive aria-hidden />, disabledReason: "Yakında" },
+      s.managed
+        ? { label: "İşletim sistemini yeniden kur", icon: <HardDrive aria-hidden />, href: `${SERVICE_PATH}/${s.id}` }
+        : { label: "İşletim sistemini yeniden kur", icon: <HardDrive aria-hidden />, disabledReason: "Yakında" },
     ];
   };
 

@@ -122,7 +122,13 @@ export interface ProxmoxServiceState {
   needsAdmin?: string;
   suspendedAt?: string;
   terminatedAt?: string;
-  reinstall?: { phase: "destroy" | "provision" | "done" | "failed"; requestedAt: string; completedAt?: string; error?: string };
+  /** queued (panel) → destroy → provision → done | failed (job gave up). */
+  reinstall?: {
+    phase: "queued" | "destroy" | "provision" | "done" | "failed";
+    requestedAt: string;
+    completedAt?: string;
+    error?: string;
+  };
 }
 
 function memoryState(): ServerModuleState {
@@ -688,8 +694,9 @@ export function createProxmoxModule(
       }
       const now = () => new Date(runtime.now()).toISOString();
       let reinstall = state.reinstall;
-      if (!reinstall || reinstall.phase === "done" || reinstall.phase === "failed") {
-        reinstall = { phase: "destroy", requestedAt: now() };
+      if (!reinstall || (reinstall.phase !== "destroy" && reinstall.phase !== "provision")) {
+        // New request (none, finished, failed or just queued by the panel).
+        reinstall = { phase: "destroy", requestedAt: reinstall?.phase === "queued" ? reinstall.requestedAt : now() };
         await store.patch({
           reinstall,
           ...(input.sshKeys ? { sshKeys: input.sshKeys } : {}),

@@ -248,9 +248,17 @@ async function retryServiceProvisioning(
     const { activationKindForCategory, queueServiceActivatedNotice } = await import(
       "@/lib/provisioning/activation-notice"
     );
+    const kind = activationKindForCategory(order.product.category.slug);
+    // A module-bound service got its IP / username / remote id written by the
+    // bridge just now: mail those. Server modules keep the initial password in
+    // the panel (shown once), never in the e-mail.
+    const bound = service.moduleInstanceId
+      ? await db.service.findUnique({ where: { id: service.id }, include: { product: true } })
+      : null;
     await queueServiceActivatedNotice(undefined, {
-      service: { ...service, serverName: provisioning.reference ?? service.serverName },
-      kind: activationKindForCategory(order.product.category.slug),
+      service: bound ? { ...bound, serverName: null } : { ...service, serverName: provisioning.reference ?? service.serverName },
+      kind,
+      ...(bound && kind === "server" ? { passwordDelivery: "panel" as const } : {}),
     });
   }
 

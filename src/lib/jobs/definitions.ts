@@ -146,12 +146,38 @@ export const notificationSendJob = defineJob({
   },
 });
 
+export const SERVER_REINSTALL_JOB = "server.reinstall";
+
+/**
+ * Customer-confirmed VDS reinstall (Proxmox: destroy → re-clone into the same
+ * VMID with the same IP). The module's reinstall is resumable through
+ * Service.moduleData, so a retry continues instead of starting over; the
+ * final failure flags the service for the admin. 3 attempts, 2 / 4 min apart.
+ */
+export const serverReinstallJob = defineJob({
+  name: SERVER_REINSTALL_JOB,
+  label: "Sunucu yeniden kurulumu",
+  schema: z.object({ serviceId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 2,
+    retryDelay: 2 * 60,
+    retryBackoff: true,
+    expireInSeconds: 10 * 60,
+  },
+  handler: async ({ serviceId }, context) => {
+    const { runServerReinstallJob } = await import("@/lib/modules/server-panel");
+    return runServerReinstallJob(serviceId, context);
+  },
+});
+
 const definitions = [
   provisioningRunJob,
   domainRenewJob,
   efaturaIssueJob,
   paymentSettledJob,
   notificationSendJob,
+  serverReinstallJob,
 ] as const;
 
 export type RegisteredJob = (typeof definitions)[number];

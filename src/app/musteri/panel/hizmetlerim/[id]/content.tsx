@@ -54,6 +54,8 @@ import { submitCancellationRequest } from "@/lib/actions/customer/cancellation";
 import { toast } from "@/lib/toast";
 import { formatTRY } from "@/lib/format/price";
 import { billingPeriodLabel, formatDate, formatDateTime } from "@/lib/format/date";
+import { VdsPanel } from "@/components/panel/vds-panel";
+import type { VdsPanelView } from "@/lib/modules/server-panel";
 
 const categoryIcons: Record<string, typeof Package> = {
   hosting: Package,
@@ -107,6 +109,9 @@ interface ServiceData {
   } | null;
   /** Expected-time text while the service waits for manual provisioning (status PENDING). */
   provisioningEta: string | null;
+  suspendReason?: string | null;
+  /** Module-bound VDS (Proxmox): live panel instead of the generic server cards. */
+  vds?: VdsPanelView | null;
 }
 
 interface HizmetDetayContentProps {
@@ -124,6 +129,7 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
   const categorySlug = service.product.category?.slug ?? "hosting";
   const isHosting = categorySlug === "hosting";
   const isServer = ["vds", "vps", "server"].includes(categorySlug);
+  const vds = service.vds ?? null;
   const isSsl = categorySlug === "ssl";
 
   const TypeIcon = categoryIcons[categorySlug] || Package;
@@ -185,7 +191,9 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
         { label: "Webmail", description: "Gelen kutusu erişimi", href: "/musteri/panel/webmail", icon: <Mail aria-hidden /> },
       ]
     : [];
-  const soonActions: { label: string; description: string; icon: React.ReactNode }[] = isHosting
+  const soonActions: { label: string; description: string; icon: React.ReactNode }[] = vds
+    ? []
+    : isHosting
     ? [
         { label: "cPanel", description: "Kontrol paneli", icon: <ExternalLink aria-hidden /> },
         { label: "phpMyAdmin", description: "Veritabanı yönetimi", icon: <Database aria-hidden /> },
@@ -287,7 +295,24 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
-          {isHosting || isServer ? (
+          {vds ? (
+            <VdsPanel
+              serviceId={service.id}
+              status={service.status}
+              suspendReason={service.suspendReason ?? null}
+              ipAddress={service.ipAddress}
+              usage={{
+                cpuUsage: service.cpuUsage,
+                ramUsage: service.ramUsage,
+                diskUsed: service.diskUsed,
+                diskLimit: service.diskLimit,
+                bandwidthUsed: service.bandwidthUsed,
+              }}
+              view={vds}
+            />
+          ) : null}
+
+          {!vds && (isHosting || isServer) ? (
             <SectionCard title="Kaynak kullanımı">
               {hasUsage ? (
                 <div className="grid gap-5 sm:grid-cols-2">
@@ -309,7 +334,7 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
             </SectionCard>
           ) : null}
 
-          {isServer && specItems.some((s) => s.value) ? (
+          {isServer && !vds && specItems.some((s) => s.value) ? (
             <SectionCard title="Sunucu özellikleri">
               <DetailList layout="grid" columns={2} items={specItems} />
             </SectionCard>

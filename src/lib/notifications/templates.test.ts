@@ -102,6 +102,16 @@ describe("notification templates", () => {
     expect(rendered.text).toContain("ayrıca iletilecektir");
   });
 
+  it("automated VDS activation points to the one-time password reveal in the panel", () => {
+    const rendered = renderNotification(
+      "service.activated",
+      { serviceId: "s1", serviceLabel: "VDS", kind: "server", ipAddress: "203.0.113.20", username: "kleacore", passwordDelivery: "panel" },
+      ctx
+    );
+    expect(rendered.text).toContain("IP adresi: 203.0.113.20");
+    expect(rendered.text).toContain("hizmet sayfasından bir kez görüntüleyebilirsiniz");
+  });
+
   it("hosting activation lists cPanel user, panel URL and nameservers", () => {
     const rendered = renderNotification(
       "service.activated",
