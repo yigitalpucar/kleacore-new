@@ -12,7 +12,8 @@ import {
 import { toast } from "@/lib/toast";
 
 interface ReportExportButtonProps {
-  period: string;
+  /** Range query string ("period=6months" or "from=…&to=…"). */
+  query: string;
 }
 
 function getFileNameFromDisposition(disposition: string | null) {
@@ -22,14 +23,14 @@ function getFileNameFromDisposition(disposition: string | null) {
   return decodeURIComponent(match[1].replace(/"/g, "").trim());
 }
 
-export function ReportExportButton({ period }: ReportExportButtonProps) {
+export function ReportExportButton({ query }: ReportExportButtonProps) {
   const [isPending, startTransition] = useTransition();
 
   const handleExport = (format: "csv" | "pdf") => {
     startTransition(async () => {
       try {
         const response = await fetch(
-          `/api/admin/reports/export?period=${encodeURIComponent(period)}&format=${format}`,
+          `/api/admin/reports/export?${query}&format=${format}`,
           {
             method: "GET",
             cache: "no-store",

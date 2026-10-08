@@ -11,12 +11,12 @@ import {
 import type { PaymentMethod, Prisma } from "@prisma/client";
 import { add, toNumber, type MoneyInput } from "@/lib/money";
 import { forbidden, unauthorized } from "@/lib/utils/api-response";
+import { parseReportRange } from "@/lib/reports/range";
+import { buildRevenueTrend, rangeLabel } from "@/lib/reports/revenue-trend";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const reportPeriods = ["7days", "30days", "3months", "6months", "1year"] as const;
-type ReportPeriod = (typeof reportPeriods)[number];
 const reportFormats = ["csv", "pdf"] as const;
 type ReportFormat = (typeof reportFormats)[number];
 const reportTypes = ["full", "accounting"] as const;
@@ -28,21 +28,14 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
   BALANCE: "Bakiye",
 };
 
-const monthNames = ["Oca", "Sub", "Mar", "Nis", "May", "Haz", "Tem", "Agu", "Eyl", "Eki", "Kas", "Ara"];
-
-function parseReportPeriod(value: string | null): ReportPeriod {
-  if (value && reportPeriods.includes(value as ReportPeriod)) {
-    return value as ReportPeriod;
-  }
-  return "6months";
-}
-
-function periodLabel(period: ReportPeriod) {
-  if (period === "7days") return "Son 7 Gun";
-  if (period === "30days") return "Son 30 Gun";
-  if (period === "3months") return "Son 3 Ay";
-  if (period === "1year") return "Son 1 Yil";
-  return "Son 6 Ay";
+/** The PDF uses a Type1 font without Turkish glyphs; labels stay ASCII. */
+function asciiText(text: string) {
+  return text
+    .replace(/ı/g, "i")
+    .replace(/İ/g, "I")
+    .replace(/–/g, "-")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 function parseReportFormat(value: string | null): ReportFormat {
@@ -111,97 +104,6 @@ function buildAccountingRows(
       entry.paymentMethod ? paymentMethodLabels[entry.paymentMethod] : "-",
     ]),
   ];
-}
-
-function getRangeByPeriod(period: ReportPeriod, now: Date) {
-  const to = new Date(now);
-  const from = new Date(now);
-
-  if (period === "7days") {
-    from.setDate(from.getDate() - 6);
-    from.setHours(0, 0, 0, 0);
-    return { from, to };
-  }
-
-  if (period === "30days") {
-    from.setDate(from.getDate() - 29);
-    from.setHours(0, 0, 0, 0);
-    return { from, to };
-  }
-
-  if (period === "3months") {
-    return { from: new Date(now.getFullYear(), now.getMonth() - 2, 1), to };
-  }
-
-  if (period === "1year") {
-    return { from: new Date(now.getFullYear(), now.getMonth() - 11, 1), to };
-  }
-
-  return { from: new Date(now.getFullYear(), now.getMonth() - 5, 1), to };
-}
-
-function dayKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
-  ).padStart(2, "0")}`;
-}
-
-function monthKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function buildRevenueTrendRows(
-  paidInvoices: Array<{ paidAt: Date | null; paidAmount: MoneyInput }>,
-  period: ReportPeriod,
-  now: Date
-) {
-  const rows: Array<[string, number]> = [];
-
-  if (period === "7days" || period === "30days") {
-    const dayCount = period === "7days" ? 7 : 30;
-    const revenueByDay = new Map<string, Prisma.Decimal>();
-
-    for (const invoice of paidInvoices) {
-      if (!invoice.paidAt) continue;
-      const key = dayKey(new Date(invoice.paidAt));
-      revenueByDay.set(key, add(revenueByDay.get(key), invoice.paidAmount));
-    }
-
-    for (let i = dayCount - 1; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      const key = dayKey(date);
-      const label =
-        dayCount <= 7
-          ? `${String(date.getDate()).padStart(2, "0")} ${monthNames[date.getMonth()]}`
-          : `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
-      rows.push([label, toNumber(revenueByDay.get(key))]);
-    }
-
-    return rows;
-  }
-
-  const monthCount = period === "3months" ? 3 : period === "1year" ? 12 : 6;
-  const revenueByMonth = new Map<string, Prisma.Decimal>();
-
-  for (const invoice of paidInvoices) {
-    if (!invoice.paidAt) continue;
-    const key = monthKey(new Date(invoice.paidAt));
-    revenueByMonth.set(key, add(revenueByMonth.get(key), invoice.paidAmount));
-  }
-
-  for (let i = monthCount - 1; i >= 0; i--) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = monthKey(date);
-    const label =
-      monthCount === 12
-        ? `${monthNames[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`
-        : monthNames[date.getMonth()];
-
-    rows.push([label, toNumber(revenueByMonth.get(key))]);
-  }
-
-  return rows;
 }
 
 function escapeCsvCell(value: unknown) {
@@ -302,11 +204,12 @@ export async function GET(request: NextRequest) {
   if (userRole !== "ADMIN") return forbidden();
 
   try {
-    const period = parseReportPeriod(request.nextUrl.searchParams.get("period"));
+    const range = parseReportRange(request.nextUrl.searchParams);
+    const period = range.period === "custom" ? `${range.fromDay}_${range.toDay}` : range.period;
     const format = parseReportFormat(request.nextUrl.searchParams.get("format"));
     const reportType = parseReportType(request.nextUrl.searchParams.get("type"));
     const now = new Date();
-    const dateRange = getRangeByPeriod(period, now);
+    const dateRange = { from: range.from, to: range.to };
 
     const [revenueData, customerData, serviceData, accountingData, accountingLedger] =
       await Promise.all([
@@ -330,7 +233,7 @@ export async function GET(request: NextRequest) {
     if (reportType === "accounting") {
       rows = [
         ["Muhasebe Raporu"],
-        ["Donem", periodLabel(period)],
+        ["Donem", asciiText(rangeLabel(range))],
         ["Baslangic", dateRange.from.toISOString()],
         ["Bitis", dateRange.to.toISOString()],
         ["Olusturma Zamani", now.toISOString()],
@@ -374,7 +277,7 @@ export async function GET(request: NextRequest) {
 
       rows = [
         ["Yonetim Raporu"],
-        ["Donem", periodLabel(period)],
+        ["Donem", asciiText(rangeLabel(range))],
         ["Baslangic", dateRange.from.toISOString()],
         ["Bitis", dateRange.to.toISOString()],
         ["Olusturma Zamani", now.toISOString()],
@@ -387,7 +290,7 @@ export async function GET(request: NextRequest) {
         [],
         ["Gelir Trendi"],
         ["Periyot", "Gelir (TRY)"],
-        ...buildRevenueTrendRows(revenueData!.paidInvoices, period, now).map(([label, value]) => [
+        ...buildRevenueTrend(revenueData!.paidInvoices, range).points.map((p): [string, number] => [p.label, p.value]).map(([label, value]) => [
           label,
           value.toFixed(2),
         ]),
@@ -396,7 +299,7 @@ export async function GET(request: NextRequest) {
         ["Toplam Musteri", customerData!.totalCustomers],
         ["Aktif Musteri", customerData!.activeCustomers],
         ["Pasif Musteri", inactiveCustomers],
-        [`${periodLabel(period)} Yeni Kayit`, customerData!.newInPeriod],
+        [`${asciiText(rangeLabel(range))} Yeni Kayit`, customerData!.newInPeriod],
         [],
         ["Musteri Tur Dagilimi"],
         ["Tur", "Adet"],
@@ -437,7 +340,7 @@ export async function GET(request: NextRequest) {
         reportType === "accounting"
           ? [
               "Muhasebe Raporu",
-              `Donem: ${periodLabel(period)}`,
+              `Donem: ${asciiText(rangeLabel(range))}`,
               `Baslangic: ${dateRange.from.toISOString()}`,
               `Bitis: ${dateRange.to.toISOString()}`,
               `Olusturma Zamani: ${now.toISOString()}`,
@@ -446,7 +349,7 @@ export async function GET(request: NextRequest) {
             ]
           : [
               "Yonetim Raporu",
-              `Donem: ${periodLabel(period)}`,
+              `Donem: ${asciiText(rangeLabel(range))}`,
               `Baslangic: ${dateRange.from.toISOString()}`,
               `Bitis: ${dateRange.to.toISOString()}`,
               `Olusturma Zamani: ${now.toISOString()}`,
@@ -458,7 +361,7 @@ export async function GET(request: NextRequest) {
               `Aylik Tekrarlayan Gelir (TRY): ${Number(serviceData!.monthlyRecurring).toFixed(2)}`,
               "",
               "Gelir Trendi",
-              ...buildRevenueTrendRows(revenueData!.paidInvoices, period, now).map(
+              ...buildRevenueTrend(revenueData!.paidInvoices, range).points.map((p): [string, number] => [p.label, p.value]).map(
                 ([label, value]) => `${label}: ${value.toFixed(2)} TRY`
               ),
               "",
@@ -466,7 +369,7 @@ export async function GET(request: NextRequest) {
               `Toplam Musteri: ${customerData!.totalCustomers}`,
               `Aktif Musteri: ${customerData!.activeCustomers}`,
               `Pasif Musteri: ${customerData!.totalCustomers - customerData!.activeCustomers}`,
-              `${periodLabel(period)} Yeni Kayit: ${customerData!.newInPeriod}`,
+              `${asciiText(rangeLabel(range))} Yeni Kayit: ${customerData!.newInPeriod}`,
               "",
               "Musteri Tur Dagilimi",
               ...customerData!.customersByType.map(
