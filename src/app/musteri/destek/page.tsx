@@ -1,10 +1,20 @@
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
+import type { Metadata } from "next";
 import { getCategories, getPopularArticles } from "@/lib/dal/knowledge-base";
 import { DestekContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Destek Merkezi",
+  description:
+    "KLEACORE destek merkezi: bilgi bankasında arayın, destek talebi oluşturun veya support@kleacore.com adresine yazın.",
+  alternates: { canonical: "/musteri/destek" },
+  openGraph: {
+    title: "Destek Merkezi | KLEACORE",
+    description: "Bilgi bankası, destek talebi ve e-posta ile KLEACORE desteğine ulaşın.",
+    url: "/musteri/destek",
+  },
+};
 
 export default async function DestekPage() {
   const [categories, popularArticles] = await Promise.all([
@@ -18,30 +28,34 @@ export default async function DestekPage() {
     slug: cat.slug,
     description: cat.description,
     icon: cat.icon,
-    _count: cat._count,
+    // Published articles only (the DAL already filters `articles`).
+    articleCount: cat.articles.length,
   }));
+
+  const searchIndex = categories.flatMap((cat) =>
+    cat.articles.map((article) => ({
+      id: article.id,
+      title: article.title,
+      slug: article.slug,
+      tags: (article.tags as string[]) ?? [],
+      categoryName: cat.name,
+      categorySlug: cat.slug,
+    }))
+  );
 
   const serializedArticles = popularArticles.map((article) => ({
     id: article.id,
     title: article.title,
     slug: article.slug,
-    viewCount: article.viewCount,
-    category: article.category
-      ? { name: article.category.name, slug: article.category.slug }
-      : null,
+    categoryName: article.category.name,
+    categorySlug: article.category.slug,
   }));
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-      <main className="flex-1">
-        <DestekContent
-          categories={serializedCategories}
-          popularArticles={serializedArticles}
-        />
-      </main>
-      <Footer />
-    </div>
+    <DestekContent
+      categories={serializedCategories}
+      searchIndex={searchIndex}
+      popularArticles={serializedArticles}
+    />
   );
 }

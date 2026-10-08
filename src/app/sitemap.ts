@@ -41,6 +41,7 @@ const staticRoutes: { path: string; changeFrequency: Entry["changeFrequency"]; p
   { path: "/hakkimizda", changeFrequency: "monthly", priority: 0.5 },
   { path: "/iletisim", changeFrequency: "monthly", priority: 0.5 },
   { path: "/kurumsal/kariyer", changeFrequency: "monthly", priority: 0.4 },
+  { path: "/degisiklikler", changeFrequency: "weekly", priority: 0.4 },
   // Legal
   { path: "/yasal/kullanim-kosullari", changeFrequency: "yearly", priority: 0.3 },
   { path: "/yasal/gizlilik", changeFrequency: "yearly", priority: 0.3 },
