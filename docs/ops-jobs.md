@@ -103,6 +103,22 @@ Yerelde: `pnpm jobs:worker` (tsx) veya `pnpm build && node --env-file=.env .work
 - `/yonetim/provisioning`'deki "Yeniden dene" eskisi gibi anında çalışır;
   başarılı olursa kuyruktaki başarısız kaydı da temizler.
 
+## Alan adı yenileme (`domain.renew`)
+
+- Yenileme faturası ödendiğinde (`fulfillInvoicePayment`, aynı transaction)
+  `onDomainRenewalPaid(invoiceId)` `domain_renewals` satırını `PAID` yapar ve
+  `domain.renew` işini kuyruğa ekler (`singletonKey` = yenileme id'si).
+- İş Gri'de `renewDomainWithRegistrar` çağırır; başarılıysa `expiresAt`
+  (registrar yanıtında yeni tarih varsa o, yoksa dönem başı + yıl) ilerler,
+  satır `COMPLETED` olur, domain geçmişine ve aktivite kaydına yazılır.
+- Toplam 5 deneme (≈10, 20, 40, 80 dk). Tekrar denemeden önce registrar'daki
+  bitiş tarihi kontrol edilir; yenileme zaten yapılmışsa ikinci kez yenilenmez.
+- Son deneme de başarısızsa satır `FAILED`, iş /yonetim/isler'de "başarısız",
+  tüm yöneticilere bildirim gider. /yonetim/domainler/[id] → "Registrar'da
+  yenile" ile elle tekrar denenir.
+- Kuyruk erişilemezse satır `PAID` kalır; günlük `domain-renewals` cron'u
+  kuyruğa ekler.
+
 ## Cron kilidi ve çalışma kaydı
 
 Her `/api/cron/*` çağrısı:

@@ -24,17 +24,47 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 
 | Görev adı | Zamanlama (Europe/Istanbul) | Komut |
 |---|---|---|
+| KLEACORE: Domain Senkronu (Gri) | `0 1 * * *` | `/app/cron-run.sh domain-sync` |
+| KLEACORE: Domain Yenileme Faturaları | `30 1 * * *` | `/app/cron-run.sh domain-renewals` |
 | KLEACORE: Günlük Faturalama | `0 2 * * *` | `/app/cron-run.sh daily-billing` |
 | KLEACORE: Yedeklemeler | `0 3 * * *` | `/app/cron-run.sh run-backups` |
 | KLEACORE: SSL Süre Kontrolü | `0 4 * * *` | `/app/cron-run.sh ssl-expiry` |
 | KLEACORE: Gecikmiş Faturalar | `0 5 * * *` | `/app/cron-run.sh overdue-invoices` |
 | KLEACORE: Hizmet Askıya Alma | `0 6 * * *` | `/app/cron-run.sh suspend-services` |
+| KLEACORE: Domain Süre Bildirimleri | `0 10 * * *` | `/app/cron-run.sh domain-notices` |
 | KLEACORE: Provisioning Retry | `*/15 * * * *` | `/app/cron-run.sh retry-provisioning` |
 | KLEACORE: İş Kuyruğu | `* * * * *` | `/app/cron-run.sh jobs-drain` |
 
 Aynı görev aynı anda iki kez çalışmaz (Postgres advisory lock); ikinci çağrı
 `{"status":"locked"}` döner. Çalıştırmalar `cron_runs` tablosuna yazılır ve
 /yonetim/isler'de görünür. Kuyruk ve işçi modeli: `docs/ops-jobs.md`.
+
+### Domain yaşam döngüsü görevleri
+
+Sıra bilinçli: önce registrar senkronu (bitiş tarihleri güncel olsun), sonra
+yenileme faturaları, bildirimler gündüz.
+
+- **domain-sync** (01:00): `ACTIVE`/`TRANSFERRING`/`EXPIRED` domainleri Gri'den
+  sorgular (`GET /api/v2/domain/{ad}`), en eski senkronlanan önce, çağrı başına
+  400 ms bekleme, çalıştırma başına en çok 200 domain. Bitiş tarihi, durum
+  (TRANSFERRING→ACTIVE dahil) ve nameserver farkları domain geçmişine
+  (`domain_lifecycle_events`) yazılır; registrar'dan boş/eksik gelen değer
+  mevcut veriyi asla silmez. Gri etkin değilse veya API bilgileri eksikse hiçbir
+  şey yapmaz, `cron_runs` özetinde `registrar: "not-configured"` görünür.
+- **domain-renewals** (01:30): `ACTIVE` + otomatik yenilemesi açık domainlere,
+  bitişten `domain_renewal_invoice_days` gün (ayar, varsayılan 30) önce yenileme
+  faturası keser (TLD `renewPrice` × yıl + KDV). `domain_renewals` tablosundaki
+  `(domainId, periodStart)` benzersiz anahtarı sayesinde aynı dönem için ikinci
+  fatura oluşmaz. Ayrıca ödenmiş ama kuyruğa girmemiş yenilemeleri `domain.renew`
+  kuyruğuna ekler, iptal edilen faturaların yenilemelerini kapatır.
+- **domain-notices** (10:00): 30/7/1 gün kala, süre dolunca, ek süre bitmeden
+  (`domain_grace_days`, varsayılan 30) ve geri alma sürecinde
+  (`domain_redemption_days`, varsayılan 30) müşteriye bildirim. Her tür, domain +
+  dönem başına bir kez (`domain_notices`). Bitişi geçmiş `ACTIVE` domainler
+  `EXPIRED` yapılır.
+
+Ödeme sonrası registrar yenilemesi cron değil, kuyruk işidir (`domain.renew`,
+bkz. `docs/ops-jobs.md`): 5 deneme, son hata yöneticiye bildirim + /yonetim/isler.
 
 Hepsi: `scheduleType: "application"`, `shellType: "sh"`, `enabled: true`.
 

@@ -29,11 +29,14 @@ const APPLICATION_ID =
 const TIMEZONE = process.env.CRON_TIMEZONE ?? "Europe/Istanbul";
 
 export const JOBS = [
+  { name: "KLEACORE: Domain Senkronu (Gri)", cron: "0 1 * * *", job: "domain-sync" },
+  { name: "KLEACORE: Domain Yenileme Faturaları", cron: "30 1 * * *", job: "domain-renewals" },
   { name: "KLEACORE: Günlük Faturalama", cron: "0 2 * * *", job: "daily-billing" },
   { name: "KLEACORE: Yedeklemeler", cron: "0 3 * * *", job: "run-backups" },
   { name: "KLEACORE: SSL Süre Kontrolü", cron: "0 4 * * *", job: "ssl-expiry" },
   { name: "KLEACORE: Gecikmiş Faturalar", cron: "0 5 * * *", job: "overdue-invoices" },
   { name: "KLEACORE: Hizmet Askıya Alma", cron: "0 6 * * *", job: "suspend-services" },
+  { name: "KLEACORE: Domain Süre Bildirimleri", cron: "0 10 * * *", job: "domain-notices" },
   { name: "KLEACORE: Provisioning Retry", cron: "*/15 * * * *", job: "retry-provisioning" },
   // Fallback queue worker (docs/ops-jobs.md). Keep it even with a worker service.
   { name: "KLEACORE: İş Kuyruğu", cron: "* * * * *", job: "jobs-drain" },

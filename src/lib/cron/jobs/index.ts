@@ -4,3 +4,4 @@ export { markOverdueInvoices } from "./mark-overdue-invoices";
 export { runScheduledBackups } from "./run-scheduled-backups";
 export { suspendOverdueServices } from "./suspend-overdue-services";
 export type { CronJobResult } from "./types";
+export { runDomainNotices, runDomainRenewals, runDomainSync } from "./domain-lifecycle";
