@@ -3,6 +3,7 @@ import { COMPANY_SETTING_KEYS, companyInfoFromSettings } from "@/lib/company-inf
 import { decryptSecret, encryptSecret, isEncryptedValue } from "@/lib/secrets/crypto";
 import { getAppBaseUrl } from "@/lib/stripe";
 import { LOGO_CID, renderEmailLayout, type RenderedEmail } from "./layout";
+import { renderOverrideEmail, renderOverrideSms, type TemplateOverride } from "./overrides";
 import { LOGO_PNG_BASE64 } from "./logo";
 import { getTemplate } from "./templates";
 import type { NotificationBrand, NotificationTemplate, RenderContext } from "./templates/types";
@@ -86,18 +87,37 @@ export const LOGO_DATA_URI = `data:image/png;base64,${LOGO_PNG_BASE64}`;
  * Validates `data` with the template schema and renders subject/HTML/text
  * (and the SMS text when the template has one). `logo: "cid"` for real
  * sends (inline attachment), `"inline"` for previews in the browser.
+ * `override`: the template's active admin edits (loadTemplateOverride); a
+ * missing channel, or an override that fails to render, falls back to the
+ * typed TS template.
  */
 export function renderNotification(
   templateKey: string,
   data: unknown,
   ctx: RenderContext,
-  options: { logo?: "cid" | "inline" } = {}
+  options: { logo?: "cid" | "inline"; override?: TemplateOverride | null } = {}
 ): RenderedNotification {
   const template = getTemplate(templateKey);
   const parsed = template.schema.parse(data);
-  const content = template.render(parsed, ctx);
-  const email = renderEmailLayout(content, ctx.brand, {
-    logoSrc: options.logo === "inline" ? LOGO_DATA_URI : `cid:${LOGO_CID}`,
-  });
-  return { ...email, sms: template.sms ? template.sms(parsed, ctx) : null };
+  const logoSrc = options.logo === "inline" ? LOGO_DATA_URI : `cid:${LOGO_CID}`;
+
+  let email: RenderedEmail | null = null;
+  if (options.override?.email) {
+    try {
+      email = renderOverrideEmail(template, parsed, ctx, options.override.email, { logoSrc });
+    } catch (error) {
+      console.error(`[Notifications] ${templateKey} e-posta şablonu işlenemedi, varsayılan kullanılıyor:`, error);
+    }
+  }
+  email ??= renderEmailLayout(template.render(parsed, ctx), ctx.brand, { logoSrc });
+
+  let sms: string | null = template.sms ? template.sms(parsed, ctx) : null;
+  if (template.sms && options.override?.sms) {
+    try {
+      sms = renderOverrideSms(template, parsed, ctx, options.override.sms);
+    } catch (error) {
+      console.error(`[Notifications] ${templateKey} SMS şablonu işlenemedi, varsayılan kullanılıyor:`, error);
+    }
+  }
+  return { ...email, sms };
 }

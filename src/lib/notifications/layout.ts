@@ -85,6 +85,65 @@ function footerLines(brand: NotificationBrand) {
   ].filter((line) => line && line.trim());
 }
 
+/** Inner card HTML (heading, greeting, paragraphs, details, button, note) of a structured template. */
+export function renderEmailBody(content: EmailContent, options: { greetingHtml?: string } = {}) {
+  const greeting = greetingLine(content);
+  const bodyStyle = `margin:0 0 14px;font-size:15px;line-height:1.6;color:${COLORS.text}`;
+  const greetingHtml = options.greetingHtml ?? (greeting ? escapeHtml(greeting) : null);
+  return `<h1 style="margin:0 0 20px;font-size:22px;line-height:1.3;font-weight:700;color:${COLORS.ink}">${escapeHtml(content.heading)}</h1>
+${greetingHtml ? `<p style="${bodyStyle}">${greetingHtml}</p>` : ""}
+${paragraphs(content.intro, bodyStyle)}
+${detailsTable(content)}
+${actionButton(content)}
+${paragraphs(content.outro, bodyStyle)}
+${content.note ? `<p style="margin:20px 0 0;padding-top:16px;border-top:1px dashed ${COLORS.border};font-size:13px;line-height:1.5;color:${COLORS.muted}">${escapeHtml(content.note)}</p>` : ""}`;
+}
+
+/**
+ * The branded shell around a card body: dark header with the logo, white
+ * card, company footer. Shared by the typed TS templates and admin-edited
+ * (DB) templates, so both look the same.
+ */
+export function renderEmailShell(
+  input: { subject: string; preheader: string; bodyHtml: string },
+  brand: NotificationBrand,
+  options: { logoSrc: string }
+) {
+  const siteHref = escapeHtml(safeUrl(brand.siteUrl));
+  const footer = footerLines(brand)
+    .map((line) => `<p style="margin:0 0 4px">${escapeHtml(line)}</p>`)
+    .join("");
+
+  return `<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<title>${escapeHtml(input.subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:${COLORS.page};font-family:${FONT};color:${COLORS.text}">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(input.preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.page}">
+<tr><td align="center" style="padding:32px 16px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
+<tr><td style="background:${COLORS.ink};border-radius:12px 12px 0 0;padding:22px 32px">
+<a href="${siteHref}" style="text-decoration:none"><img src="${escapeHtml(options.logoSrc)}" width="${LOGO_WIDTH}" height="${LOGO_HEIGHT}" alt="${escapeHtml(brand.siteName)}" style="display:block;border:0;color:#ffffff;font-family:${FONT};font-size:18px;font-weight:700;letter-spacing:2px" /></a>
+</td></tr>
+<tr><td style="background:${COLORS.card};border:1px solid ${COLORS.border};border-top:0;border-radius:0 0 12px 12px;padding:32px;font-size:15px;line-height:1.6;color:${COLORS.text}">
+${input.bodyHtml}
+</td></tr>
+<tr><td style="padding:20px 32px;font-size:12px;line-height:1.5;color:${COLORS.muted};text-align:center">
+${footer}
+<p style="margin:8px 0 0">Bu e-posta hesabınızla ilgili bir işlem nedeniyle otomatik olarak gönderilmiştir.</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+}
+
 /**
  * Branded, monochrome, table-based HTML (renders in Gmail/Outlook) plus a
  * plain-text alternative. No remote images, pixels or link rewriting: the
@@ -97,52 +156,18 @@ export function renderEmailLayout(
 ): RenderedEmail {
   const greeting = greetingLine(content);
   const preheader = content.preheader ?? content.intro[0] ?? content.heading;
-  const bodyStyle = `margin:0 0 14px;font-size:15px;line-height:1.6;color:${COLORS.text}`;
-  const siteHref = escapeHtml(safeUrl(brand.siteUrl));
-  const footer = footerLines(brand)
-    .map((line) => `<p style="margin:0 0 4px">${escapeHtml(line)}</p>`)
-    .join("");
-
-  const html = `<!doctype html>
-<html lang="tr">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<meta name="color-scheme" content="light" />
-<title>${escapeHtml(content.subject)}</title>
-</head>
-<body style="margin:0;padding:0;background:${COLORS.page};font-family:${FONT};color:${COLORS.text}">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(preheader)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.page}">
-<tr><td align="center" style="padding:32px 16px">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
-<tr><td style="background:${COLORS.ink};border-radius:12px 12px 0 0;padding:22px 32px">
-<a href="${siteHref}" style="text-decoration:none"><img src="${escapeHtml(options.logoSrc)}" width="${LOGO_WIDTH}" height="${LOGO_HEIGHT}" alt="${escapeHtml(brand.siteName)}" style="display:block;border:0;color:#ffffff;font-family:${FONT};font-size:18px;font-weight:700;letter-spacing:2px" /></a>
-</td></tr>
-<tr><td style="background:${COLORS.card};border:1px solid ${COLORS.border};border-top:0;border-radius:0 0 12px 12px;padding:32px">
-<h1 style="margin:0 0 20px;font-size:22px;line-height:1.3;font-weight:700;color:${COLORS.ink}">${escapeHtml(content.heading)}</h1>
-${greeting ? `<p style="${bodyStyle}">${escapeHtml(greeting)}</p>` : ""}
-${paragraphs(content.intro, bodyStyle)}
-${detailsTable(content)}
-${actionButton(content)}
-${paragraphs(content.outro, bodyStyle)}
-${content.note ? `<p style="margin:20px 0 0;padding-top:16px;border-top:1px dashed ${COLORS.border};font-size:13px;line-height:1.5;color:${COLORS.muted}">${escapeHtml(content.note)}</p>` : ""}
-</td></tr>
-<tr><td style="padding:20px 32px;font-size:12px;line-height:1.5;color:${COLORS.muted};text-align:center">
-${footer}
-<p style="margin:8px 0 0">Bu e-posta hesabınızla ilgili bir işlem nedeniyle otomatik olarak gönderilmiştir.</p>
-</td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`;
-
+  const html = renderEmailShell({ subject: content.subject, preheader, bodyHtml: renderEmailBody(content) }, brand, options);
   const text = renderText(content, brand, greeting);
   return { subject: content.subject, preheader, html, text };
 }
 
-function renderText(content: EmailContent, brand: NotificationBrand, greeting: string | null) {
+/** Plain-text footer appended to admin-edited templates' text part. */
+export function textFooter(brand: NotificationBrand) {
+  return ["—", ...footerLines(brand)].join("\n");
+}
+
+/** Plain-text body lines of a structured template (no footer). */
+export function renderTextBody(content: EmailContent, greeting: string | null = greetingLine(content)) {
   const lines: string[] = [content.heading, ""];
   if (greeting) lines.push(greeting, "");
   for (const line of content.intro) lines.push(line);
@@ -153,6 +178,10 @@ function renderText(content: EmailContent, brand: NotificationBrand, greeting: s
   if (content.action) lines.push("", `${content.action.label}: ${content.action.url}`);
   if (content.outro?.length) lines.push("", ...content.outro);
   if (content.note) lines.push("", content.note);
-  lines.push("", "—", ...footerLines(brand));
+  return lines;
+}
+
+function renderText(content: EmailContent, brand: NotificationBrand, greeting: string | null) {
+  const lines = [...renderTextBody(content, greeting), "", "—", ...footerLines(brand)];
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }

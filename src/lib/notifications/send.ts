@@ -131,7 +131,9 @@ export async function sendNotification<K extends TemplateKey>(
     // Validate + render now: a bad payload fails here (logged) instead of in
     // the worker, and the subject is stored for the admin list.
     const ctx = await loadRenderContext();
-    const rendered = renderNotification(template.key, data, ctx);
+    const { loadTemplateOverride } = await import("./overrides");
+    const override = await loadTemplateOverride(template.key);
+    const rendered = renderNotification(template.key, data, ctx, { override });
     const redacted = hasSensitiveData(template, data);
 
     const planned = await planChannels(template, input as SendNotificationInput<TemplateKey>, recipient);
@@ -163,7 +165,7 @@ export async function sendNotification<K extends TemplateKey>(
 
     const emailRow = created.find((row) => row.channel === "EMAIL");
     if (emailRow && input.userId && template.inbox && !input.resendOfId) {
-      await recordInboxCopy(client, emailRow.id, input.userId, template, data, ctx);
+      await recordInboxCopy(client, emailRow.id, input.userId, template, data, ctx, override);
     }
 
     const { queueNotificationDelivery } = await import("./queue");
@@ -193,9 +195,10 @@ async function recordInboxCopy(
   userId: string,
   template: NotificationTemplate,
   data: Record<string, unknown>,
-  ctx: Awaited<ReturnType<typeof loadRenderContext>>
+  ctx: Awaited<ReturnType<typeof loadRenderContext>>,
+  override: Awaited<ReturnType<typeof import("./overrides").loadTemplateOverride>>
 ) {
-  const safe = renderNotification(template.key, redactSensitive(template, data), ctx);
+  const safe = renderNotification(template.key, redactSensitive(template, data), ctx, { override });
   const message = await client.emailMessage.create({
     data: {
       customerId: userId,
