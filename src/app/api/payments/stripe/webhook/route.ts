@@ -4,10 +4,10 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { fulfillBalanceTopUp } from "@/lib/payments/balance-top-up";
 import {
+  finalizeFulfilledInvoices,
   fulfillInvoicePayment,
-  notifyInvoicePaymentReceived,
+  type FulfillInvoicePaymentResult,
 } from "@/lib/payments/fulfillment";
-import { runUnsuspendJobsForInvoices } from "@/lib/payments/service-lifecycle";
 import { getStripe } from "@/lib/stripe";
 import { createLogger } from "@/lib/logger";
 
@@ -96,25 +96,26 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        await db.$transaction(async (tx) => {
+        const results = await db.$transaction(async (tx) => {
           await tx.stripeWebhookEvent.create({
             data: { eventId: event.id },
           });
 
+          const settled: FulfillInvoicePaymentResult[] = [];
           for (const invoiceId of invoiceIds) {
-            await fulfillInvoicePayment(tx, {
-              invoiceId,
-              performedBy: session.metadata?.customerId ?? "stripe",
-              paymentReference: session.id,
-              notes: "Stripe Checkout ödemesi",
-            });
+            settled.push(
+              await fulfillInvoicePayment(tx, {
+                invoiceId,
+                performedBy: session.metadata?.customerId ?? "stripe",
+                paymentReference: session.id,
+                notes: "Stripe Checkout ödemesi",
+              })
+            );
           }
+          return settled;
         });
 
-        await runUnsuspendJobsForInvoices(invoiceIds);
-        await Promise.allSettled(
-          invoiceIds.map((invoiceId) => notifyInvoicePaymentReceived(invoiceId))
-        );
+        await finalizeFulfilledInvoices(results);
       } catch (error) {
         if (isUniqueConstraintError(error)) {
           return NextResponse.json({ received: true, skipped: true });

@@ -103,6 +103,30 @@ Yerelde: `pnpm jobs:worker` (tsx) veya `pnpm build && node --env-file=.env .work
 - `/yonetim/provisioning`'deki "Yeniden dene" eskisi gibi anında çalışır;
   başarılı olursa kuyruktaki başarısız kaydı da temizler.
 
+## Ödeme sonrası akış (kart, havale onayı, admin "ödendi")
+
+Ödeme callback'i (Kuveyt Türk, iyzico, PayTR, Stripe webhook) veya admin onayı
+**tek kısa transaction** açar: Payment `COMPLETED`, fatura `PAID` (koşullu güncelleme,
+tekrar gelen callback no-op), sipariş `COMPLETED`, yenileme/paket değişikliği,
+yerel kayıtlar (alan adı `PENDING`, SSL sertifikası `PENDING`, hizmet satırı),
+`ProvisioningJob` satırı ve şu kuyruk işleri — hepsi aynı commit'le:
+
+| İş | Ne yapar | Tekrar |
+|---|---|---|
+| `provisioning.run` | Registrar kaydı/transferi, SSL siparişi, WHM/VPS oluşturma, paket değişikliği (`PLAN_CHANGE`), askı kaldırma | 5 deneme, backoff; sonra `FAILED` |
+| `efatura.issue` | Uyumsoft/Paraşüt e-fatura/e-arşiv kesimi | 6 deneme; fatura verisi hatası (`EFATURA_…:`) tekrar denenmez, `/yonetim/e-fatura`'da görünür |
+| `payment.settled` | Webhook/aktivite olayları + `notification.send` ("ödeme alındı") | 4 deneme |
+
+Transaction içinde **hiçbir uzak çağrı yapılmaz**; bu yüzden registrar/WHM/SSL
+hatası artık kart çekimini geri almaz. Sipariş verisi bozuksa (ör. alan adı
+olmayan SSL) iş `FAILED` olarak, nedeniyle birlikte `/yonetim/provisioning`'de
+görünür; siparişi düzeltip "Yeniden dene" yeterlidir. Siparişin etkinleştirilmesi
+beklenmedik bir hatayla patlarsa (ör. yenilenecek hizmet silinmiş) yalnızca o kısım
+bir SAVEPOINT'e geri alınır, ödeme kalır; sipariş `PROCESSING`, iş
+`FAILED` (`FULFILMENT_ERROR: …`) olur. Kuyruk o an erişilemezse ödeme yine
+kaydedilir; takip işleri commit'ten sonra yeniden kuyruğa eklenir, olmazsa aynı
+istekte çalıştırılır.
+
 ## Cron kilidi ve çalışma kaydı
 
 Her `/api/cron/*` çağrısı:

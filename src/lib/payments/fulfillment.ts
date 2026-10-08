@@ -1,7 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { applyAffiliateCommission } from "@/lib/affiliate";
 import { db } from "@/lib/db";
-import { dispatchEvents } from "@/lib/events/dispatcher";
 import type {
   KleacoreEvent,
   PaymentCompletedContext,
@@ -11,12 +10,23 @@ import {
   sendPaymentReceivedEmail,
 } from "@/lib/notifications/email";
 import { sendSmsNotification } from "@/lib/notifications/sms";
-import { queueEInvoiceDraft } from "@/lib/integrations/efatura";
 import { applyServiceRenewalFromOrder } from "@/lib/payments/renewal-fulfillment";
 import { applyPlanChangeFromOrder } from "@/lib/services/plan-change";
 import { unsuspendServiceIfNeeded } from "@/lib/payments/service-lifecycle";
-import { provisionCompletedOrder } from "@/lib/provisioning/internal";
+import {
+  prepareOrderProvisioning,
+  type PreparedProvisioning,
+} from "@/lib/provisioning/internal";
+import {
+  queuePaymentFollowUps,
+  runPaymentFollowUpsWithoutQueue,
+  withSavepoint,
+  type PaymentFollowUps,
+} from "@/lib/payments/follow-ups";
+import { createLogger } from "@/lib/logger";
 import { toNumber, type MoneyInput } from "@/lib/money";
+
+const log = createLogger("payments.fulfillment");
 
 interface FulfillInvoicePaymentInput {
   invoiceId: string;
@@ -207,10 +217,171 @@ async function recordPaymentOnSettledInvoice(
   }
 }
 
+export type FulfillInvoicePaymentResult =
+  | {
+      fulfilled: true;
+      invoice: { id: string };
+      /** False when the queue was down: run `finalizeFulfilledInvoices` after commit. */
+      followUpsQueued: boolean;
+      followUps: PaymentFollowUps;
+      /** Set when the order's activation failed and was parked for the admin. */
+      fulfilmentError?: string;
+    }
+  | { fulfilled: false; invoice: { id: string } };
+
+export interface PaidOrderEffects {
+  renewal: RenewalResult | null;
+  planChange: PlanChangeResult | null;
+  provisioned: PreparedProvisioning | null;
+}
+
+function describeProvisioning(provisioned: PreparedProvisioning) {
+  if (provisioned.status === "NEEDS_ACTION") {
+    return "Ödeme alındı; kurulum için yönetici müdahalesi gerekli";
+  }
+  if (provisioned.status === "EXISTING") {
+    return "Ödeme tamamlandı";
+  }
+  return provisioned.type === "domain"
+    ? "Ödeme tamamlandı; alan adı kaydı kuyruğa alındı"
+    : provisioned.type === "ssl"
+      ? "Ödeme tamamlandı; SSL siparişi kuyruğa alındı"
+      : "Ödeme tamamlandı; hizmet oluşturuldu, kurulum kuyruğa alındı";
+}
+
+/**
+ * Local effects of a paid order, inside the payment transaction: order
+ * COMPLETED, renewal / plan change applied, activation records (domain, SSL
+ * certificate, service) and their ProvisioningJob. No remote call happens
+ * here; registrar / SSL / WHM work runs in the provisioning.run job.
+ */
+export async function applyPaidOrderEffects(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  context: { performedBy: string; invoiceId: string; paymentReference?: string }
+): Promise<PaidOrderEffects> {
+  const order = await tx.order.findUnique({ where: { id: orderId } });
+  if (!order) {
+    throw new Error("ORDER_NOT_FOUND");
+  }
+
+  const now = new Date();
+  await tx.order.update({
+    where: { id: orderId },
+    data: {
+      status: "COMPLETED",
+      approvedAt: order.approvedAt ?? now,
+      approvedBy: context.performedBy,
+      completedAt: now,
+    },
+  });
+
+  const renewal: RenewalResult = await applyServiceRenewalFromOrder(tx, orderId);
+  let planChange: PlanChangeResult | null = null;
+  let provisioned: PreparedProvisioning | null = null;
+
+  if (renewal.applied) {
+    await tx.orderActivity.create({
+      data: {
+        orderId,
+        action: "RENEWED",
+        description: "Ödeme tamamlandı ve hizmet yenilendi",
+        performedBy: context.performedBy,
+        metadata: {
+          invoiceId: context.invoiceId,
+          paymentReference: context.paymentReference,
+          serviceId: renewal.serviceId,
+          newExpiryDate: renewal.newExpiryDate?.toISOString(),
+        },
+      },
+    });
+  } else {
+    planChange = await applyPlanChangeFromOrder(tx, orderId, context.performedBy);
+
+    if (!planChange.applied) {
+      provisioned = await prepareOrderProvisioning(tx, orderId);
+
+      await tx.orderActivity.create({
+        data: {
+          orderId,
+          action: "PAYMENT_FULFILLED",
+          description: describeProvisioning(provisioned),
+          performedBy: context.performedBy,
+          metadata: {
+            invoiceId: context.invoiceId,
+            paymentReference: context.paymentReference,
+            ...provisioned,
+          },
+        },
+      });
+    }
+  }
+
+  // Paying a renewal (or any non-plan-change invoice of the service) lifts a
+  // non-payment suspension; a plan change payment doesn't settle the debt.
+  if (order.serviceId && !planChange?.applied) {
+    await unsuspendServiceIfNeeded(tx, order.serviceId, orderId);
+  }
+
+  return { renewal: renewal.applied ? renewal : null, planChange, provisioned };
+}
+
+/**
+ * Records that the order's activation failed after the payment was taken:
+ * the order stays PROCESSING (paid, not delivered) and a FAILED
+ * ProvisioningJob with the reason shows up on /yonetim/provisioning.
+ */
+async function parkFailedOrderFulfilment(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  error: unknown,
+  context: { performedBy: string; invoiceId: string; paymentReference?: string }
+) {
+  const reason = error instanceof Error ? error.message : String(error);
+  const lastError = `FULFILMENT_ERROR: ${reason}. Ödeme kaydedildi; sipariş teslim edilmedi.`.slice(0, 2000);
+  const now = new Date();
+
+  await tx.order.update({
+    where: { id: orderId },
+    data: { status: "PROCESSING", processingStartedAt: now },
+  });
+  await tx.provisioningJob.upsert({
+    where: { orderId },
+    create: { orderId, kind: "PROVISION", status: "FAILED", attempts: 0, lastError, nextRetryAt: now },
+    update: { kind: "PROVISION", status: "FAILED", lastError, nextRetryAt: now, completedAt: null },
+  });
+  await tx.orderActivity.create({
+    data: {
+      orderId,
+      action: "FULFILMENT_FAILED",
+      description: "Ödeme alındı ancak sipariş teslim edilemedi; yönetici müdahalesi gerekli",
+      performedBy: context.performedBy,
+      metadata: {
+        invoiceId: context.invoiceId,
+        paymentReference: context.paymentReference,
+        error: reason,
+      },
+    },
+  });
+  return lastError;
+}
+
+/**
+ * Records a successful payment of one invoice, in one short transaction:
+ * Payment COMPLETED, invoice PAID (idempotent conditional update), order
+ * activation records + ProvisioningJob, affiliate commission, and the queued
+ * follow-ups (e-invoice, events, notification).
+ *
+ * Nothing here talks to a registrar, SSL vendor, WHM or the e-invoice
+ * provider, and a failure while activating the order (bad order data, a
+ * missing service) is rolled back to a savepoint and parked for the admin —
+ * it never rolls back the recorded payment. Call `finalizeFulfilledInvoices`
+ * with the results after the transaction committed.
+ */
 export async function fulfillInvoicePayment(
   tx: Prisma.TransactionClient,
   input: FulfillInvoicePaymentInput
-) {
+): Promise<FulfillInvoicePaymentResult> {
   const invoice = await tx.invoice.findUnique({
     where: { id: input.invoiceId },
     include: {
@@ -248,77 +419,34 @@ export async function fulfillInvoicePayment(
 
   if (transition.count === 0) {
     await recordPaymentOnSettledInvoice(tx, invoice.id, input);
-    return { fulfilled: false as const, invoice };
+    return { fulfilled: false, invoice };
   }
 
   await completeInvoicePayment(tx, invoice.id, now, input);
 
   let renewal: RenewalResult | null = null;
   let orderCompleted = false;
+  let fulfilmentError: string | undefined;
 
   if (invoice.orderId && invoice.order && invoice.order.status !== "COMPLETED") {
-    orderCompleted = true;
+    const orderId = invoice.orderId;
+    const context = {
+      performedBy: input.performedBy,
+      invoiceId: invoice.id,
+      paymentReference: input.paymentReference,
+    };
+    const effects = await withSavepoint(tx, () => applyPaidOrderEffects(tx, orderId, context));
 
-    await tx.order.update({
-      where: { id: invoice.orderId },
-      data: {
-        status: "COMPLETED",
-        approvedAt: invoice.order.approvedAt ?? now,
-        approvedBy: input.performedBy,
-        completedAt: now,
-      },
-    });
-
-    renewal = await applyServiceRenewalFromOrder(tx, invoice.orderId);
-
-    if (renewal.applied) {
-      await tx.orderActivity.create({
-        data: {
-          orderId: invoice.orderId,
-          action: "RENEWED",
-          description: "Ödeme tamamlandı ve hizmet yenilendi",
-          performedBy: input.performedBy,
-          metadata: {
-            invoiceId: invoice.id,
-            paymentReference: input.paymentReference,
-            serviceId: renewal.serviceId,
-            newExpiryDate: renewal.newExpiryDate?.toISOString(),
-          },
-        },
-      });
+    if (effects.ok) {
+      orderCompleted = true;
+      renewal = effects.value.renewal;
     } else {
-      const planChange: PlanChangeResult = await applyPlanChangeFromOrder(
-        tx,
-        invoice.orderId,
-        input.performedBy
-      );
-
-      if (!planChange.applied) {
-        const provisioned = await provisionCompletedOrder(tx, invoice.orderId);
-
-        await tx.orderActivity.create({
-          data: {
-            orderId: invoice.orderId,
-            action: "PAYMENT_FULFILLED",
-            description:
-              "partialFailure" in provisioned && provisioned.partialFailure
-                ? "Ödeme tamamlandı, sağlama başarısız oldu ve yeniden denenecek"
-                : provisioned.type === "domain"
-                  ? "Ödeme tamamlandı ve domain registrara iletildi"
-                  : "Ödeme tamamlandı ve hizmet aktifleştirildi",
-            performedBy: input.performedBy,
-            metadata: {
-              invoiceId: invoice.id,
-              paymentReference: input.paymentReference,
-              ...provisioned,
-            },
-          },
-        });
-      }
-    }
-
-    if (invoice.order?.serviceId) {
-      await unsuspendServiceIfNeeded(tx, invoice.order.serviceId, invoice.orderId);
+      log.error("order activation failed after payment; parked for admin", {
+        invoiceId: invoice.id,
+        orderId,
+        error: effects.error,
+      });
+      fulfilmentError = await parkFailedOrderFulfilment(tx, orderId, effects.error, context);
     }
   }
 
@@ -327,15 +455,37 @@ export async function fulfillInvoicePayment(
     orderTotal: invoice.totalAmount,
   });
 
-  dispatchEvents(buildFulfillmentEvents(invoice, input, renewal, orderCompleted), {
+  const followUps: PaymentFollowUps = {
+    invoiceId: invoice.id,
     userId: input.performedBy,
-  });
+    events: buildFulfillmentEvents(invoice, input, renewal, orderCompleted),
+  };
+  const followUpsQueued = await queuePaymentFollowUps(tx, followUps);
 
-  void queueEInvoiceDraft(invoice.id).catch((error) => {
-    console.error("[E-Fatura] Taslak kuyruğa alınamadı:", error);
-  });
+  return { fulfilled: true, invoice, followUpsQueued, followUps, fulfilmentError };
+}
 
-  return { fulfilled: true as const, invoice };
+/**
+ * After the payment transaction committed: runs the inline unsuspend fast
+ * path (queue job is the backstop) and, only if the queue was down during the
+ * transaction, the follow-ups. Never throws.
+ */
+export async function finalizeFulfilledInvoices(results: FulfillInvoicePaymentResult[]) {
+  const fulfilled = results.filter(
+    (result): result is Extract<FulfillInvoicePaymentResult, { fulfilled: true }> => result.fulfilled
+  );
+  if (fulfilled.length === 0) {
+    return;
+  }
+
+  const { runUnsuspendJobsForInvoices } = await import("@/lib/payments/service-lifecycle");
+  await runUnsuspendJobsForInvoices(fulfilled.map((result) => result.invoice.id));
+
+  await Promise.allSettled(
+    fulfilled
+      .filter((result) => !result.followUpsQueued)
+      .map((result) => runPaymentFollowUpsWithoutQueue(result.followUps))
+  );
 }
 
 export async function notifyInvoicePaymentReceived(invoiceId: string) {

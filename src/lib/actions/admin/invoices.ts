@@ -11,8 +11,7 @@ import {
   sendInvoiceOverdueEmail,
   sendInvoicePaymentReminderEmail,
 } from "@/lib/notifications/email";
-import { fulfillInvoicePayment, notifyInvoicePaymentReceived } from "@/lib/payments/fulfillment";
-import { runUnsuspendJobsForInvoices } from "@/lib/payments/service-lifecycle";
+import { finalizeFulfilledInvoices, fulfillInvoicePayment } from "@/lib/payments/fulfillment";
 import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import { createLogger } from "@/lib/logger";
@@ -148,13 +147,13 @@ async function fulfillInvoiceAsAdmin(
     return { success: false as const, error: "İptal edilmiş fatura ödenemez" };
   }
 
-  await db.$transaction(async (tx) => {
-    await fulfillInvoicePayment(tx, {
+  const result = await db.$transaction(async (tx) =>
+    fulfillInvoicePayment(tx, {
       invoiceId: id,
       performedBy,
       notes,
-    });
-  });
+    })
+  );
 
   await logActivity({
     userId: performedBy,
@@ -168,9 +167,8 @@ async function fulfillInvoiceAsAdmin(
     },
   });
 
-  await runUnsuspendJobsForInvoices([id]);
-
-  dispatchNotification(() => notifyInvoicePaymentReceived(id));
+  // Provisioning, e-invoice and the "ödeme alındı" notification are queued.
+  await finalizeFulfilledInvoices([result]);
 
   revalidatePath("/yonetim/faturalar");
   revalidatePath(`/yonetim/faturalar/${id}`);
@@ -182,7 +180,12 @@ async function fulfillInvoiceAsAdmin(
   revalidatePath("/musteri/panel/domainler");
   revalidatePath("/yonetim/aktivite");
 
-  return { success: true as const };
+  return {
+    success: true as const,
+    // Payment recorded, but the order's activation needs the admin (see
+    // /yonetim/provisioning).
+    warning: result.fulfilled ? result.fulfilmentError : undefined,
+  };
 }
 
 export async function markPaid(id: string) {

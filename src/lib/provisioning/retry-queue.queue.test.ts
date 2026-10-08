@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   unsuspendRemoteService: vi.fn(),
+  changeRemoteServicePlan: vi.fn(),
   queueProvisioningAttempt: vi.fn(),
   dismissFailedQueueEntries: vi.fn(),
   db: {
@@ -24,6 +25,7 @@ vi.mock("@/lib/provisioning/queue", () => ({
 vi.mock("@/lib/integrations/provisioning-provider", () => ({
   createRemoteService: vi.fn(),
   unsuspendRemoteService: mocks.unsuspendRemoteService,
+  changeRemoteServicePlan: mocks.changeRemoteServicePlan,
 }));
 vi.mock("@/lib/integrations/ssl", () => ({ mapProductSubTypeToSslType: vi.fn(), provisionSslCertificate: vi.fn() }));
 
@@ -106,6 +108,49 @@ describe("runQueuedProvisioningJob (provisioning.run handler)", () => {
 
     await expect(runQueuedProvisioningJob("pj-1", ctx(0))).rejects.toThrow("JOB_BUSY");
     expect(mocks.unsuspendRemoteService).not.toHaveBeenCalled();
+  });
+});
+
+describe("runQueuedProvisioningJob — paid order work moved out of the payment transaction", () => {
+  beforeEach(() => {
+    Object.values(mocks.db.provisioningJob).forEach((fn) => fn.mockReset());
+    mocks.db.provisioningJob.updateMany.mockResolvedValue({ count: 1 });
+    mocks.db.provisioningJob.update.mockResolvedValue({});
+    mocks.changeRemoteServicePlan.mockReset();
+  });
+
+  it("pushes a paid plan change to WHM with the service's new package", async () => {
+    mocks.db.provisioningJob.findUnique.mockResolvedValue({ ...unsuspendJob, kind: "PLAN_CHANGE" });
+    mocks.db.service.findUnique.mockResolvedValue({ ...activeService, product: { sku: "HOST-PRO" } });
+    mocks.changeRemoteServicePlan.mockResolvedValue({ ok: true });
+
+    await expect(runQueuedProvisioningJob("pj-1", ctx(0))).resolves.toEqual({ ok: true, orderId: "ord-1" });
+    expect(mocks.changeRemoteServicePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "svc-1" }),
+      "HOST-PRO"
+    );
+  });
+
+  it("parks an SSL order without a domain as FAILED for the admin instead of retrying", async () => {
+    mocks.db.provisioningJob.findUnique.mockResolvedValue({
+      ...unsuspendJob,
+      kind: "PROVISION",
+      order: {
+        serviceId: null,
+        domain: null,
+        product: { sku: "SSL-DV-01", subType: "standart", category: { slug: "ssl" } },
+        items: [{ configuration: { type: "ssl" } }],
+      },
+    });
+
+    const result = await runQueuedProvisioningJob("pj-1", ctx(0));
+
+    expect(result).toMatchObject({ ok: false, needsAction: expect.stringMatching(/^DOMAIN_REQUIRED/) });
+    expect(mocks.db.provisioningJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "FAILED", lastError: expect.stringMatching(/^DOMAIN_REQUIRED/) }),
+      })
+    );
   });
 });
 

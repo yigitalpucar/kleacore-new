@@ -3,11 +3,12 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { generateInvoiceNumber } from "@/lib/utils/number-generators";
-import { provisionCompletedOrder } from "@/lib/provisioning/internal";
+import { prepareOrderProvisioning } from "@/lib/provisioning/internal";
 import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import { createLogger } from "@/lib/logger";
 import { sub } from "@/lib/money";
+import { netInvoiceLine, netInvoiceLineFromOrder } from "@/lib/billing/invoice-lines";
 
 const log = createLogger("admin.orders");
 
@@ -33,6 +34,13 @@ export async function approveOrder(id: string) {
     dueDate.setDate(dueDate.getDate() + 7);
 
     const subtotal = sub(order.totalAmount, order.taxAmount);
+    const description = order.items[0]?.productName ?? order.product.name;
+    const orderLine = netInvoiceLineFromOrder(order, description);
+    // The invoice must equal its lines; an order whose net amounts don't add
+    // up (legacy rows) is billed as one net line of its subtotal.
+    const invoiceLine = orderLine.totalPrice.equals(subtotal)
+      ? orderLine
+      : netInvoiceLine({ description, unitPrice: subtotal });
 
     const [updatedOrder, invoice] = await db.$transaction([
       db.order.update({
@@ -55,12 +63,9 @@ export async function approveOrder(id: string) {
           status: "PENDING",
           dueDate,
           items: {
-            create: order.items.map((item) => ({
-              description: item.productName,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              totalPrice: item.totalPrice,
-            })),
+            // Net line from the order's own net amounts; OrderItem.totalPrice
+            // is KDV-inclusive in some flows and must not be copied.
+            create: invoiceLine,
           },
         },
       }),
@@ -203,16 +208,20 @@ export async function completeOrder(id: string) {
         },
       });
 
-      const provisioned = await provisionCompletedOrder(tx, id);
+      // Local records + queued provisioning job; the registrar / WHM call
+      // runs after commit in the provisioning.run job.
+      const provisioned = await prepareOrderProvisioning(tx, id);
 
       await tx.orderActivity.create({
         data: {
           orderId: id,
           action: "COMPLETED",
           description:
-            provisioned.type === "domain"
-              ? "Sipariş tamamlandı ve domain kaydı aktifleştirildi"
-              : "Sipariş tamamlandı ve hizmet aktifleştirildi",
+            provisioned.status === "NEEDS_ACTION"
+              ? `Sipariş tamamlandı; kurulum için müdahale gerekli (${provisioned.error})`
+              : provisioned.type === "domain"
+                ? "Sipariş tamamlandı; domain kaydı kuyruğa alındı"
+                : "Sipariş tamamlandı; hizmet kurulumu kuyruğa alındı",
           performedBy: session.user.id,
           metadata: provisioned,
         },

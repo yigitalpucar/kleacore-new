@@ -2,23 +2,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   applyAffiliateCommission: vi.fn(),
-  dispatchEvents: vi.fn(),
-  queueEInvoiceDraft: vi.fn(),
+  queuePaymentFollowUps: vi.fn(),
+  runPaymentFollowUpsWithoutQueue: vi.fn(),
   applyServiceRenewalFromOrder: vi.fn(),
   applyPlanChangeFromOrder: vi.fn(),
-  provisionCompletedOrder: vi.fn(),
+  prepareOrderProvisioning: vi.fn(),
   unsuspendServiceIfNeeded: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/affiliate", () => ({ applyAffiliateCommission: mocks.applyAffiliateCommission }));
-vi.mock("@/lib/events/dispatcher", () => ({ dispatchEvents: mocks.dispatchEvents }));
 vi.mock("@/lib/notifications/email", () => ({
   loadCustomerRecipient: vi.fn(),
   sendPaymentReceivedEmail: vi.fn(),
 }));
 vi.mock("@/lib/notifications/sms", () => ({ sendSmsNotification: vi.fn() }));
-vi.mock("@/lib/integrations/efatura", () => ({ queueEInvoiceDraft: mocks.queueEInvoiceDraft }));
+vi.mock("@/lib/payments/follow-ups", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/payments/follow-ups")>()),
+  queuePaymentFollowUps: mocks.queuePaymentFollowUps,
+  runPaymentFollowUpsWithoutQueue: mocks.runPaymentFollowUpsWithoutQueue,
+}));
 vi.mock("@/lib/payments/renewal-fulfillment", () => ({
   applyServiceRenewalFromOrder: mocks.applyServiceRenewalFromOrder,
 }));
@@ -26,7 +29,7 @@ vi.mock("@/lib/services/plan-change", () => ({
   applyPlanChangeFromOrder: mocks.applyPlanChangeFromOrder,
 }));
 vi.mock("@/lib/provisioning/internal", () => ({
-  provisionCompletedOrder: mocks.provisionCompletedOrder,
+  prepareOrderProvisioning: mocks.prepareOrderProvisioning,
 }));
 vi.mock("@/lib/payments/service-lifecycle", () => ({
   unsuspendServiceIfNeeded: mocks.unsuspendServiceIfNeeded,
@@ -79,6 +82,8 @@ function createStore(invoices: FakeInvoice[], payments: FakePayment[]) {
       serviceId: null as string | null,
       items: [{ configuration: {} }],
     },
+    jobs: [] as Array<Record<string, unknown>>,
+    sql: [] as string[],
   };
 
   const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -149,12 +154,24 @@ function createStore(invoices: FakeInvoice[], payments: FakePayment[]) {
       },
     },
     order: {
+      findUnique: async () => ({ ...state.order }),
       update: async ({ data }: { data: Record<string, unknown> }) => {
         Object.assign(state.order, data);
         return state.order;
       },
     },
     orderActivity: { create: vi.fn() },
+    provisioningJob: {
+      upsert: vi.fn(async ({ create }: { create: Record<string, unknown> }) => {
+        state.jobs.push(create);
+        return { id: `pj-${state.jobs.length}`, ...create };
+      }),
+    },
+    // SAVEPOINT / RELEASE / ROLLBACK TO SAVEPOINT issued by withSavepoint.
+    $executeRawUnsafe: vi.fn(async (sql: string) => {
+      state.sql.push(sql);
+      return 0;
+    }),
   };
 
   return { state, tx: tx as unknown as Prisma.TransactionClient };
@@ -189,10 +206,15 @@ function payment(overrides: Partial<FakePayment> = {}): FakePayment {
 
 beforeEach(() => {
   Object.values(mocks).forEach((mock) => mock.mockReset());
-  mocks.queueEInvoiceDraft.mockResolvedValue(undefined);
+  mocks.queuePaymentFollowUps.mockResolvedValue(true);
   mocks.applyServiceRenewalFromOrder.mockResolvedValue({ applied: false });
   mocks.applyPlanChangeFromOrder.mockResolvedValue({ applied: false });
-  mocks.provisionCompletedOrder.mockResolvedValue({ type: "service", identifier: "svc-1" });
+  mocks.prepareOrderProvisioning.mockResolvedValue({
+    type: "service",
+    identifier: "svc-1",
+    status: "QUEUED",
+    jobId: "pj-1",
+  });
 });
 
 describe("fulfillInvoicePayment idempotency", () => {
@@ -206,10 +228,9 @@ describe("fulfillInvoicePayment idempotency", () => {
     ]);
 
     expect(results.filter((result) => result.fulfilled)).toHaveLength(1);
-    expect(mocks.provisionCompletedOrder).toHaveBeenCalledTimes(1);
+    expect(mocks.prepareOrderProvisioning).toHaveBeenCalledTimes(1);
     expect(mocks.applyAffiliateCommission).toHaveBeenCalledTimes(1);
-    expect(mocks.dispatchEvents).toHaveBeenCalledTimes(1);
-    expect(mocks.queueEInvoiceDraft).toHaveBeenCalledTimes(1);
+    expect(mocks.queuePaymentFollowUps).toHaveBeenCalledTimes(1);
     expect(state.invoices.get("inv-1")?.status).toBe("PAID");
     expect(state.payments[0]).toMatchObject({ status: "COMPLETED", transactionId: "sess-1" });
   });
@@ -264,10 +285,63 @@ describe("fulfillInvoicePayment idempotency", () => {
     });
 
     expect(result.fulfilled).toBe(false);
-    expect(mocks.provisionCompletedOrder).not.toHaveBeenCalled();
+    expect(mocks.prepareOrderProvisioning).not.toHaveBeenCalled();
     expect(state.payments[0].status).toBe("COMPLETED");
     expect(state.payments[0].notes).toMatch(/MÜKERRER/);
     expect(error).toHaveBeenCalled();
+  });
+
+  it("keeps the payment when activating the order throws (old rollback bug)", async () => {
+    const { state, tx } = createStore([invoice()], [payment()]);
+    mocks.prepareOrderProvisioning.mockRejectedValue(new Error("DOMAIN_REQUIRED"));
+
+    const result = await fulfillInvoicePayment(tx, {
+      invoiceId: "inv-1",
+      performedBy: "cus-1",
+      paymentReference: "sess-1",
+    });
+
+    expect(result).toMatchObject({ fulfilled: true, followUpsQueued: true });
+    expect(result.fulfilled && result.fulfilmentError).toMatch(/^FULFILMENT_ERROR: DOMAIN_REQUIRED/);
+    expect(state.invoices.get("inv-1")).toMatchObject({ status: "PAID", paidAmount: 120 });
+    expect(state.payments[0]).toMatchObject({ status: "COMPLETED", transactionId: "sess-1" });
+    // Only the activation was undone; the admin sees a FAILED job with the reason.
+    expect(state.sql.some((sql) => sql.startsWith("ROLLBACK TO SAVEPOINT"))).toBe(true);
+    expect(state.jobs).toEqual([
+      expect.objectContaining({ orderId: "ord-1", status: "FAILED", lastError: expect.stringMatching(/DOMAIN_REQUIRED/) }),
+    ]);
+    expect(state.order.status).toBe("PROCESSING");
+    expect(mocks.applyAffiliateCommission).toHaveBeenCalledTimes(1);
+    expect(mocks.queuePaymentFollowUps).toHaveBeenCalledTimes(1);
+  });
+
+  it("queues e-invoice, events and notification instead of running them in the transaction", async () => {
+    const { tx } = createStore([invoice()], [payment()]);
+
+    await fulfillInvoicePayment(tx, { invoiceId: "inv-1", performedBy: "cus-1", paymentReference: "sess-1" });
+
+    expect(mocks.queuePaymentFollowUps).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        invoiceId: "inv-1",
+        userId: "cus-1",
+        events: [
+          expect.objectContaining({ type: "payment.completed" }),
+          expect.objectContaining({ type: "order.paid" }),
+        ],
+      })
+    );
+  });
+
+  it("does not lift a suspension when a plan change is paid", async () => {
+    mocks.applyPlanChangeFromOrder.mockResolvedValue({ applied: true, planChangeId: "pc-1", serviceId: "svc-1" });
+    const { state, tx } = createStore([invoice()], [payment()]);
+    state.order.serviceId = "svc-1";
+
+    await fulfillInvoicePayment(tx, { invoiceId: "inv-1", performedBy: "cus-1", paymentReference: "sess-1" });
+
+    expect(mocks.unsuspendServiceIfNeeded).not.toHaveBeenCalled();
+    expect(mocks.prepareOrderProvisioning).not.toHaveBeenCalled();
   });
 
   it("refuses to pay a cancelled invoice", async () => {
@@ -309,7 +383,7 @@ describe("fulfillPaymentsByGatewayReference", () => {
     ]);
 
     expect(results.filter((result) => result.fulfilled)).toHaveLength(1);
-    expect(mocks.provisionCompletedOrder).toHaveBeenCalledTimes(1);
+    expect(mocks.prepareOrderProvisioning).toHaveBeenCalledTimes(1);
     expect(mocks.applyAffiliateCommission).toHaveBeenCalledTimes(1);
   });
 
@@ -336,7 +410,7 @@ describe("fulfillPaymentsByGatewayReference", () => {
     expect(state.payments[0].status).toBe("PENDING");
     expect(state.payments[0].notes).toMatch(/^Tutar uyuşmazlığı/);
     expect(state.payments[0].notes).toMatch(/gateway_meta:/);
-    expect(mocks.provisionCompletedOrder).not.toHaveBeenCalled();
+    expect(mocks.prepareOrderProvisioning).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalled();
   });
 });

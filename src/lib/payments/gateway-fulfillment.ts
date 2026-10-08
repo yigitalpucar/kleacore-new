@@ -2,10 +2,10 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { parseGatewayMeta } from "@/lib/integrations/payment-gateways";
 import {
+  finalizeFulfilledInvoices,
   fulfillInvoicePayment,
-  notifyInvoicePaymentReceived,
+  type FulfillInvoicePaymentResult,
 } from "@/lib/payments/fulfillment";
-import { runUnsuspendJobsForInvoices } from "@/lib/payments/service-lifecycle";
 import { sum, toFixed2, toKurus, type MoneyInput } from "@/lib/money";
 
 /** What the gateway says was charged for a session, as reported in its callback. */
@@ -104,6 +104,7 @@ export async function fulfillPaymentsByGatewayReference(
       skipped: completed > 0,
       amountMismatch: false,
       invoiceIds: [] as string[],
+      results: [] as FulfillInvoicePaymentResult[],
     };
   }
 
@@ -129,6 +130,7 @@ export async function fulfillPaymentsByGatewayReference(
       skipped: false,
       amountMismatch: true,
       invoiceIds: [] as string[],
+      results: [] as FulfillInvoicePaymentResult[],
     };
   }
 
@@ -136,6 +138,7 @@ export async function fulfillPaymentsByGatewayReference(
   const customerId = meta?.customerId ?? "gateway";
   const invoiceIds = [...new Set(payments.map((payment) => payment.invoiceId))];
   const fulfilledInvoiceIds: string[] = [];
+  const results: FulfillInvoicePaymentResult[] = [];
 
   for (const invoiceId of invoiceIds) {
     const result = await fulfillInvoicePayment(tx, {
@@ -144,6 +147,7 @@ export async function fulfillPaymentsByGatewayReference(
       paymentReference: reference,
       notes,
     });
+    results.push(result);
 
     if (result.fulfilled) {
       fulfilledInvoiceIds.push(invoiceId);
@@ -155,9 +159,15 @@ export async function fulfillPaymentsByGatewayReference(
     skipped: fulfilledInvoiceIds.length === 0,
     amountMismatch: false,
     invoiceIds: fulfilledInvoiceIds,
+    results,
   };
 }
 
+/**
+ * Shared fulfilment of Kuveyt Türk, iyzico and PayTR callbacks: one short
+ * transaction records the payment(s); remote provisioning runs afterwards in
+ * the job queue, so a provisioning failure can never undo a card charge.
+ */
 export async function fulfillGatewayReference(
   reference: string,
   notes: string,
@@ -167,12 +177,8 @@ export async function fulfillGatewayReference(
     fulfillPaymentsByGatewayReference(tx, reference, notes, confirmation)
   );
 
-  if (result.fulfilled) {
-    await runUnsuspendJobsForInvoices(result.invoiceIds);
-    await Promise.allSettled(
-      result.invoiceIds.map((invoiceId) => notifyInvoicePaymentReceived(invoiceId))
-    );
-  }
+  // Provisioning, e-invoice and notifications were queued with the commit.
+  await finalizeFulfilledInvoices(result.results);
 
   return result;
 }

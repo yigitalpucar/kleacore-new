@@ -8,6 +8,8 @@ const log = createLogger("provisioning.queue");
 
 /** How long a transaction may wait for pg-boss to come up before skipping the enqueue. */
 const BOSS_READY_TIMEOUT_MS = 2_000;
+const QUEUE_DOWN_BACKOFF_MS = 30_000;
+let queueDownUntil = 0;
 
 type ProvisioningJobRecord = { id: string; attempts: number; maxAttempts: number };
 
@@ -16,7 +18,18 @@ export function remainingRetryLimit(record: ProvisioningJobRecord) {
   return Math.max(record.maxAttempts - record.attempts - 1, 0);
 }
 
-async function bossReady(): Promise<boolean> {
+/**
+ * Whether pg-boss is up (waits at most 2 s). Used before enqueueing inside a
+ * payment transaction so a queue outage never blocks or rolls back a payment.
+ */
+export async function isJobQueueReady(): Promise<boolean> {
+  // After a failed check, answer "no" at once for a while: a payment
+  // transaction may ask several times (one per invoice / job) and must not
+  // add 2 s per question while the queue is down.
+  if (Date.now() < queueDownUntil) {
+    return false;
+  }
+
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
@@ -27,6 +40,7 @@ async function bossReady(): Promise<boolean> {
     ]);
     return true;
   } catch (error) {
+    queueDownUntil = Date.now() + QUEUE_DOWN_BACKOFF_MS;
     log.error("job queue unavailable; provisioning job left for the reconcile cron", { error });
     return false;
   } finally {
@@ -48,7 +62,7 @@ export async function queueProvisioningAttempt(
   record: ProvisioningJobRecord,
   options: { startAfter?: Date | number } = {}
 ) {
-  if (!(await bossReady())) {
+  if (!(await isJobQueueReady())) {
     return { queued: false as const, deduplicated: false };
   }
 

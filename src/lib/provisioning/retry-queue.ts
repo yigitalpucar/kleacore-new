@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
+  changeRemoteServicePlan,
   createRemoteService,
   unsuspendRemoteService,
 } from "@/lib/integrations/provisioning-provider";
@@ -21,10 +22,6 @@ const RETRY_DELAYS_MS = [
 ] as const;
 
 type DbClient = Prisma.TransactionClient | typeof db;
-
-function normalizeDomain(value: string | null | undefined) {
-  return value?.trim().toLowerCase() || null;
-}
 
 export function getRetryDelayMs(attempt: number): number {
   const index = Math.min(Math.max(attempt, 0), RETRY_DELAYS_MS.length - 1);
@@ -107,21 +104,23 @@ async function retryDomainProvisioning(
     };
   }>
 ) {
-  const firstItemConfig = order.items[0]?.configuration;
-  const config =
-    firstItemConfig && typeof firstItemConfig === "object" && !Array.isArray(firstItemConfig)
-      ? (firstItemConfig as Record<string, unknown>)
-      : {};
-  const configuredDomain =
-    normalizeDomain(typeof config.domain === "string" ? config.domain : undefined) ??
-    normalizeDomain(order.domain);
+  const { resolveProvisioningDomain, submitDomainToRegistrar, upsertPendingDomain } = await import(
+    "@/lib/provisioning/internal"
+  );
+  const resolved = resolveProvisioningDomain(order);
 
-  if (!configuredDomain) {
-    return { ok: false as const, error: "DOMAIN_REQUIRED" };
+  if (!resolved.domain) {
+    return { ok: false as const, error: resolved.error ?? "DOMAIN_REQUIRED", permanent: true };
   }
 
-  const { submitDomainToRegistrar } = await import("@/lib/provisioning/internal");
-  const registrarResult = await submitDomainToRegistrar(db, order, configuredDomain);
+  // The row exists when the order had its domain at payment time; after an
+  // admin fixed a missing/invalid domain it is created here.
+  const existing = await db.domain.findUnique({ where: { name: resolved.domain }, select: { id: true } });
+  if (!existing) {
+    await upsertPendingDomain(db, order, resolved.domain);
+  }
+
+  const registrarResult = await submitDomainToRegistrar(db, order, resolved.domain);
 
   if (registrarResult.ok && !registrarResult.skipped) {
     return { ok: true as const };
@@ -141,18 +140,13 @@ async function retrySslProvisioning(
     };
   }>
 ) {
-  const firstItemConfig = order.items[0]?.configuration;
-  const config =
-    firstItemConfig && typeof firstItemConfig === "object" && !Array.isArray(firstItemConfig)
-      ? (firstItemConfig as Record<string, unknown>)
-      : {};
-  const configuredDomain =
-    normalizeDomain(typeof config.domain === "string" ? config.domain : undefined) ??
-    normalizeDomain(order.domain);
+  const { resolveProvisioningDomain } = await import("@/lib/provisioning/internal");
+  const resolved = resolveProvisioningDomain(order);
 
-  if (!configuredDomain) {
-    return { ok: false as const, error: "DOMAIN_REQUIRED" };
+  if (!resolved.domain) {
+    return { ok: false as const, error: resolved.error ?? "DOMAIN_REQUIRED", permanent: true };
   }
+  const configuredDomain = resolved.domain;
 
   const sslType = mapProductSubTypeToSslType(order.product.subType);
   const existing = await db.sslCertificate.findFirst({
@@ -274,6 +268,41 @@ async function retryServiceUnsuspend(serviceId: string | null) {
   return { ok: false as const, error: result.error ?? "REMOTE_UNSUSPEND_FAILED" };
 }
 
+/**
+ * Remote half of a paid plan change: the service row already points at the
+ * new product (applied in the payment transaction); this moves the remote
+ * account (WHM changepackage, VPS resize) to that package.
+ */
+async function retryServicePlanChange(serviceId: string | null) {
+  if (!serviceId) {
+    return { ok: false as const, error: "SERVICE_NOT_FOUND", permanent: true };
+  }
+
+  const service = await db.service.findUnique({
+    where: { id: serviceId },
+    include: {
+      product: { include: { category: true } },
+      customer: true,
+    },
+  });
+
+  if (!service) {
+    return { ok: false as const, error: "SERVICE_NOT_FOUND", permanent: true };
+  }
+
+  if (service.status === "CANCELLED") {
+    return { ok: true as const };
+  }
+
+  const result = await changeRemoteServicePlan(service, service.product.sku);
+
+  if (result.ok || result.skipped) {
+    return { ok: true as const };
+  }
+
+  return { ok: false as const, error: result.error ?? "REMOTE_PLAN_CHANGE_FAILED" };
+}
+
 type ProvisioningJobWithOrder = Prisma.ProvisioningJobGetPayload<{
   include: {
     order: {
@@ -286,11 +315,51 @@ type ProvisioningJobWithOrder = Prisma.ProvisioningJobGetPayload<{
   };
 }>;
 
-async function retryProvisioningJob(job: ProvisioningJobWithOrder) {
+type RetryResult = { ok: boolean; error?: string; permanent?: boolean; rescheduled?: boolean };
+
+/**
+ * The order's activation failed inside the payment transaction (rolled back
+ * to a savepoint, payment kept). Re-run the same local step now; it may
+ * re-queue this row itself (provisioning / plan change / unsuspend), in which
+ * case the caller must leave the row alone.
+ */
+async function retryPaidOrderEffects(job: ProvisioningJobWithOrder): Promise<RetryResult> {
+  const { applyPaidOrderEffects } = await import("@/lib/payments/fulfillment");
+  const invoice = await db.invoice.findUnique({ where: { orderId: job.orderId }, select: { id: true } });
+
+  try {
+    await db.$transaction((tx) =>
+      applyPaidOrderEffects(tx, job.orderId, { performedBy: "system", invoiceId: invoice?.id ?? "" })
+    );
+  } catch (error) {
+    // Keep the FULFILMENT_ERROR prefix so the next retry takes this path again.
+    const reason = error instanceof Error ? error.message : String(error);
+    return { ok: false, permanent: true, error: `FULFILMENT_ERROR: ${reason}. Ödeme kaydedildi; sipariş teslim edilmedi.` };
+  }
+
+  const current = await db.provisioningJob.findUnique({ where: { id: job.id } });
+  if (current?.status === "PENDING") {
+    return { ok: true, rescheduled: true };
+  }
+  if (current?.status === "FAILED" && current.lastError !== job.lastError) {
+    return { ok: false, permanent: true, error: current.lastError ?? "PROVISIONING_NEEDS_ACTION" };
+  }
+  return { ok: true };
+}
+
+async function retryProvisioningJob(job: ProvisioningJobWithOrder): Promise<RetryResult> {
   const { order } = job;
+
+  if (job.kind === "PROVISION" && job.lastError?.startsWith("FULFILMENT_ERROR")) {
+    return retryPaidOrderEffects(job);
+  }
 
   if (job.kind === "UNSUSPEND") {
     return retryServiceUnsuspend(job.serviceId ?? order.serviceId);
+  }
+
+  if (job.kind === "PLAN_CHANGE") {
+    return retryServicePlanChange(job.serviceId ?? order.serviceId);
   }
 
   if (order.product.category.slug === "domain") {
@@ -306,20 +375,19 @@ async function retryProvisioningJob(job: ProvisioningJobWithOrder) {
     return retryServiceProvisioning(order, serviceId);
   }
 
-  const { provisionCompletedOrder } = await import("@/lib/provisioning/internal");
-  const provisioned = await db.$transaction((tx) => provisionCompletedOrder(tx, order.id));
+  // Job written before the service row existed (legacy rows): create it
+  // locally first, then provision it remotely like any other attempt.
+  const { createServiceForOrder, resolveProvisioningDomain } = await import("@/lib/provisioning/internal");
+  const service = await db.$transaction(async (tx) => {
+    const current = await tx.order.findUnique({ where: { id: order.id }, select: { serviceId: true } });
+    if (current?.serviceId) {
+      return { id: current.serviceId };
+    }
+    return createServiceForOrder(tx, order, resolveProvisioningDomain(order).domain);
+  });
+  await db.provisioningJob.update({ where: { id: job.id }, data: { serviceId: service.id } });
 
-  if ("partialFailure" in provisioned && provisioned.partialFailure) {
-    const error =
-      provisioned.type === "domain"
-        ? provisioned.registrar.error
-        : provisioned.type === "ssl"
-          ? provisioned.ssl.error
-          : provisioned.provisioning.error;
-    return { ok: false as const, error: error ?? "PROVISIONING_PARTIAL_FAILURE" };
-  }
-
-  return { ok: true as const };
+  return retryServiceProvisioning(order, service.id);
 }
 
 async function loadProvisioningJobForRetry(jobId: string) {
@@ -420,6 +488,10 @@ export async function manualRetryProvisioningJob(jobId: string) {
 
   try {
     const result = await retryProvisioningJob(job);
+
+    if (result.rescheduled) {
+      return { ok: true as const };
+    }
 
     const finalized = await finalizeProvisioningRetryAttempt(job, result, {
       respectMaxAttempts: false,
@@ -532,11 +604,15 @@ export async function runQueuedProvisioningJob(provisioningJobId: string, contex
     throw new Error("JOB_BUSY");
   }
 
-  let result: { ok: boolean; error?: string };
+  let result: RetryResult;
   try {
     result = await retryProvisioningJob(job);
   } catch (error) {
     result = { ok: false, error: error instanceof Error ? error.message : "PROVISIONING_RETRY_FAILED" };
+  }
+
+  if (result.rescheduled) {
+    return { ok: true, orderId: job.orderId, rescheduled: true };
   }
 
   if (result.ok) {
@@ -548,6 +624,17 @@ export async function runQueuedProvisioningJob(provisioningJobId: string, contex
   }
 
   const error = result.error ?? "PROVISIONING_RETRY_FAILED";
+
+  // Bad order data (no / invalid domain): retrying can't help. Park the row
+  // as FAILED with the reason for the admin instead of burning the retries.
+  if (result.permanent) {
+    await db.provisioningJob.update({
+      where: { id: job.id },
+      data: { status: "FAILED", attempts: job.attempts + 1, lastError: error },
+    });
+    return { ok: false, orderId: job.orderId, needsAction: error };
+  }
+
   await db.provisioningJob.update({
     where: { id: job.id },
     data: {

@@ -6,13 +6,11 @@ import {
   generateInvoiceNumber,
   generateOrderNumber,
 } from "@/lib/utils/number-generators";
-import { provisionCompletedOrder } from "@/lib/provisioning/internal";
 import {
   dispatchNotification,
   loadCustomerRecipient,
   sendOrderConfirmationEmail,
 } from "@/lib/notifications/email";
-import { applyAffiliateCommission } from "@/lib/affiliate";
 import {
   applyResellerDiscount,
   getResellerDiscountForCustomer,
@@ -29,6 +27,14 @@ import {
 } from "@/lib/payments/methods";
 import { claimPromotionUse } from "@/lib/billing/promo-usage";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
+import { netInvoiceLine } from "@/lib/billing/invoice-lines";
+import {
+  cartDomainItemName,
+  validateCartItems,
+  type CartValidationError,
+} from "@/lib/checkout/validate-cart";
+import { sslAllowsWildcard } from "@/lib/provisioning/internal";
+import { checkDomainName } from "@/lib/validations/domain-name";
 import {
   addonPeriodTotal,
   periodTotal,
@@ -93,8 +99,19 @@ function normalizeBillingPeriod(value: string | undefined): BillingPeriod {
   return value === "yearly" ? "yearly" : "monthly";
 }
 
+/** Hosting domain choice with its domain normalised like the domain items. */
+function normalizeDomainChoice(choice: NonNullable<CheckoutItemInput["metadata"]>["domainChoice"]) {
+  if (!choice?.domain) {
+    return choice;
+  }
+  const check = checkDomainName(choice.domain);
+  return check.ok ? { ...choice, domain: check.domain } : choice;
+}
+
 function getDomainName(item: CheckoutItemInput) {
-  return item.metadata?.domain?.trim().toLowerCase() || item.id.replace(/^domain:/, "").trim().toLowerCase();
+  const raw = cartDomainItemName(item);
+  const check = checkDomainName(raw);
+  return check.ok ? check.domain : raw.toLowerCase();
 }
 
 async function getDomainProduct(domain: string, tx: Prisma.TransactionClient) {
@@ -341,6 +358,22 @@ export async function checkoutCart(input: CheckoutInput) {
     return { success: false, error: "Sepetiniz boş" };
   }
 
+  // Bad carts (SSL without a domain, invalid domain names, hosting pointing at
+  // a domain that isn't bought) are rejected here, before anything is
+  // written or charged: a paid order must never fail provisioning on its data.
+  const soldTlds = await db.domainTld.findMany({ where: { isActive: true }, select: { ext: true } });
+  const cartErrors: CartValidationError[] = validateCartItems(input.items, {
+    tlds: soldTlds.map((tld) => tld.ext),
+  });
+  if (cartErrors.length > 0) {
+    return {
+      success: false,
+      error: cartErrors[0].message,
+      code: "CART_INVALID" as const,
+      errors: cartErrors,
+    };
+  }
+
   try {
     // Card payments go through the active gateway (Kuveyt Türk, iyzico,
     // PayTR); Stripe keeps its own session flow below.
@@ -396,7 +429,20 @@ export async function checkoutCart(input: CheckoutInput) {
         }
 
         const catalogProduct = await getCatalogProduct(item, tx);
-        const domainChoice = item.metadata?.domainChoice;
+        const domainChoice = normalizeDomainChoice(item.metadata?.domainChoice);
+        let sslDomain: string | undefined;
+
+        if (catalogProduct.product.category.slug === "ssl") {
+          // Re-checked against the real product: only wildcard certificates
+          // accept "*.example.com".
+          const check = checkDomainName(item.metadata?.domain, {
+            allowWildcard: sslAllowsWildcard(catalogProduct.product),
+          });
+          if (!check.ok) {
+            throw new Error(`CART_INVALID:SSL sertifikası için geçerli bir alan adı girin`);
+          }
+          sslDomain = check.domain;
+        }
 
         preparedItems.push({
           item,
@@ -409,6 +455,7 @@ export async function checkoutCart(input: CheckoutInput) {
           unitPrice: catalogProduct.unitPrice,
           configuration: {
             type: item.type,
+            domain: sslDomain,
             category: item.metadata?.category,
             location: item.metadata?.location,
             subType: item.metadata?.subType,
@@ -544,12 +591,12 @@ export async function checkoutCart(input: CheckoutInput) {
               ? "Kredi kartı ödeme onayı bekleniyor"
               : "Banka havalesi sonrası ödeme onayı bekleniyor",
             items: {
-              create: {
+              create: netInvoiceLine({
                 description: item.productName,
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
-                totalPrice: taxed.totalAmount,
-              },
+                discountAmount: lineDiscount,
+              }),
             },
           },
         });
@@ -593,30 +640,6 @@ export async function checkoutCart(input: CheckoutInput) {
             },
           },
         });
-
-        if (isPaid) {
-          await applyAffiliateCommission(tx, {
-            customerId,
-            orderTotal: taxed.totalAmount,
-          });
-
-          const provisioned = await provisionCompletedOrder(tx, order.id);
-
-          await tx.orderActivity.create({
-            data: {
-              orderId: order.id,
-              action: "PROVISIONED",
-              description:
-                "partialFailure" in provisioned && provisioned.partialFailure
-                  ? "Sağlama başarısız oldu, yeniden denenecek"
-                  : provisioned.type === "domain"
-                    ? "Domain kaydı registrara iletildi"
-                    : "Hizmet aktifleştirildi",
-              performedBy: customerId,
-              metadata: provisioned,
-            },
-          });
-        }
 
         orderIds.push(order.id);
         invoiceIds.push(invoice.id);
@@ -753,6 +776,9 @@ export async function checkoutCart(input: CheckoutInput) {
       if (error.message.startsWith("CONFIG_INVALID")) {
         const message = error.message.split(":").slice(1).join(":").trim();
         return { success: false, error: message || "Ürün yapılandırması geçersiz" };
+      }
+      if (error.message.startsWith("CART_INVALID:")) {
+        return { success: false, error: error.message.slice("CART_INVALID:".length) };
       }
       if (error.message.startsWith("DOMAIN_TLD_NOT_FOUND")) {
         return { success: false, error: "Sepetteki domain uzantısı desteklenmiyor" };

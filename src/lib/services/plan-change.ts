@@ -2,6 +2,8 @@ import type { BillingPeriod, PlanChangeType, Prisma, Service } from "@prisma/cli
 import { db } from "@/lib/db";
 import { changeRemoteServicePlan } from "@/lib/integrations/provisioning-provider";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
+import { netInvoiceLine } from "@/lib/billing/invoice-lines";
+import { queueProvisioningAttempt } from "@/lib/provisioning/queue";
 import { periodTotal, priceBasisForCategory } from "@/lib/billing/period-price";
 import { billingMonths } from "@/lib/payments/renewal-fulfillment";
 import { compare, div, max, money, mul, roundHalfUp, sub, toNumber, type MoneyInput } from "@/lib/money";
@@ -306,12 +308,10 @@ export async function requestPlanChange(input: RequestPlanChangeInput) {
         dueDate,
         notes: `Paket yükseltme: ${service.product.name} → ${targetProduct.name}`,
         items: {
-          create: {
+          create: netInvoiceLine({
             description: `${service.product.name} → ${targetProduct.name} (orantılı fark)`,
-            quantity: 1,
-            unitPrice: totalAmount,
-            totalPrice: totalAmount,
-          },
+            unitPrice: chargeAmount,
+          }),
         },
       },
     });
@@ -433,17 +433,35 @@ export async function applyPlanChange(
     },
   });
 
-  const updatedService = {
-    ...planChange.service,
-    productId: planChange.toProductId,
-    product: planChange.toProduct,
-    amount: money(newAmount),
-  };
-
-  const remoteResult = await changeRemoteServicePlan(
-    updatedService,
-    planChange.toProduct.sku
-  );
+  // The remote package change (WHM / VPS API) never runs inside this
+  // transaction: a paid change gets a PLAN_CHANGE provisioning job queued
+  // with the commit; an order-less (admin-approved downgrade) change is pushed
+  // by approvePlanChangeDowngrade after its commit.
+  let remoteQueued = false;
+  if (planChange.orderId) {
+    const job = await tx.provisioningJob.upsert({
+      where: { orderId: planChange.orderId },
+      create: {
+        orderId: planChange.orderId,
+        serviceId: planChange.serviceId,
+        kind: "PLAN_CHANGE",
+        status: "PENDING",
+        attempts: 0,
+        nextRetryAt: now,
+      },
+      update: {
+        serviceId: planChange.serviceId,
+        kind: "PLAN_CHANGE",
+        status: "PENDING",
+        attempts: 0,
+        lastError: null,
+        nextRetryAt: now,
+        completedAt: null,
+      },
+    });
+    await queueProvisioningAttempt(tx, job);
+    remoteQueued = true;
+  }
 
   if (planChange.orderId) {
     const action = planChange.type === "UPGRADE" ? "UPGRADED" : "DOWNGRADED";
@@ -464,9 +482,7 @@ export async function applyPlanChange(
           fromProduct: planChange.fromProduct.name,
           toProduct: planChange.toProduct.name,
           priceDiff: toNumber(planChange.proratedAmount),
-          remoteApplied: remoteResult.ok,
-          remoteProvider: remoteResult.provider,
-          remoteError: remoteResult.ok ? undefined : remoteResult.error,
+          remoteQueued,
         },
       },
     });
@@ -477,7 +493,7 @@ export async function applyPlanChange(
     planChangeId: planChange.id,
     serviceId: planChange.serviceId,
     changeType: planChange.type,
-    remoteResult,
+    remoteQueued,
   };
 }
 
@@ -540,9 +556,31 @@ export async function approvePlanChangeDowngrade(planChangeId: string, performed
     throw new Error("PLAN_CHANGE_NOT_PENDING");
   }
 
-  return db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     return applyPlanChange(tx, planChangeId, performedBy);
   });
+
+  if (!result.applied || result.remoteQueued || !result.serviceId) {
+    return result;
+  }
+
+  // Order-less downgrade: push the package change now that the new plan is
+  // committed. A failure leaves the local change in place and is reported.
+  const service = await db.service.findUnique({
+    where: { id: result.serviceId },
+    include: { product: { include: { category: true } }, customer: true },
+  });
+  if (!service) {
+    return result;
+  }
+
+  try {
+    const remoteResult = await changeRemoteServicePlan(service, service.product.sku);
+    return { ...result, remoteResult };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "REMOTE_PLAN_CHANGE_FAILED";
+    return { ...result, remoteResult: { ok: false as const, error: message } };
+  }
 }
 
 export async function getPlanChangeOptionsForService(serviceId: string, customerId: string) {

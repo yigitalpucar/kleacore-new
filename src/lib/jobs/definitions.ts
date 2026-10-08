@@ -33,7 +33,92 @@ export const provisioningRunJob = defineJob({
   },
 });
 
-const definitions = [provisioningRunJob] as const;
+export const EFATURA_ISSUE_JOB = "efatura.issue";
+
+/**
+ * Issues the official e-invoice of a paid invoice (Uyumsoft / Paraşüt),
+ * queued in the payment transaction. `issueEInvoiceForInvoice` is idempotent
+ * (one record + stable ETTN per invoice); the EInvoiceRecord row is the admin
+ * record (/yonetim/e-fatura). Build errors (bad invoice data) are final and
+ * not retried; entegratör/network errors are.
+ */
+export const efaturaIssueJob = defineJob({
+  name: EFATURA_ISSUE_JOB,
+  label: "E-fatura kesimi",
+  schema: z.object({ invoiceId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 5,
+    retryDelay: 5 * 60,
+    retryBackoff: true,
+    retryDelayMax: 6 * 60 * 60,
+    expireInSeconds: 5 * 60,
+  },
+  handler: async ({ invoiceId }) => {
+    const { runEInvoiceIssueJob } = await import("@/lib/payments/follow-ups");
+    return runEInvoiceIssueJob(invoiceId);
+  },
+});
+
+export const PAYMENT_SETTLED_JOB = "payment.settled";
+
+const kleacoreEventSchema = z.object({
+  type: z.enum(["payment.completed", "order.paid", "service.renewed"]),
+  payload: z.record(z.string(), z.unknown()),
+});
+
+/**
+ * Side effects of a paid invoice that must not run before the payment
+ * committed: outbound webhooks + activity log events and the "ödeme alındı"
+ * notification. Queued in the payment transaction.
+ */
+export const paymentSettledJob = defineJob({
+  name: PAYMENT_SETTLED_JOB,
+  label: "Ödeme sonrası bildirimler",
+  schema: z
+    .object({
+      invoiceId: z.string().min(1),
+      userId: z.string().min(1),
+      events: z.array(kleacoreEventSchema),
+    })
+    .strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 3,
+    retryDelay: 60,
+    retryBackoff: true,
+    expireInSeconds: 5 * 60,
+  },
+  handler: async (payload) => {
+    const { runPaymentSettledJob } = await import("@/lib/payments/follow-ups");
+    return runPaymentSettledJob(payload);
+  },
+});
+
+export const NOTIFICATION_SEND_JOB = "notification.send";
+
+/**
+ * STUB (fulfil branch): agreed entry point of the notification system; the
+ * notify branch replaces this definition with templates + NotificationLog.
+ * Until then only "payment_received" is delivered (existing e-mail + SMS).
+ */
+export const notificationSendJob = defineJob({
+  name: NOTIFICATION_SEND_JOB,
+  label: "Bildirim gönderimi",
+  schema: z.object({
+    userId: z.string().min(1),
+    template: z.string().min(1),
+    data: z.record(z.string(), z.unknown()).default({}),
+    channel: z.enum(["email", "sms", "all"]).optional(),
+  }),
+  queue: { policy: "standard", retryLimit: 3, retryDelay: 60, retryBackoff: true },
+  handler: async (payload) => {
+    const { deliverNotificationStub } = await import("@/lib/notifications/send");
+    return deliverNotificationStub(payload);
+  },
+});
+
+const definitions = [provisioningRunJob, efaturaIssueJob, paymentSettledJob, notificationSendJob] as const;
 
 export type RegisteredJob = (typeof definitions)[number];
 export type JobName = RegisteredJob["name"];
