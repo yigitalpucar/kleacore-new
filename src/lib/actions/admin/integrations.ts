@@ -413,7 +413,7 @@ export async function importGriTldPricingFromIntegrations() {
     "registrar",
     result.success,
     result.success
-      ? `${result.data.upserted} TLD fiyatı Gri API üzerinden güncellendi.`
+      ? `${result.data.upserted} TLD maliyeti Gri API üzerinden güncellendi. Satış fiyatları için Ürünler › TLD fiyatları ekranındaki önerileri inceleyin.`
       : result.error ?? "TLD fiyatları içe aktarılamadı."
   );
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowUpRight, Box, Layers, Package, Percent, Plus, ShoppingCart, Tag } from "lucide-react";
+import { ArrowUpRight, Box, Globe, Layers, Package, Percent, Plus, ShoppingCart, Tag } from "lucide-react";
 import { IconTile, PageHeader, SectionCard, StatCard, StatGrid, appButton } from "@/components/app";
 import { categoryConfig } from "@/lib/products/constants";
 import { getProductStats, getProductCategoryCounts } from "@/lib/dal/products";
@@ -45,6 +45,13 @@ export default async function ProductsDashboardPage() {
       href: "/yonetim/urunler/promosyonlar",
       icon: Percent,
       count: `${promotions.length} aktif kod`,
+    },
+    {
+      title: "TLD fiyatları",
+      description: "Registrar maliyeti, TCMB kuru ve marj önerileri",
+      href: "/yonetim/urunler/tld-fiyatlari",
+      icon: Globe,
+      count: null,
     },
     {
       title: "Siparişler",

@@ -15,7 +15,8 @@ export {
   getAccountingLedger,
   getMonthlyTaxBreakdown,
 } from "@/lib/reports/accounting";
-import { toNumber } from "@/lib/money";
+import { sum, toNumber } from "@/lib/money";
+import { monthlyValue } from "@/lib/reports/mrr";
 
 export async function getRevenueReport(dateRange: DateRange) {
   const { from, to } = dateRange;
@@ -172,7 +173,10 @@ export async function getServiceReport(dateRange?: DateRange) {
       orderBy: { expiresAt: "asc" },
       take: 20,
     }),
-    db.service.aggregate({
+    // Service.amount is the charge of one billing period: normalise each
+    // period's total to a month (yearly 468 → 39/ay), see reports/mrr.ts.
+    db.service.groupBy({
+      by: ["billingPeriod"],
       where: { status: "ACTIVE" },
       _sum: { amount: true },
     }),
@@ -183,7 +187,9 @@ export async function getServiceReport(dateRange?: DateRange) {
     servicesByStatus,
     servicesByCategory,
     expiringServices,
-    monthlyRecurring: toNumber(monthlyRecurring._sum.amount),
+    monthlyRecurring: toNumber(
+      sum(monthlyRecurring.map((group) => monthlyValue(group._sum.amount, group.billingPeriod)))
+    ),
   };
 }
 

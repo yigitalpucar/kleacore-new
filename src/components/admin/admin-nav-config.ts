@@ -211,6 +211,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { title: "Paketler", href: `${ADMIN_ROOT}/urunler/paketler` },
       { title: "Özellikler", href: `${ADMIN_ROOT}/urunler/ozellikler` },
       { title: "Promosyonlar", href: `${ADMIN_ROOT}/urunler/promosyonlar` },
+      { title: "TLD fiyatları", href: `${ADMIN_ROOT}/urunler/tld-fiyatlari` },
     ],
   },
   {
@@ -280,6 +281,7 @@ export const ADMIN_SEGMENT_LABELS: Record<string, string> = {
   kategoriler: "Kategoriler",
   ozellikler: "Özellikler",
   promosyonlar: "Promosyonlar",
+  "tld-fiyatlari": "TLD fiyatları",
   "bilgi-bankasi": "Bilgi bankası",
   durum: "Sistem durumu",
   sablonlar: "Şablonlar",
