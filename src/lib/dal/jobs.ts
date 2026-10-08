@@ -13,6 +13,8 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   "overdue-invoices": "Gecikmiş faturalar",
   "suspend-services": "Hizmet askıya alma",
   "retry-provisioning": "Provisioning kuyruk eşitleme",
+  "efatura-status": "E-Fatura durum sorgusu",
+  notifications: "Fatura bildirimleri ve bildirim kuyruğu eşitleme",
   "jobs-drain": "İş kuyruğu (drain)",
 };
 
