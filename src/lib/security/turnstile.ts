@@ -7,8 +7,11 @@ import { createLogger } from "@/lib/logger";
  * and fall back to the admin settings (turnstile_site_key /
  * turnstile_secret_key, the secret stored encrypted). Behaviour when the keys
  * are missing:
- *   - production: fail closed — every protected form is rejected and an
- *     error is logged, so a misconfigured deploy is loud, not silently open;
+ *   - production with TURNSTILE_REQUIRED=true: fail closed — every protected
+ *     form is rejected and an error is logged;
+ *   - production otherwise: bypass with an error log until the keys are set,
+ *     so forms keep working while the keys are being provisioned (the site
+ *     had no captcha before; setting the keys turns protection on);
  *   - anywhere else: bypass (verification succeeds) with a warning, so local
  *     development and tests work without Cloudflare. Locally prefer the
  *     official always-pass test keys below.
@@ -103,6 +106,11 @@ function isProduction() {
   return process.env.NODE_ENV === "production";
 }
 
+/** Opt-in fail-closed mode for production once keys are known to be in place. */
+function isTurnstileRequired() {
+  return process.env.TURNSTILE_REQUIRED === "true";
+}
+
 export async function verifyTurnstileToken(
   token: string | null | undefined,
   options: VerifyTurnstileOptions = {}
@@ -110,11 +118,17 @@ export async function verifyTurnstileToken(
   const keys = options.keys ?? (await getTurnstileKeys());
 
   if (!keys.secretKey || !keys.siteKey) {
-    if (isProduction()) {
+    if (isProduction() && isTurnstileRequired()) {
       log.error("Turnstile keys are not configured; rejecting request (fail closed)", {
         action: options.action,
       });
       return { success: false, reason: "misconfigured", errorCodes: [] };
+    }
+    if (isProduction()) {
+      log.error("Turnstile keys are not configured; verification bypassed until they are set", {
+        action: options.action,
+      });
+      return { success: true, bypassed: true };
     }
     log.warn("Turnstile keys are not configured; verification bypassed (non-production only)", {
       action: options.action,

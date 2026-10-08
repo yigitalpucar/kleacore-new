@@ -108,8 +108,9 @@ describe("verifyTurnstileToken", () => {
     expect(http).toMatchObject({ success: false, reason: "network-error" });
   });
 
-  it("fails closed in production when the keys are missing", async () => {
+  it("fails closed in production when the keys are missing and TURNSTILE_REQUIRED=true", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("TURNSTILE_REQUIRED", "true");
     const fetchImpl = vi.fn();
 
     const result = await verifyTurnstileToken("tok", {
@@ -121,8 +122,9 @@ describe("verifyTurnstileToken", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("fails closed in production when only one key is set", async () => {
+  it("fails closed in production when only one key is set and TURNSTILE_REQUIRED=true", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("TURNSTILE_REQUIRED", "true");
 
     const result = await verifyTurnstileToken("tok", {
       keys: { siteKey: "site", secretKey: null },
@@ -130,6 +132,19 @@ describe("verifyTurnstileToken", () => {
     });
 
     expect(result).toMatchObject({ success: false, reason: "misconfigured" });
+  });
+
+  it("bypasses in production while keys are not provisioned yet", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const fetchImpl = vi.fn();
+
+    const result = await verifyTurnstileToken("tok", {
+      keys: { siteKey: null, secretKey: null },
+      fetchImpl,
+    });
+
+    expect(result).toMatchObject({ success: true, bypassed: true });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("bypasses outside production when the keys are missing", async () => {
