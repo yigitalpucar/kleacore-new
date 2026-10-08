@@ -6,7 +6,7 @@
  * what importers and future multi-registrar routing use.
  */
 import { z } from "zod";
-import { createGriRegistrarProvider } from "@/lib/integrations/registrar/providers/gri";
+import { createGriRegistrarProvider, listGriDomains } from "@/lib/integrations/registrar/providers/gri";
 import type { GriRegistrarConfig } from "@/lib/integrations/registrar/types";
 import type { RegistrarModule } from "../../contracts";
 import { defineModule } from "../../types";
@@ -31,7 +31,25 @@ export function createGriModule(config: GriModuleConfig): RegistrarModule {
   const provider = createGriRegistrarProvider(toGriRegistrarConfig(config));
   const getDomainInfo = provider.getDomainInfo;
   if (!getDomainInfo) throw new Error("GRI_DOMAIN_INFO_MISSING");
-  return { ...provider, getDomainInfo };
+  return {
+    ...provider,
+    getDomainInfo,
+    async listDomains() {
+      const result = await listGriDomains(toGriRegistrarConfig(config));
+      if (!result.ok) return { ok: false, provider: result.provider, error: result.error };
+      return {
+        ok: true,
+        provider: result.provider,
+        data: (result.data ?? []).map((item) => ({
+          domain: item.domain,
+          expiresAt: item.expiresAt,
+          status: item.status,
+          nameservers: item.nameservers,
+          autoRenew: item.autoRenew,
+        })),
+      };
+    },
+  };
 }
 
 export const griModule = defineModule({
@@ -59,6 +77,7 @@ export const griModule = defineModule({
     "bulkAvailability",
     "domainInfo",
     "tldPricing",
+    "listDomains",
   ],
   async healthCheck(instance) {
     const result = await createGriRegistrarProvider(toGriRegistrarConfig(instance.config)).healthCheck();

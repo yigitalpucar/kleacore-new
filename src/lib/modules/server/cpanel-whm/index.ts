@@ -9,11 +9,13 @@ import { z } from "zod";
 import {
   CpanelWhmApiError,
   createCpanelWhmClient,
+  type WhmListAccount,
 } from "@/lib/integrations/provisioning/providers/cpanel-whm-client";
 import type { CpanelWhmConfig } from "@/lib/integrations/provisioning/types";
 import type { IntegrationResult } from "@/lib/integrations/settings";
 import type {
   OperationResult,
+  RemoteAccount,
   ServerAccountContext,
   ServerAccountCreated,
   ServerModule,
@@ -85,6 +87,39 @@ function accountOf(ctx: ServerAccountContext<CpanelWhmProductOptions>) {
   return ctx.service.remoteId?.trim() || ctx.service.username?.trim() || "";
 }
 
+/** "150M" / "1.5G" / "none" / "unlimited" → MB (undefined = unknown / unlimited). */
+export function parseWhmSize(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== "string") return undefined;
+  const match = /^\s*([\d.]+)\s*([KMGT]?)B?\s*$/i.exec(value);
+  if (!match) return undefined;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) return undefined;
+  const factor = { "": 1, K: 1 / 1024, M: 1, G: 1024, T: 1024 * 1024 }[match[2].toUpperCase() as "" | "K" | "M" | "G" | "T"];
+  return Math.round(amount * factor * 100) / 100;
+}
+
+/** WHM listaccts row → RemoteAccount (importers, 2.7). */
+export function toRemoteAccount(account: WhmListAccount): RemoteAccount {
+  const suspended = String(account.suspended ?? "0") === "1";
+  const startSeconds = Number(account.unix_startdate);
+  const reason = account.suspendreason?.trim();
+  return {
+    remoteId: account.user,
+    username: account.user,
+    domain: account.domain?.trim().toLowerCase() || undefined,
+    email: account.email?.trim() && account.email.trim() !== "*unknown*" ? account.email.trim() : undefined,
+    package: account.plan?.trim() || undefined,
+    status: suspended ? "suspended" : "active",
+    ipAddress: account.ip?.trim() || undefined,
+    createdAt: Number.isFinite(startSeconds) && startSeconds > 0 ? new Date(startSeconds * 1000) : undefined,
+    diskUsedMB: parseWhmSize(account.diskused),
+    diskLimitMB: parseWhmSize(account.disklimit),
+    suspendReason: suspended && reason && reason !== "not suspended" ? reason : undefined,
+    raw: { owner: account.owner },
+  };
+}
+
 export function createCpanelWhmModule(
   instance: ResolvedModuleInstance<CpanelWhmModuleConfig>
 ): ServerModule<CpanelWhmProductOptions> {
@@ -132,6 +167,14 @@ export function createCpanelWhmModule(
     unsuspend: (ctx) => onAccount(ctx, (user) => client.unsuspendAccount(user)),
     terminate: (ctx) => onAccount(ctx, (user) => client.terminateAccount(user)),
     changePackage: (ctx) => onAccount(ctx, (user) => client.changePackage(user, whmPackageFor(ctx, config))),
+    async listAccounts() {
+      try {
+        const accounts = await client.listAccounts();
+        return { ok: true, provider: MODULE_ID, data: accounts.filter((account) => account.user).map(toRemoteAccount) };
+      } catch (error) {
+        return errorResult<RemoteAccount[]>(error);
+      }
+    },
   };
 }
 
@@ -150,7 +193,7 @@ export const cpanelWhmModule = defineModule({
     useSsl: { label: "SSL ile bağlan" },
     defaultPlan: { label: "Varsayılan paket", hint: "Üründe paket ve SKU yoksa kullanılır." },
   },
-  capabilities: ["provision", "changePackage"],
+  capabilities: ["provision", "changePackage", "listAccounts"],
   productCategories: ["hosting", "email"],
   productOptionsSchema: cpanelWhmProductOptionsSchema,
   productOptionsFields: {

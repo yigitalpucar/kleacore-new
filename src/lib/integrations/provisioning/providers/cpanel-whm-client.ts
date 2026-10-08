@@ -36,6 +36,24 @@ export interface CpanelEmailAccount {
   diskused?: number | string;
 }
 
+/** One row of WHM `listaccts` (fields we read; WHM returns many more). */
+export interface WhmListAccount {
+  user: string;
+  domain?: string;
+  plan?: string;
+  email?: string;
+  /** "150M", "none" */
+  diskused?: string;
+  /** "1000M", "unlimited" */
+  disklimit?: string;
+  suspended?: number | string;
+  suspendreason?: string;
+  /** Unix seconds as a string or number. */
+  unix_startdate?: number | string;
+  ip?: string;
+  owner?: string;
+}
+
 export class CpanelWhmApiError extends Error {
   constructor(
     message: string,
@@ -189,6 +207,12 @@ export function createCpanelWhmClient(config: CpanelWhmConfig) {
 
   return {
     testConnection: () => requestWhm("version"),
+    /** Read-only: every account the token owner can see (reseller: its own accounts). */
+    listAccounts: async (): Promise<WhmListAccount[]> => {
+      const payload = await requestWhm("listaccts", { want: "user,domain,plan,email,diskused,disklimit,suspended,suspendreason,unix_startdate,ip,owner" });
+      const accounts = (payload.data as { acct?: unknown } | undefined)?.acct;
+      return Array.isArray(accounts) ? (accounts as WhmListAccount[]) : [];
+    },
     createAccount: (params: {
       username: string;
       domain: string;

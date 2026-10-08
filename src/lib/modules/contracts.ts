@@ -79,6 +79,11 @@ export interface RemoteAccount {
   status?: "active" | "suspended" | "stopped" | "unknown";
   ipAddress?: string;
   createdAt?: Date;
+  /** Disk used / quota in MB (undefined = unknown; limit undefined also = unlimited). */
+  diskUsedMB?: number;
+  diskLimitMB?: number;
+  /** Panel-side suspension reason, when status is "suspended". */
+  suspendReason?: string;
   raw?: Record<string, unknown>;
 }
 

@@ -385,6 +385,73 @@ export function createGriRegistrarProvider(config: GriRegistrarConfig): Registra
   };
 }
 
+/** One domain of the reseller account, as listed by Gri (importers, 2.7). */
+export interface GriDomainListItem {
+  domain: string;
+  expiresAt: Date | null;
+  status: string | null;
+  nameservers?: string[];
+  autoRenew?: boolean;
+}
+
+interface GriListResponse {
+  data?: unknown[];
+  meta?: { max_page?: number; last_page?: number };
+}
+
+const MAX_LIST_PAGES = 200;
+
+function parseBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === "1" || value === "true") return true;
+  if (value === 0 || value === "0" || value === "false") return false;
+  return undefined;
+}
+
+/** Maps one entry of Gri's domain list; field names matched defensively like parseGriDomainInfo. */
+export function parseGriDomainListItem(raw: unknown): GriDomainListItem | null {
+  const payload = griPayload(raw);
+  const nameValue = payload.name ?? payload.domain ?? payload.domain_name ?? payload.fqdn;
+  if (typeof nameValue !== "string" || !nameValue.trim()) return null;
+  const domain = nameValue.trim().toLowerCase().replace(/\.$/, "");
+  const info = parseGriDomainInfo(domain, raw);
+  return {
+    domain,
+    expiresAt: info.expiresAt ?? null,
+    status: info.status ?? null,
+    nameservers: info.nameservers,
+    autoRenew: parseBoolean(payload.auto_renew ?? payload.autorenew ?? payload.autoRenew),
+  };
+}
+
+/**
+ * Read-only list of every domain on the Gri account (GET /api/v2/domains,
+ * paginated like /pricing). The endpoint is not in Gri's public docs we have;
+ * the shape is parsed defensively and anything missing is filled per domain
+ * by getDomainInfo in the importer.
+ */
+export async function listGriDomains(config: GriRegistrarConfig): Promise<IntegrationResult<GriDomainListItem[]>> {
+  const provider = "gri";
+  const client = new GriClient(config);
+  const items: GriDomainListItem[] = [];
+  try {
+    let page = 0;
+    let maxPage = 0;
+    do {
+      const response = await client.request<GriListResponse>("/api/v2/domains", { method: "GET", query: { page } });
+      maxPage = response.meta?.max_page ?? response.meta?.last_page ?? 0;
+      for (const entry of response.data ?? []) {
+        const item = parseGriDomainListItem(entry);
+        if (item) items.push(item);
+      }
+      page += 1;
+    } while (page <= maxPage && page < MAX_LIST_PAGES);
+    return { ok: true, provider, data: items };
+  } catch (error) {
+    return toIntegrationError(error, provider);
+  }
+}
+
 export async function fetchGriTldPricing(client: GriClient): Promise<
   IntegrationResult<GriTldPricingRow[]>
 > {
