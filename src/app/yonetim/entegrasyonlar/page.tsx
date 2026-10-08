@@ -6,6 +6,9 @@ import {
 } from "@/lib/integrations/module-status";
 import { getSettings, getApiKeys } from "@/lib/dal/settings";
 import { getEInvoiceConfig, getEInvoiceConfigProblem } from "@/lib/integrations/efatura";
+import { getBankAccounts } from "@/lib/dal/bank-transfer";
+import { getPaymentGatewayConfig } from "@/lib/integrations/payment-gateways";
+import { isCardGatewayConfigured } from "@/lib/integrations/payment-gateways/config";
 import { EntegrasyonlarContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -118,16 +121,13 @@ export default async function EntegrasyonlarPage({ searchParams }: Entegrasyonla
   const webhookOrders = getSettingValue(settings, "webhook_orders", "");
   const webhookPayments = getSettingValue(settings, "webhook_payments", "");
 
-  const paymentGatewayProvider = getSettingValue(settings, "payment_gateway_provider", "stripe");
-  const iyzicoEnabled = getSettingValue(settings, "iyzico_enabled", "false") === "true";
+  const [gatewayConfig, bankAccounts] = await Promise.all([getPaymentGatewayConfig(), getBankAccounts()]);
   const iyzicoApiKey = getSettingValue(settings, "iyzico_api_key", "");
   const iyzicoSecretKey = getSettingValue(settings, "iyzico_secret_key", "");
   const iyzicoTestMode = getSettingValue(settings, "iyzico_test_mode", "true") === "true";
-  const paytrEnabled = getSettingValue(settings, "paytr_enabled", "false") === "true";
   const paytrMerchantId = getSettingValue(settings, "paytr_merchant_id", "");
   const paytrMerchantKey = getSettingValue(settings, "paytr_merchant_key", "");
   const paytrMerchantSalt = getSettingValue(settings, "paytr_merchant_salt", "");
-  const kuveytturkEnabled = getSettingValue(settings, "kuveytturk_enabled", "false") === "true";
   const kuveytturkMerchantId = getSettingValue(settings, "kuveytturk_merchant_id", "");
   const kuveytturkCustomerId = getSettingValue(settings, "kuveytturk_customer_id", "");
   const kuveytturkUsername = getSettingValue(settings, "kuveytturk_username", "");
@@ -218,21 +218,35 @@ export default async function EntegrasyonlarPage({ searchParams }: Entegrasyonla
         payments: webhookPayments,
       }}
       paymentGateway={{
-        provider: paymentGatewayProvider,
+        methods: {
+          order: gatewayConfig.methods.order,
+          enabled: gatewayConfig.methods.enabled,
+          defaultMethod: gatewayConfig.methods.defaultMethod,
+          derived: gatewayConfig.methodsDerived,
+          configured: {
+            kuveytturk: isCardGatewayConfigured(gatewayConfig, "kuveytturk"),
+            paytr: isCardGatewayConfigured(gatewayConfig, "paytr"),
+            iyzico: isCardGatewayConfigured(gatewayConfig, "iyzico"),
+            stripe: isCardGatewayConfigured(gatewayConfig, "stripe"),
+            bank_transfer: bankAccounts.some((account) => account.isActive),
+            balance: true,
+          },
+        },
+        bankAccounts,
         iyzico: {
-          enabled: iyzicoEnabled,
+          enabled: gatewayConfig.iyzico.enabled,
           apiKey: iyzicoApiKey,
           hasSecretKey: Boolean(iyzicoSecretKey),
           testMode: iyzicoTestMode,
         },
         paytr: {
-          enabled: paytrEnabled,
+          enabled: gatewayConfig.paytr.enabled,
           merchantId: paytrMerchantId,
           hasMerchantKey: Boolean(paytrMerchantKey),
           hasMerchantSalt: Boolean(paytrMerchantSalt),
         },
         kuveytturk: {
-          enabled: kuveytturkEnabled,
+          enabled: gatewayConfig.kuveytturk.enabled,
           merchantId: kuveytturkMerchantId,
           customerId: kuveytturkCustomerId,
           username: kuveytturkUsername,

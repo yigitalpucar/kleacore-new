@@ -3,10 +3,16 @@ import { toFixed2, toNumber } from "@/lib/money";
 import { buildIyzicoAuthorization, createIyzicoRandomKey } from "../iyzico-auth";
 import { persistGatewayCheckout } from "../persist";
 import type { PaymentGatewayConfig } from "../config";
-import type { CheckoutSessionInput, CheckoutSessionResult, PaymentGatewayProvider } from "../types";
+import type {
+  CheckoutSessionInput,
+  CheckoutSessionResult,
+  GatewayRefundResult,
+  PaymentGatewayProvider,
+} from "../types";
 
 const IYZICO_INIT_PATH = "/payment/iyzipos/checkoutform/initialize/auth/ecom";
 const IYZICO_RETRIEVE_PATH = "/payment/iyzipos/checkoutform/auth/ecom/detail";
+export const IYZICO_REFUND_PATH = "/payment/refund";
 
 interface IyzicoInitializeResponse {
   status: string;
@@ -28,6 +34,8 @@ interface IyzicoRetrieveResponse {
   /** Amount actually charged (includes installment commission if passed to the customer). */
   paidPrice?: number | string;
   currency?: string;
+  /** One entry per basket item; refunds address these, not the payment. */
+  itemTransactions?: Array<{ itemId?: string; paymentTransactionId?: string; paidPrice?: number | string }>;
 }
 
 function getIyzicoBaseUrl(testMode: boolean) {
@@ -224,4 +232,86 @@ export async function retrieveIyzicoCheckoutResult(
     conversationId: conversationId ?? `retrieve-${token}`,
     token,
   });
+}
+
+/** Body of iyzico's refund API (per basket item transaction; partial amounts allowed). */
+export function buildIyzicoRefundRequest(input: {
+  paymentTransactionId: string;
+  amount: number | string;
+  conversationId: string;
+  ip?: string;
+}) {
+  return {
+    locale: "tr",
+    conversationId: input.conversationId,
+    paymentTransactionId: input.paymentTransactionId,
+    price: toFixed2(input.amount),
+    currency: "TRY",
+    ip: input.ip?.trim() || "127.0.0.1",
+  };
+}
+
+interface IyzicoRefundResponse {
+  status?: string;
+  paymentId?: string;
+  paymentTransactionId?: string;
+  price?: number | string;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+/**
+ * Refunds part or all of a Checkout Form payment. We only keep the checkout
+ * token, so the basket item's paymentTransactionId is read back from the
+ * checkout result first (our baskets have exactly one item).
+ */
+export async function refundIyzicoPayment(
+  config: PaymentGatewayConfig["iyzico"],
+  input: { token: string; amount: number | string; conversationId: string; ip?: string }
+): Promise<GatewayRefundResult> {
+  let paymentTransactionId: string | undefined;
+  try {
+    const checkout = await retrieveIyzicoCheckoutResult(config, input.token);
+    paymentTransactionId = checkout.itemTransactions?.[0]?.paymentTransactionId;
+    if (checkout.status !== "success" || !paymentTransactionId) {
+      return {
+        ok: false,
+        message: `iyzico ödeme kaydı bulunamadı: ${checkout.errorMessage ?? "işlem numarası yok"}`,
+      };
+    }
+  } catch {
+    return { ok: false, message: "iyzico ödeme kaydı okunamadı; iade yapılmadı." };
+  }
+
+  let result: IyzicoRefundResponse;
+  try {
+    result = await postIyzico<IyzicoRefundResponse>(
+      config,
+      IYZICO_REFUND_PATH,
+      buildIyzicoRefundRequest({ ...input, paymentTransactionId })
+    );
+  } catch {
+    return {
+      ok: false,
+      uncertain: true,
+      operation: "refund",
+      message: "iyzico'ya ulaşılamadı; iade durumu iyzico panelinden kontrol edilmeli.",
+    };
+  }
+
+  if (result.status === "success") {
+    return {
+      ok: true,
+      operation: "refund",
+      gatewayRef: result.paymentTransactionId ?? paymentTransactionId,
+      message: "iyzico iadeyi onayladı.",
+      data: { paymentId: result.paymentId, paymentTransactionId, price: result.price },
+    };
+  }
+  return {
+    ok: false,
+    operation: "refund",
+    message: `iyzico iadeyi reddetti: ${result.errorMessage ?? result.errorCode ?? "bilinmeyen hata"}`,
+    data: { errorCode: result.errorCode },
+  };
 }

@@ -2,6 +2,7 @@ import { checkIntegrationHealth } from "./health";
 import { getSettingMap, isEnabled } from "./settings";
 import { db } from "@/lib/db";
 import { getEInvoiceConfig, getEInvoiceConfigProblem } from "./efatura/config";
+import { getPaymentGatewayConfig } from "./payment-gateways/config";
 
 export type ModuleCategory =
   | "domain"
@@ -166,17 +167,15 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
 
   const stripeConfigured = Boolean(env("STRIPE_SECRET_KEY"));
   const stripeWebhookConfigured = Boolean(env("STRIPE_WEBHOOK_SECRET"));
-  const paymentGatewayProvider = settings.payment_gateway_provider || "stripe";
-  const iyzicoConfigured =
-    isEnabled(settings.iyzico_enabled) &&
-    Boolean(settings.iyzico_api_key && settings.iyzico_secret_key);
+  // Several gateways can be offered at once; "active" = enabled in the
+  // payment method list (Entegrasyonlar › Ödeme).
+  const enabledMethods = new Set((await getPaymentGatewayConfig()).methods.enabled);
+  const iyzicoConfigured = Boolean(settings.iyzico_api_key && settings.iyzico_secret_key);
   const paytrConfigured =
-    isEnabled(settings.paytr_enabled) &&
     Boolean(
       settings.paytr_merchant_id && settings.paytr_merchant_key && settings.paytr_merchant_salt
     );
   const kuveytturkConfigured =
-    isEnabled(settings.kuveytturk_enabled) &&
     Boolean(
       settings.kuveytturk_merchant_id &&
         settings.kuveytturk_customer_id &&
@@ -251,7 +250,7 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       description: "Kredi kartı ile online ödeme",
       category: "payment",
       status:
-        paymentGatewayProvider === "stripe"
+        enabledMethods.has("stripe")
           ? stripeConfigured
             ? stripeWebhookConfigured
               ? "active"
@@ -263,8 +262,8 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       configured: stripeConfigured,
       provider: "stripe",
       message: stripeConfigured
-        ? paymentGatewayProvider !== "stripe"
-          ? "Aktif ödeme sağlayıcısı Stripe değil"
+        ? !enabledMethods.has("stripe")
+          ? "Ödeme yöntemlerinde kapalı"
           : stripeWebhookConfigured
             ? undefined
             : "STRIPE_WEBHOOK_SECRET tanımlı değil"
@@ -278,7 +277,7 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       description: "Türkiye odaklı kredi kartı ödeme altyapısı",
       category: "payment",
       status:
-        paymentGatewayProvider === "iyzico"
+        enabledMethods.has("iyzico")
           ? iyzicoConfigured
             ? "active"
             : "error"
@@ -288,7 +287,7 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       configured: iyzicoConfigured,
       provider: "iyzico",
       message:
-        paymentGatewayProvider === "iyzico" && !iyzicoConfigured
+        enabledMethods.has("iyzico") && !iyzicoConfigured
           ? "iyzico API bilgileri eksik"
           : undefined,
       configSource: "settings",
@@ -300,7 +299,7 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       description: "3D Secure kredi kartı ödemesi (birincil sanal POS)",
       category: "payment",
       status:
-        paymentGatewayProvider === "kuveytturk"
+        enabledMethods.has("kuveytturk")
           ? kuveytturkConfigured
             ? "active"
             : "error"
@@ -308,7 +307,7 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       configured: kuveytturkConfigured,
       provider: "kuveytturk",
       message:
-        paymentGatewayProvider === "kuveytturk" && !kuveytturkConfigured
+        enabledMethods.has("kuveytturk") && !kuveytturkConfigured
           ? "Kuveyt Türk üye işyeri bilgileri eksik"
           : undefined,
       configSource: "settings",
@@ -320,7 +319,7 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       description: "PayTR iframe ile kredi kartı ödemesi",
       category: "payment",
       status:
-        paymentGatewayProvider === "paytr"
+        enabledMethods.has("paytr")
           ? paytrConfigured
             ? "active"
             : "error"
@@ -330,7 +329,7 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       configured: paytrConfigured,
       provider: "paytr",
       message:
-        paymentGatewayProvider === "paytr" && !paytrConfigured
+        enabledMethods.has("paytr") && !paytrConfigured
           ? "PayTR mağaza bilgileri eksik"
           : undefined,
       configSource: "settings",

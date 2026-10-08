@@ -16,19 +16,35 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const session = await requireAdmin();
   const user = session.user;
 
-  const [pendingOrders, openTickets, overdueInvoices, pendingCancellations, pendingManualProvisioning, notifications] = await Promise.all([
+  const [
+    pendingOrders,
+    openTickets,
+    overdueInvoices,
+    pendingCancellations,
+    pendingManualProvisioning,
+    pendingBankTransfers,
+    notifications,
+  ] = await Promise.all([
     db.order.count({ where: { status: "PENDING" } }),
     db.supportTicket.count({ where: { status: { in: ["OPEN", "CUSTOMER_REPLY"] } } }),
     db.invoice.count({ where: { status: "OVERDUE" } }),
     db.cancellationRequest.count({ where: { status: "PENDING" } }),
     db.provisioningJob.count({ where: { kind: "MANUAL", status: { in: ["PENDING", "PROCESSING", "FAILED"] } } }),
+    db.bankTransferNotice.count({ where: { status: "PENDING" } }),
     user?.id ? getNotifications(user.id) : Promise.resolve([]),
   ]);
 
   return (
     <AdminShell
       user={{ name: user?.name || "Yönetici", email: user?.email }}
-      counts={{ pendingOrders, openTickets, overdueInvoices, pendingCancellations, pendingManualProvisioning }}
+      counts={{
+        pendingOrders,
+        openTickets,
+        overdueInvoices,
+        pendingCancellations,
+        pendingManualProvisioning,
+        pendingBankTransfers,
+      }}
       notifications={notifications.slice(0, 10).map((n) => ({
         id: n.id,
         title: n.title,

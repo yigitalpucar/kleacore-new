@@ -1,7 +1,12 @@
 import { getStripe } from "@/lib/stripe";
 import { toKurus, toNumber } from "@/lib/money";
 import { persistGatewayCheckout } from "../persist";
-import type { CheckoutSessionInput, CheckoutSessionResult, PaymentGatewayProvider } from "../types";
+import type {
+  CheckoutSessionInput,
+  CheckoutSessionResult,
+  GatewayRefundResult,
+  PaymentGatewayProvider,
+} from "../types";
 
 export function createStripePaymentGatewayProvider(): PaymentGatewayProvider {
   return {
@@ -77,4 +82,45 @@ export function createStripePaymentGatewayProvider(): PaymentGatewayProvider {
       }
     },
   };
+}
+/** Refunds (part of) the PaymentIntent behind a Checkout Session. */
+export async function refundStripePayment(input: {
+  sessionId: string;
+  amountKurus: number;
+  idempotencyKey: string;
+}): Promise<GatewayRefundResult> {
+  const stripe = getStripe();
+  let paymentIntent: string | undefined;
+  try {
+    const session = await stripe.checkout.sessions.retrieve(input.sessionId);
+    paymentIntent =
+      typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+  } catch {
+    return { ok: false, message: "Stripe ödeme oturumu okunamadı; iade yapılmadı." };
+  }
+  if (!paymentIntent) {
+    return { ok: false, message: "Stripe ödeme oturumunda tahsilat bulunamadı." };
+  }
+
+  try {
+    const refund = await stripe.refunds.create(
+      { payment_intent: paymentIntent, amount: input.amountKurus },
+      { idempotencyKey: `kleacore-refund-${input.idempotencyKey}` }
+    );
+    const ok = refund.status === "succeeded" || refund.status === "pending";
+    return {
+      ok,
+      operation: "refund",
+      gatewayRef: refund.id,
+      message: ok ? "Stripe iadeyi kabul etti." : `Stripe iade durumu: ${refund.status}`,
+      data: { paymentIntent, status: refund.status },
+    };
+  } catch {
+    return {
+      ok: false,
+      uncertain: true,
+      operation: "refund",
+      message: "Stripe'a ulaşılamadı; iade durumu Stripe panelinden kontrol edilmeli.",
+    };
+  }
 }

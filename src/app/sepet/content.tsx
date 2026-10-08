@@ -13,9 +13,7 @@ import { useCartStore } from "@/store/cart-store";
 import { checkoutCart } from "@/lib/actions/customer/checkout";
 import {
   ArrowRight,
-  CreditCard,
   Globe,
-  Landmark,
   Loader2,
   Lock,
   Package,
@@ -31,6 +29,8 @@ import { PeriodBadge, PeriodNote } from "@/components/checkout/period-note";
 import type { CartItem } from "@/store/cart-store";
 import { cartTotals } from "@/lib/billing/cart-totals";
 import { validateCartItems } from "@/lib/checkout/validate-cart";
+import { PaymentMethodPicker } from "@/components/checkout/payment-method-picker";
+import type { CustomerPaymentOptions } from "@/lib/payments/payment-options";
 
 function formatPrice(value: number) {
   return formatTRY(value, { keepDecimals: true });
@@ -51,7 +51,13 @@ function itemPeriod(item: CartItem): "monthly" | "yearly" {
   return item.metadata?.billingPeriod === "yearly" ? "yearly" : "monthly";
 }
 
-export function SepetContent({ taxRate }: { taxRate: number }) {
+export function SepetContent({
+  taxRate,
+  paymentOptions,
+}: {
+  taxRate: number;
+  paymentOptions: CustomerPaymentOptions;
+}) {
   const router = useRouter();
   const items = useCartStore((state) => state.items);
   const hasHydrated = useCartStore((state) => state.hasHydrated);
@@ -65,7 +71,10 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
   const hasYearly = items.some(
     (item) => itemPeriod(item) === "yearly" && priceBasisForItemType(item.type) === "monthly-equivalent"
   );
-  const [paymentMethod, setPaymentMethod] = useState<"BANK_TRANSFER" | "CREDIT_CARD">("CREDIT_CARD");
+  const [paymentMethod, setPaymentMethod] = useState<string | null>(paymentOptions.defaultMethod);
+  const selectedKind = [...paymentOptions.options, ...paymentOptions.otherCards].find(
+    (option) => option.id === paymentMethod
+  )?.kind;
   const [promoCode, setPromoCode] = useState("");
   const [isPending, startTransition] = useTransition();
   // Same rules as checkoutCart (minus the TLD list): a cart that can't be
@@ -86,6 +95,10 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
   const handleCheckout = () => {
     if (cartErrors.length > 0) {
       toast.error(cartErrors[0].message);
+      return;
+    }
+    if (!paymentMethod) {
+      toast.error("Lütfen bir ödeme yöntemi seçin.");
       return;
     }
     startTransition(async () => {
@@ -126,34 +139,33 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
         return;
       }
 
-      toast.success(
-        paymentMethod === "CREDIT_CARD"
-          ? "Ödeme sayfasına yönlendiriliyorsunuz."
-          : "Siparişiniz oluşturuldu. Banka havalesi onayı bekleniyor."
-      );
+      const invoiceIds = result.data && "invoiceIds" in result.data ? result.data.invoiceIds : [];
+      const paidWithBalance = Boolean(result.data && "paidWithBalance" in result.data && result.data.paidWithBalance);
+
+      if (selectedKind === "balance") {
+        if (paidWithBalance) {
+          toast.success("Siparişiniz bakiyenizden ödendi.");
+        } else {
+          toast.error("Bakiye ile ödenemedi; faturalarınızı başka bir yöntemle ödeyebilirsiniz.");
+        }
+        router.push("/musteri/panel/faturalar");
+        return;
+      }
+
+      if (selectedKind === "bank_transfer") {
+        toast.success("Siparişiniz oluşturuldu. Havale/EFT bilgileri ve ödeme bildirimi faturanızda.");
+        router.push(
+          invoiceIds.length === 1
+            ? `/musteri/panel/faturalar/${invoiceIds[0]}?odeme=havale`
+            : "/musteri/panel/faturalar"
+        );
+        return;
+      }
+
+      toast.success("Ödeme sayfasına yönlendiriliyorsunuz.");
       router.push("/musteri/panel/faturalar");
     });
   };
-
-  const paymentOptions: {
-    value: "CREDIT_CARD" | "BANK_TRANSFER";
-    label: string;
-    description: string;
-    icon: typeof CreditCard;
-  }[] = [
-    {
-      value: "CREDIT_CARD",
-      label: "Kredi kartı",
-      description: "Kart bilgilerinizi bir sonraki adımda girersiniz; 3D Secure ile tek çekim.",
-      icon: CreditCard,
-    },
-    {
-      value: "BANK_TRANSFER",
-      label: "Banka havalesi",
-      description: "Sipariş oluşturulur, havale onayından sonra işleme alınır.",
-      icon: Landmark,
-    },
-  ];
 
   return (
     <>
@@ -383,53 +395,20 @@ export function SepetContent({ taxRate }: { taxRate: number }) {
                     <p className="mt-1.5 text-xs text-muted-foreground">Kupon ödeme sırasında doğrulanır.</p>
                   </div>
 
-                  <fieldset>
-                    <legend className="text-sm font-medium">Ödeme yöntemi</legend>
-                    <div className="mt-2 space-y-2">
-                      {paymentOptions.map((option) => {
-                        const selected = paymentMethod === option.value;
-                        return (
-                          <label
-                            key={option.value}
-                            className={cn(
-                              "flex cursor-pointer items-start gap-3 rounded-xl border bg-background p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-                              selected ? "border-foreground ring-1 ring-foreground" : "hover:bg-muted/40"
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name="payment-method"
-                              value={option.value}
-                              checked={selected}
-                              onChange={() => setPaymentMethod(option.value)}
-                              className="sr-only"
-                            />
-                            <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40">
-                              <option.icon aria-hidden className="size-4 text-foreground/80" />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-sm font-medium">{option.label}</span>
-                              <span className="block text-xs text-muted-foreground">{option.description}</span>
-                            </span>
-                            <span
-                              aria-hidden
-                              className={cn(
-                                "mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border",
-                                selected && "border-foreground"
-                              )}
-                            >
-                              {selected ? <span className="size-2 rounded-full bg-foreground" /> : null}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </fieldset>
+                  <PaymentMethodPicker
+                    options={paymentOptions.options}
+                    otherCards={paymentOptions.otherCards}
+                    value={paymentMethod}
+                    onChange={setPaymentMethod}
+                    payableAmount={grandTotal}
+                    balance={paymentOptions.balance}
+                    name="payment-method"
+                  />
 
                   <button
                     type="button"
                     onClick={handleCheckout}
-                    disabled={isPending || cartErrors.length > 0}
+                    disabled={isPending || cartErrors.length > 0 || !paymentMethod}
                     className={buttonClasses({ size: "lg", className: "w-full disabled:opacity-60" })}
                   >
                     {isPending ? (

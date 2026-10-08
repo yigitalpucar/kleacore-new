@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getPaymentGatewayProvider } from "@/lib/integrations/payment-gateways";
 import type { CheckoutCustomerInfo } from "@/lib/integrations/payment-gateways/types";
+import type { CardGatewayId } from "@/lib/integrations/payment-gateways/methods-config";
 import { getAppBaseUrl } from "@/lib/stripe";
 import type { PaymentContext } from "@/lib/payments/context";
 import type { CustomerPaymentMethod } from "@/lib/payments/methods";
@@ -95,6 +96,8 @@ interface InitiateCreditCardPaymentInput {
   amount: number;
   context: PaymentContext;
   customerIp?: string;
+  /** Card gateway the customer picked; the primary card gateway when omitted. */
+  gateway?: CardGatewayId;
 }
 
 export async function initiateCreditCardPayment(input: InitiateCreditCardPaymentInput) {
@@ -112,7 +115,7 @@ export async function initiateCreditCardPayment(input: InitiateCreditCardPayment
 
   const customer = await loadCheckoutCustomer(input.customerId, input.customerIp);
 
-  const provider = await getPaymentGatewayProvider();
+  const provider = await getPaymentGatewayProvider(input.gateway);
   const result = await provider.createCheckout({
     customerId: input.customerId,
     customer,

@@ -49,3 +49,15 @@ export interface GatewayMeta {
   context: PaymentContext;
   provider: PaymentGatewayId;
 }
+
+/** Outcome of a refund/cancel call to a card gateway. */
+export interface GatewayRefundResult {
+  ok: boolean;
+  /** Timeout / network error: the gateway may or may not have refunded. */
+  uncertain?: boolean;
+  /** Bank/gateway operation that was attempted (SaleReversal, DrawBack, …). */
+  operation?: string;
+  gatewayRef?: string;
+  message: string;
+  data?: Record<string, unknown>;
+}

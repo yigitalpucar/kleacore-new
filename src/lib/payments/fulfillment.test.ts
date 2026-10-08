@@ -58,7 +58,7 @@ type FakeInvoice = {
   totalAmount: number;
   paidAmount: number;
   paidAt: Date | null;
-  status: "PENDING" | "PAID" | "OVERDUE" | "CANCELLED";
+  status: "PENDING" | "PAID" | "OVERDUE" | "CANCELLED" | "REFUNDED" | "PARTIALLY_REFUNDED";
   orderId: string | null;
 };
 
@@ -270,6 +270,23 @@ describe("fulfillInvoicePayment idempotency", () => {
     const byId = Object.fromEntries(state.payments.map((item) => [item.id, item]));
     expect(byId["pay-old"]).toMatchObject({ status: "COMPLETED", transactionId: "sess-old" });
     expect(byId["pay-new"]).toMatchObject({ status: "FAILED", transactionId: "sess-new" });
+  });
+
+  it("does not re-open or re-provision a refunded invoice on a late callback", async () => {
+    for (const status of ["REFUNDED", "PARTIALLY_REFUNDED"] as const) {
+      const { state, tx } = createStore([invoice({ status })], [payment()]);
+
+      const result = await fulfillInvoicePayment(tx, {
+        invoiceId: "inv-1",
+        performedBy: "cus-1",
+        paymentReference: "sess-1",
+      });
+
+      expect(result.fulfilled).toBe(false);
+      expect(state.invoices.get("inv-1")?.status).toBe(status);
+    }
+    expect(mocks.prepareOrderProvisioning).not.toHaveBeenCalled();
+    expect(mocks.queuePaymentFollowUps).not.toHaveBeenCalled();
   });
 
   it("records a second, really charged session on a paid invoice as a duplicate instead of re-fulfilling", async () => {

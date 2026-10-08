@@ -25,6 +25,11 @@ import { formatDate, formatDateTime } from "@/lib/format/date";
 import { formatTRY } from "@/lib/format/price";
 import { toast } from "@/lib/toast";
 import { issueEInvoiceForInvoiceAction } from "@/lib/actions/admin/efatura";
+import { RefundDialog } from "@/components/admin-b/payments/refund-dialog";
+import { RefundHistory } from "@/components/admin-b/payments/refund-history";
+import { NoticeReviewButtons } from "@/components/admin-b/payments/notice-review-buttons";
+import type { InvoiceRefundSummary } from "@/lib/payments/refunds";
+import type { BankTransferNoticeView } from "@/lib/dal/bank-transfer";
 
 export interface AdminInvoiceDetail {
   id: string;
@@ -35,6 +40,8 @@ export interface AdminInvoiceDetail {
   taxAmount: number;
   totalAmount: number;
   paidAmount: number;
+  refundedAmount: number;
+  hasService: boolean;
   createdAt: string;
   issuedAt: string;
   dueDate: string;
@@ -85,11 +92,20 @@ export interface AdminInvoiceDetail {
 
 const money = (n: number) => formatTRY(n, { keepDecimals: true });
 
-export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail }) {
+export function InvoiceDetailContent({
+  invoice,
+  refundSummary,
+  bankTransferNotices = [],
+}: {
+  invoice: AdminInvoiceDetail;
+  refundSummary?: InvoiceRefundSummary | null;
+  bankTransferNotices?: BankTransferNoticeView[];
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const isOpen = invoice.status === "PENDING" || invoice.status === "OVERDUE";
   const isPaid = invoice.status === "PAID";
+  const canRefund = Boolean(refundSummary && refundSummary.refundable > 0);
   const customerName = `${invoice.customer.name} ${invoice.customer.surname}`.trim();
   const outstanding = Math.max(0, invoice.totalAmount - invoice.paidAmount);
   const hasPendingBankTransfer = invoice.payments.some(
@@ -184,6 +200,15 @@ export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail 
                 {busy === "mail" ? "Gönderiliyor…" : mailLabel}
               </button>
             ) : null}
+            {canRefund && refundSummary ? (
+              <RefundDialog
+                invoiceId={invoice.id}
+                invoiceNumber={invoice.invoiceNumber}
+                refundable={refundSummary.refundable}
+                cardGateway={refundSummary.cardGateway}
+                hasService={invoice.hasService}
+              />
+            ) : null}
             {isOpen ? (
               hasPendingBankTransfer ? (
                 <button
@@ -261,7 +286,7 @@ export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail 
                   <dt>Toplam</dt>
                   <dd className="tabular-nums">{money(invoice.totalAmount)}</dd>
                 </div>
-                {invoice.paidAmount > 0 && !isPaid ? (
+                {invoice.paidAmount > 0 && isOpen ? (
                   <div className="flex justify-between gap-4 text-muted-foreground">
                     <dt>Kalan</dt>
                     <dd className="tabular-nums">{money(outstanding)}</dd>
@@ -306,6 +331,46 @@ export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail 
               </div>
             )}
           </SectionCard>
+
+          {refundSummary ? <RefundHistory invoiceId={invoice.id} summary={refundSummary} /> : null}
+
+          {bankTransferNotices.length > 0 ? (
+            <SectionCard title="Havale bildirimleri" description={`${bankTransferNotices.length} kayıt`} flush>
+              <ul className="divide-y divide-dashed">
+                {bankTransferNotices.map((notice) => (
+                  <li key={notice.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3.5 md:px-5">
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-sm font-medium">
+                        {notice.senderName}
+                        {notice.bankName ? <span className="font-normal text-muted-foreground"> · {notice.bankName}</span> : null}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Ödeme tarihi {formatDate(notice.transferDate)} · Bildirim {formatDateTime(notice.createdAt)}
+                      </p>
+                      {notice.note ? <p className="text-xs text-muted-foreground">{notice.note}</p> : null}
+                      {notice.rejectionReason ? (
+                        <p className="text-xs text-muted-foreground">Ret nedeni: {notice.rejectionReason}</p>
+                      ) : null}
+                      {notice.status === "PENDING" && isOpen ? (
+                        <div className="pt-1">
+                          <NoticeReviewButtons
+                            noticeId={notice.id}
+                            invoiceNumber={invoice.invoiceNumber}
+                            amountLabel={money(notice.amount)}
+                            amountMismatch={Math.abs(notice.amount - outstanding) >= 0.01}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span className="font-medium tabular-nums">{money(notice.amount)}</span>
+                      <StatusBadge kind="bankTransferNotice" status={notice.status} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          ) : null}
 
           {invoice.eInvoice ? (
             <SectionCard
@@ -362,6 +427,7 @@ export function InvoiceDetailContent({ invoice }: { invoice: AdminInvoiceDetail 
                 { label: "Durum", value: <StatusBadge kind="invoice" status={invoice.status} /> },
                 { label: "Toplam", value: money(invoice.totalAmount) },
                 { label: "Ödenen", value: money(invoice.paidAmount) },
+                { label: "İade edilen", value: invoice.refundedAmount > 0 ? money(invoice.refundedAmount) : null },
                 { label: "Düzenleme", value: formatDate(invoice.issuedAt) },
                 { label: "Son ödeme", value: formatDate(invoice.dueDate) },
                 { label: "Ödeme tarihi", value: invoice.paidAt ? formatDate(invoice.paidAt) : null },

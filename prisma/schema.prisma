@@ -125,6 +125,28 @@ enum InvoiceStatus {
   PAID
   OVERDUE
   CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+/// How the money goes back: through the card gateway that charged it, as
+/// account balance, or recorded after an out-of-band transfer (havale).
+enum RefundMethod {
+  GATEWAY
+  BALANCE
+  MANUAL
+}
+
+enum BankTransferNoticeStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum EInvoiceStatus {
@@ -370,6 +392,7 @@ model User {
   cancellationRequests CancellationRequest[]
   planChanges          ServicePlanChange[]
   notificationLogs     NotificationLog[]
+  bankTransferNotices  BankTransferNotice[]
 
   // Affiliate relations
   affiliateReferrals AffiliateReferral[] @relation("AffiliateReferrals")
@@ -949,6 +972,8 @@ model Invoice {
   taxAmount   Decimal @default(0) @db.Decimal(14, 2)
   totalAmount Decimal @default(0) @db.Decimal(14, 2)
   paidAmount  Decimal @default(0) @db.Decimal(14, 2)
+  /// Sum of COMPLETED refunds; paidAmount - refundedAmount is still held.
+  refundedAmount Decimal @default(0) @db.Decimal(14, 2)
 
   // Status
   status   InvoiceStatus @default(PENDING)
@@ -960,10 +985,12 @@ model Invoice {
   notes String?
 
   // Relations
-  items          InvoiceItem[]
-  payments       Payment[]
-  eInvoiceRecord EInvoiceRecord?
-  domainRenewal  DomainRenewal?
+  items               InvoiceItem[]
+  payments            Payment[]
+  eInvoiceRecord      EInvoiceRecord?
+  domainRenewal       DomainRenewal?
+  refunds             Refund[]
+  bankTransferNotices BankTransferNotice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1033,12 +1060,94 @@ model Payment {
   /// Gateway references needed after the callback (bank order id, RRN,
   /// provision number for refunds) and the provisioning claim. Never card data.
   gatewayData   Json?
+  refunds       Refund[]
 
   // One row per invoice per gateway session: a callback for any session
   // matches exactly one payment of each invoice it covers.
   @@unique([invoiceId, transactionId])
   @@index([transactionId])
   @@map("payments")
+}
+
+/// Money returned for a paid invoice. Rows in PENDING or COMPLETED count
+/// against the refundable amount, so a refund whose gateway outcome is
+/// unknown can never be repeated by accident.
+model Refund {
+  id             String       @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id])
+  paymentId      String?
+  payment        Payment?     @relation(fields: [paymentId], references: [id])
+  customerId     String
+  amount         Decimal      @db.Decimal(14, 2)
+  reason         String
+  method         RefundMethod
+  /// "kuveytturk" | "paytr" | "iyzico" | "stripe" for GATEWAY refunds.
+  gateway        String?
+  /// Gateway operation (SaleReversal, DrawBack, …) or manual reference.
+  operation      String?
+  gatewayRef     String?
+  gatewayData    Json?
+  status         RefundStatus @default(PENDING)
+  errorMessage   String?
+  /// "CANCEL" | "KEEP" — what the admin chose for the related service.
+  serviceAction  String       @default("KEEP")
+  /// e-Arşiv cancelled ("EARSIV_CANCELLED") or a return invoice is needed
+  /// ("RETURN_INVOICE_REQUIRED"); null when no official invoice was issued.
+  eInvoiceAction String?
+  /// Set by the admin dialog once per submit: a double click inserts nothing.
+  idempotencyKey String       @unique
+  createdBy      String
+  createdAt      DateTime     @default(now())
+  completedAt    DateTime?
+
+  @@index([invoiceId])
+  @@index([status])
+  @@map("refunds")
+}
+
+/// Bank account shown to customers for havale/EFT payments.
+model BankAccount {
+  id          String   @id @default(cuid())
+  bankName    String
+  branch      String   @default("")
+  accountName String
+  iban        String   @unique
+  currency    String   @default("TRY")
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  notices BankTransferNotice[]
+
+  @@map("bank_accounts")
+}
+
+/// "Ödeme bildirimi": the customer says a transfer was sent; an admin
+/// approves it (invoice paid through fulfilment) or rejects it with a reason.
+model BankTransferNotice {
+  id              String                   @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice                  @relation(fields: [invoiceId], references: [id])
+  customerId      String
+  customer        User                     @relation(fields: [customerId], references: [id])
+  bankAccountId   String?
+  bankAccount     BankAccount?             @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  amount          Decimal                  @db.Decimal(14, 2)
+  transferDate    DateTime
+  senderName      String
+  note            String?
+  status          BankTransferNoticeStatus @default(PENDING)
+  rejectionReason String?
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@index([status, createdAt])
+  @@index([invoiceId])
+  @@map("bank_transfer_notices")
 }
 
 model StripeWebhookEvent {
