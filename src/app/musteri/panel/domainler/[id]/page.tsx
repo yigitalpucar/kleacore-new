@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getDomainWithDns } from "@/lib/dal/domains";
 import { DomainDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Alan adı detayı" };
 
 interface DomainDetayPageProps {
   params: Promise<{ id: string }>;

@@ -3,9 +3,28 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import {
+  ArrowUpDown,
+  Ban,
+  Check,
+  Cloud,
+  CreditCard,
+  Database,
+  Download,
+  ExternalLink,
+  FileText,
+  FolderOpen,
+  Loader2,
+  Lock,
+  Mail,
+  Package,
+  Power,
+  RefreshCcw,
+  Server,
+  Settings,
+  Shield,
+  Terminal,
+} from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -18,81 +37,22 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Package,
-  Server,
-  Shield,
-  Cloud,
-  ArrowLeft,
-  ArrowUpDown,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  XCircle,
-  ExternalLink,
-  RefreshCcw,
-  Settings,
-  CreditCard,
-  Calendar,
-  Globe,
-  HardDrive,
-  Cpu,
-  MemoryStick,
-  Activity,
-  Download,
-  Upload,
-  Power,
-  Terminal,
-  Copy,
-  FileText,
-  Mail,
-  Database,
-  FolderOpen,
-  Users,
-  Lock,
-  Zap,
-  Loader2,
-  Ban,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+  AppBreadcrumbLabel,
+  DetailList,
+  EmptyState,
+  IconTile,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+  UnavailableAction,
+  UsageMeter,
+  appButton,
+  enumLabel,
+} from "@/components/app";
 import { submitCancellationRequest } from "@/lib/actions/customer/cancellation";
 import { toast } from "@/lib/toast";
-
-const statusConfig: Record<string, {
-  label: string;
-  color: string;
-  bgColor: string;
-  borderColor: string;
-  icon: typeof CheckCircle2;
-}> = {
-  ACTIVE: {
-    label: "Aktif",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-    borderColor: "border-green-500/30",
-    icon: CheckCircle2,
-  },
-  EXPIRED: {
-    label: "Süresi Doldu",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
-    borderColor: "border-red-500/30",
-    icon: XCircle,
-  },
-  SUSPENDED: {
-    label: "Askıda",
-    color: "text-gray-500",
-    bgColor: "bg-gray-500/10",
-    borderColor: "border-gray-500/30",
-    icon: Clock,
-  },
-  CANCELLED: {
-    label: "İptal",
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
-    borderColor: "border-orange-500/30",
-    icon: AlertCircle,
-  },
-};
+import { formatTRY } from "@/lib/format/price";
+import { billingPeriodLabel, formatDate, formatDateTime } from "@/lib/format/date";
 
 const categoryIcons: Record<string, typeof Package> = {
   hosting: Package,
@@ -103,20 +63,6 @@ const categoryIcons: Record<string, typeof Package> = {
   domain: Cloud,
   email: Package,
 };
-
-const billingPeriodLabels: Record<string, string> = {
-  monthly: "Aylık",
-  quarterly: "3 Aylık",
-  semiannual: "6 Aylık",
-  yearly: "Yıllık",
-  biennial: "2 Yıllık",
-  triennial: "3 Yıllık",
-};
-
-const currencyFormatter = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 interface ServiceData {
   id: string;
@@ -138,7 +84,7 @@ interface ServiceData {
   product: {
     id: string;
     name: string;
-    features: string[];
+    features: unknown[];
     resourceLimits: Record<string, string>;
     category: {
       slug: string;
@@ -164,6 +110,8 @@ interface HizmetDetayContentProps {
   service: ServiceData;
 }
 
+const P = "/musteri/panel/hizmetlerim";
+
 export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
   const router = useRouter();
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
@@ -175,13 +123,11 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
   const isServer = ["vds", "vps", "server"].includes(categorySlug);
   const isSsl = categorySlug === "ssl";
 
-  const status = statusConfig[service.status] || statusConfig.ACTIVE;
-  const StatusIcon = status.icon;
   const TypeIcon = categoryIcons[categorySlug] || Package;
   const canRequestCancellation =
-    !service.pendingCancellation &&
-    service.status !== "CANCELLED" &&
-    service.status !== "EXPIRED";
+    !service.pendingCancellation && service.status !== "CANCELLED" && service.status !== "EXPIRED";
+  const endDate = service.nextDueDate ?? service.expiresAt;
+  const price = `${formatTRY(service.amount, { keepDecimals: true })} / ${billingPeriodLabel(service.billingPeriod).toLocaleLowerCase("tr-TR")}`;
 
   const handleSubmitCancellation = async () => {
     if (isSubmittingCancel) return;
@@ -202,578 +148,319 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
     setIsSubmittingCancel(false);
   };
 
+  const hasDisk = service.diskUsed != null && service.diskLimit != null && service.diskLimit > 0;
+  const hasBandwidth = service.bandwidthUsed != null && service.bandwidthLimit != null && service.bandwidthLimit > 0;
+  const hasCpu = isServer && service.cpuUsage != null;
+  const hasRam = isServer && service.ramUsage != null;
+  const hasUsage = hasDisk || hasBandwidth || hasCpu || hasRam;
+
+  const limits = service.product.resourceLimits ?? {};
+  const specItems = [
+    { label: "İşlemci", value: limits.cpu },
+    { label: "RAM", value: limits.ram },
+    { label: "Depolama", value: limits.storage ?? limits.disk },
+    { label: "Bant genişliği", value: limits.bandwidth ?? limits.traffic },
+    { label: "Port", value: limits.port },
+  ];
+
+  // Product features are stored either as strings or as { label, value } objects.
+  const features = (Array.isArray(service.product.features) ? service.product.features : [])
+    .map((f) => {
+      if (typeof f === "string") return { label: f, value: null as string | null };
+      if (f && typeof f === "object" && "label" in f) {
+        const o = f as { label?: unknown; value?: unknown };
+        return { label: String(o.label ?? ""), value: o.value != null ? String(o.value) : null };
+      }
+      return null;
+    })
+    .filter((f): f is { label: string; value: string | null } => Boolean(f && f.label));
+
+  // Quick actions: real links where a page exists, honest "Yakında" otherwise.
+  const quickLinks: { label: string; description: string; href: string; icon: React.ReactNode }[] = isHosting
+    ? [
+        { label: "E-posta hesapları", description: "cPanel e-posta yönetimi", href: `${P}/${service.id}/eposta`, icon: <Mail aria-hidden /> },
+        { label: "Webmail", description: "Gelen kutusu erişimi", href: "/musteri/panel/webmail", icon: <Mail aria-hidden /> },
+      ]
+    : [];
+  const soonActions: { label: string; description: string; icon: React.ReactNode }[] = isHosting
+    ? [
+        { label: "cPanel", description: "Kontrol paneli", icon: <ExternalLink aria-hidden /> },
+        { label: "phpMyAdmin", description: "Veritabanı yönetimi", icon: <Database aria-hidden /> },
+        { label: "Dosya yöneticisi", description: "Dosya işlemleri", icon: <FolderOpen aria-hidden /> },
+      ]
+    : isServer
+      ? [
+          { label: "SSH konsol", description: "Terminal erişimi", icon: <Terminal aria-hidden /> },
+          { label: "Yeniden başlat", description: "Sunucuyu yeniden başlat", icon: <Power aria-hidden /> },
+          { label: "Snapshot al", description: "Anlık görüntü", icon: <Download aria-hidden /> },
+          { label: "İşletim sistemi", description: "Yeniden kurulum", icon: <Settings aria-hidden /> },
+        ]
+      : isSsl
+        ? [
+            { label: "Sertifika indir", description: "CRT dosyası", icon: <Download aria-hidden /> },
+            { label: "Özel anahtar", description: "Private key", icon: <Lock aria-hidden /> },
+            { label: "Yeniden oluştur", description: "CSR ve anahtar", icon: <RefreshCcw aria-hidden /> },
+            { label: "CA bundle", description: "Ara sertifika", icon: <FileText aria-hidden /> },
+          ]
+        : [];
+
   return (
-    <div className="space-y-6">
-      {/* Back Button & Header */}
-      <BlurFade delay={0.1} inView>
-        <div className="flex flex-col gap-4">
-          <Link
-            href="/musteri/panel/hizmetlerim"
-            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Hizmetlere Dön
-          </Link>
+    <>
+      <AppBreadcrumbLabel segment={service.id} label={service.product.name} />
 
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <div className={cn("p-4 rounded-xl", status.bgColor)}>
-                <TypeIcon className={cn("h-8 w-8", status.color)} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-2xl font-bold tracking-tight">{service.product.name}</h1>
-                  <span className={cn(
-                    "flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
-                    status.bgColor, status.color
-                  )}>
-                    <StatusIcon className="h-3 w-3" />
-                    {status.label}
-                  </span>
-                </div>
-                <p className="text-muted-foreground mt-1">{service.domain || service.label || "-"}</p>
-                <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    Bitiş: {service.nextDueDate
-                      ? new Date(service.nextDueDate).toLocaleDateString("tr-TR")
-                      : service.expiresAt
-                      ? new Date(service.expiresAt).toLocaleDateString("tr-TR")
-                      : "-"}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <CreditCard className="h-4 w-4" />
-                    {currencyFormatter.format(service.amount)} / {billingPeriodLabels[service.billingPeriod] || service.billingPeriod}
-                  </span>
-                </div>
-              </div>
-            </div>
+      <PageHeader
+        back={{ href: P, label: "Hizmetlerim" }}
+        eyebrow={service.product.category?.name ?? "Hizmet"}
+        title={
+          <span className="flex items-center gap-3">
+            <IconTile size="lg" className="hidden sm:flex">
+              <TypeIcon />
+            </IconTile>
+            {service.product.name}
+          </span>
+        }
+        description={service.domain || service.label || undefined}
+        meta={
+          <>
+            <StatusBadge kind="service" status={service.status} size="md" />
+            {service.pendingCancellation ? <StatusBadge size="md" tone="warning" label="İptal talebi bekliyor" /> : null}
+            <span>Bitiş {formatDate(endDate)}</span>
+            <span className="tabular-nums">{price}</span>
+          </>
+        }
+        actions={
+          <>
+            <Link href={`${P}/${service.id}/yenile`} className={appButton({ variant: "outline" })}>
+              <RefreshCcw aria-hidden />
+              Yenile
+            </Link>
+            {service.status === "ACTIVE" ? (
+              <Link href={`${P}/${service.id}/yukselt`} className={appButton({ variant: "outline" })}>
+                <ArrowUpDown aria-hidden />
+                Paket değiştir
+              </Link>
+            ) : null}
+            <UnavailableAction label="Yönet" icon={<Settings aria-hidden />} reason="Yakında" />
+          </>
+        }
+      />
 
-            <div className="flex gap-2">
-              <Button variant="outline" asChild>
-                <Link href={`/musteri/panel/hizmetlerim/${service.id}/yenile`}>
-                  <RefreshCcw className="mr-2 h-4 w-4" />
-                  Yenile
-                </Link>
-              </Button>
-              {service.status === "ACTIVE" && (
-                <Button variant="outline" asChild>
-                  <Link href={`/musteri/panel/hizmetlerim/${service.id}/yukselt`}>
-                    <ArrowUpDown className="mr-2 h-4 w-4" />
-                    Paket Değiştir
-                  </Link>
-                </Button>
+      {quickLinks.length || soonActions.length ? (
+        <SectionCard title="Hızlı işlemler" description={soonActions.length ? "Panel bağlantıları kademeli olarak açılıyor." : undefined}>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {quickLinks.map((a) => (
+              <Link
+                key={a.label}
+                href={a.href}
+                className="flex min-h-[60px] items-center gap-3 rounded-md border bg-background px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground"
+              >
+                {a.icon}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{a.label}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{a.description}</span>
+                </span>
+              </Link>
+            ))}
+            {soonActions.map((a) => (
+              <UnavailableAction key={a.label} layout="tile" label={a.label} description={a.description} icon={a.icon} />
+            ))}
+          </div>
+        </SectionCard>
+      ) : null}
+
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
+          {isHosting || isServer ? (
+            <SectionCard title="Kaynak kullanımı">
+              {hasUsage ? (
+                <div className="grid gap-5 sm:grid-cols-2">
+                  {hasDisk ? <UsageMeter label="Disk" used={service.diskUsed} limit={service.diskLimit} unit="GB" /> : null}
+                  {hasBandwidth ? (
+                    <UsageMeter
+                      label="Bant genişliği"
+                      used={service.bandwidthUsed}
+                      limit={service.bandwidthLimit}
+                      unit={isServer ? "TB" : "GB"}
+                    />
+                  ) : null}
+                  {hasCpu ? <UsageMeter label="CPU" percent={service.cpuUsage} /> : null}
+                  {hasRam ? <UsageMeter label="RAM" percent={service.ramUsage} /> : null}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Bu hizmet için henüz kullanım verisi yok.</p>
               )}
-              <Button>
-                <Settings className="mr-2 h-4 w-4" />
-                Yönet
-              </Button>
+            </SectionCard>
+          ) : null}
+
+          {isServer && specItems.some((s) => s.value) ? (
+            <SectionCard title="Sunucu özellikleri">
+              <DetailList layout="grid" columns={2} items={specItems} />
+            </SectionCard>
+          ) : null}
+
+          {isSsl ? (
+            <SectionCard title="Sertifika detayları">
+              <DetailList
+                layout="grid"
+                items={[
+                  { label: "Sertifika tipi", value: service.product.name },
+                  { label: "Kapsam", value: service.domain || "—" },
+                ]}
+              />
+            </SectionCard>
+          ) : null}
+
+          {features.length > 0 ? (
+            <SectionCard title="Paket özellikleri">
+              <ul className="grid gap-x-8 sm:grid-cols-2">
+                {features.map((f, index) => (
+                  <li
+                    key={index}
+                    className="flex min-h-10 items-center justify-between gap-3 border-b border-dashed py-2 text-sm last:border-0 sm:[&:nth-last-child(2):nth-child(odd)]:border-0"
+                  >
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <Check aria-hidden className="size-4 shrink-0" />
+                      {f.label}
+                    </span>
+                    {f.value ? <span className="text-right font-medium">{f.value}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          ) : null}
+
+          {isHosting || isServer ? (
+            <SectionCard
+              title="Son yedekler"
+              actions={
+                <Link href="/musteri/panel/yedekleme" className={appButton({ variant: "ghost", size: "sm" })}>
+                  Yedekler
+                </Link>
+              }
+              flush
+            >
+              {service.backups.length ? (
+                <ul className="divide-y">
+                  {service.backups.map((b) => (
+                    <li key={b.id} className="flex items-center gap-3 px-4 py-3 text-sm md:px-5">
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium">{enumLabel("backupType", b.type)} yedek</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {formatDateTime(b.completedAt ?? b.createdAt)}
+                          {b.size != null ? ` · ${b.size.toLocaleString("tr-TR")} MB` : ""}
+                        </span>
+                      </span>
+                      <StatusBadge kind="backup" status={b.status} />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState compact className="m-4" title="Henüz yedek yok" />
+              )}
+            </SectionCard>
+          ) : null}
+        </div>
+
+        <div className="space-y-6">
+          <SectionCard title="Hizmet bilgileri">
+            <DetailList
+              items={[
+                { label: "Kategori", value: service.product.category?.name || "—" },
+                { label: "Başlangıç", value: formatDate(service.createdAt) },
+                { label: "Bitiş", value: formatDate(endDate) },
+                { label: "Fatura dönemi", value: billingPeriodLabel(service.billingPeriod) },
+                { label: "Tutar", value: formatTRY(service.amount, { keepDecimals: true }) },
+                { label: "IP adresi", value: service.ipAddress, mono: true, copy: service.ipAddress ?? undefined },
+              ]}
+            />
+
+            {service.pendingCancellation ? (
+              <div className="mt-4 rounded-md border border-dashed border-amber-500/50 p-3 text-sm">
+                <p className="font-medium">İptal talebi bekliyor</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {formatDate(service.pendingCancellation.createdAt)} tarihinde gönderildi
+                </p>
+                <p className="mt-2 line-clamp-3 text-muted-foreground">{service.pendingCancellation.reason}</p>
+              </div>
+            ) : null}
+
+            <div className="mt-4 grid gap-2 border-t pt-4">
+              <Link href={`${P}/${service.id}/yenile`} className={appButton({ variant: "outline", className: "justify-start" })}>
+                <RefreshCcw aria-hidden />
+                Hizmeti yenile
+              </Link>
+              {service.status === "ACTIVE" ? (
+                <Link href={`${P}/${service.id}/yukselt`} className={appButton({ variant: "outline", className: "justify-start" })}>
+                  <ArrowUpDown aria-hidden />
+                  Paket değiştir
+                </Link>
+              ) : null}
+              <Link href={`${P}/${service.id}/fatura`} className={appButton({ variant: "outline", className: "justify-start" })}>
+                <CreditCard aria-hidden />
+                Faturayı görüntüle
+              </Link>
+              {canRequestCancellation ? (
+                <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+                  <DialogTrigger asChild>
+                    <button type="button" className={appButton({ variant: "destructive", className: "justify-start" })}>
+                      <Ban aria-hidden />
+                      İptal talebi gönder
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Hizmet iptal talebi</DialogTitle>
+                      <DialogDescription>
+                        İptal talebiniz yönetici onayından sonra işleme alınır. Lütfen iptal nedeninizi açıklayın.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 py-2">
+                      <Label htmlFor="cancel-reason">İptal nedeni</Label>
+                      <Textarea
+                        id="cancel-reason"
+                        placeholder="İptal nedeninizi en az 10 karakter olacak şekilde yazın…"
+                        value={cancelReason}
+                        onChange={(e) => setCancelReason(e.target.value)}
+                        rows={4}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {cancelReason.trim().length}/1000 karakter (en az 10)
+                      </p>
+                    </div>
+                    <DialogFooter className="gap-2">
+                      <button
+                        type="button"
+                        className={appButton({ variant: "outline" })}
+                        onClick={() => setIsCancelDialogOpen(false)}
+                        disabled={isSubmittingCancel}
+                      >
+                        Vazgeç
+                      </button>
+                      <button
+                        type="button"
+                        className={appButton({ variant: "destructive" })}
+                        onClick={() => void handleSubmitCancellation()}
+                        disabled={isSubmittingCancel || cancelReason.trim().length < 10}
+                      >
+                        {isSubmittingCancel ? <Loader2 aria-hidden className="animate-spin" /> : null}
+                        {isSubmittingCancel ? "Gönderiliyor…" : "Talebi gönder"}
+                      </button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              ) : null}
             </div>
+          </SectionCard>
+
+          <div className="rounded-lg border border-dashed p-4 text-sm">
+            <p className="font-medium">Yardıma mı ihtiyacınız var?</p>
+            <p className="mt-1 text-muted-foreground">Bu hizmetle ilgili sorularınız için destek talebi açabilirsiniz.</p>
+            <Link href="/musteri/panel/destek" className={appButton({ variant: "outline", size: "sm", className: "mt-3" })}>
+              Destek talebi aç
+            </Link>
           </div>
         </div>
-      </BlurFade>
-
-      {/* Quick Actions */}
-      <BlurFade delay={0.15} inView>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Hızlı İşlemler</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-              {isHosting && (
-                <>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <ExternalLink className="mr-2 h-4 w-4 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">cPanel</p>
-                      <p className="text-xs text-muted-foreground">Kontrol paneli</p>
-                    </div>
-                  </Button>
-                  <Button variant="outline" className="justify-start h-auto py-3" asChild>
-                    <Link href={`/musteri/panel/hizmetlerim/${service.id}/eposta`}>
-                      <Mail className="mr-2 h-4 w-4 text-primary" />
-                      <div className="text-left">
-                        <p className="font-medium">E-posta Hesapları</p>
-                        <p className="text-xs text-muted-foreground">cPanel e-posta yönetimi</p>
-                      </div>
-                    </Link>
-                  </Button>
-                  <Button variant="outline" className="justify-start h-auto py-3" asChild>
-                    <Link href="/musteri/panel/webmail">
-                      <Mail className="mr-2 h-4 w-4 text-primary" />
-                      <div className="text-left">
-                        <p className="font-medium">Webmail</p>
-                        <p className="text-xs text-muted-foreground">Gelen kutusu erişimi</p>
-                      </div>
-                    </Link>
-                  </Button>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <Database className="mr-2 h-4 w-4 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">phpMyAdmin</p>
-                      <p className="text-xs text-muted-foreground">Veritabanı yönetimi</p>
-                    </div>
-                  </Button>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <FolderOpen className="mr-2 h-4 w-4 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">Dosya Yöneticisi</p>
-                      <p className="text-xs text-muted-foreground">Dosya işlemleri</p>
-                    </div>
-                  </Button>
-                </>
-              )}
-              {isServer && (
-                <>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <Terminal className="mr-2 h-4 w-4 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">SSH Konsol</p>
-                      <p className="text-xs text-muted-foreground">Terminal erişimi</p>
-                    </div>
-                  </Button>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <Power className="mr-2 h-4 w-4 text-orange-500" />
-                    <div className="text-left">
-                      <p className="font-medium">Yeniden Başlat</p>
-                      <p className="text-xs text-muted-foreground">Sunucuyu restart et</p>
-                    </div>
-                  </Button>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <Download className="mr-2 h-4 w-4 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">Snapshot Al</p>
-                      <p className="text-xs text-muted-foreground">Anlık görüntü</p>
-                    </div>
-                  </Button>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <Settings className="mr-2 h-4 w-4 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">OS Değiştir</p>
-                      <p className="text-xs text-muted-foreground">İşletim sistemi</p>
-                    </div>
-                  </Button>
-                </>
-              )}
-              {isSsl && (
-                <>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <Download className="mr-2 h-4 w-4 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">Sertifika İndir</p>
-                      <p className="text-xs text-muted-foreground">CRT dosyası</p>
-                    </div>
-                  </Button>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <Lock className="mr-2 h-4 w-4 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">Private Key</p>
-                      <p className="text-xs text-muted-foreground">Özel anahtar</p>
-                    </div>
-                  </Button>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <RefreshCcw className="mr-2 h-4 w-4 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">Yeniden Oluştur</p>
-                      <p className="text-xs text-muted-foreground">CSR & Key</p>
-                    </div>
-                  </Button>
-                  <Button variant="outline" className="justify-start h-auto py-3">
-                    <FileText className="mr-2 h-4 w-4 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">CA Bundle</p>
-                      <p className="text-xs text-muted-foreground">Ara sertifika</p>
-                    </div>
-                  </Button>
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Resource Usage - For Hosting & Server */}
-          {(isHosting || isServer) && (
-            <BlurFade delay={0.2} inView>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-primary" />
-                    Kaynak Kullanımı
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {service.diskUsed != null && service.diskLimit != null && service.diskLimit > 0 && (
-                    <div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="flex items-center gap-2">
-                          <HardDrive className="h-4 w-4 text-muted-foreground" />
-                          Disk Kullanımı
-                        </span>
-                        <span className="font-medium">
-                          {service.diskUsed} GB / {service.diskLimit} GB
-                        </span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all",
-                            (service.diskUsed / service.diskLimit) * 100 > 80
-                              ? "bg-red-500"
-                              : (service.diskUsed / service.diskLimit) * 100 > 60
-                              ? "bg-orange-500"
-                              : "bg-primary"
-                          )}
-                          style={{ width: `${Math.min((service.diskUsed / service.diskLimit) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {service.bandwidthUsed != null && service.bandwidthLimit != null && service.bandwidthLimit > 0 && (
-                    <div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="flex items-center gap-2">
-                          <Upload className="h-4 w-4 text-muted-foreground" />
-                          Bant Genişliği
-                        </span>
-                        <span className="font-medium">
-                          {service.bandwidthUsed} {isServer ? "TB" : "GB"} / {service.bandwidthLimit} {isServer ? "TB" : "GB"}
-                        </span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 rounded-full transition-all"
-                          style={{ width: `${Math.min((service.bandwidthUsed / service.bandwidthLimit) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {isServer && service.cpuUsage != null && (
-                    <div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="flex items-center gap-2">
-                          <Cpu className="h-4 w-4 text-muted-foreground" />
-                          CPU Kullanımı
-                        </span>
-                        <span className="font-medium">{service.cpuUsage}%</span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all",
-                            service.cpuUsage > 80 ? "bg-red-500" : service.cpuUsage > 60 ? "bg-orange-500" : "bg-green-500"
-                          )}
-                          style={{ width: `${service.cpuUsage}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {isServer && service.ramUsage != null && (
-                    <div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="flex items-center gap-2">
-                          <MemoryStick className="h-4 w-4 text-muted-foreground" />
-                          RAM Kullanımı
-                        </span>
-                        <span className="font-medium">{service.ramUsage}%</span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all",
-                            service.ramUsage > 80 ? "bg-red-500" : service.ramUsage > 60 ? "bg-orange-500" : "bg-purple-500"
-                          )}
-                          style={{ width: `${service.ramUsage}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </BlurFade>
-          )}
-
-          {/* Server Specs from resourceLimits */}
-          {isServer && Object.keys(service.product.resourceLimits).length > 0 && (
-            <BlurFade delay={0.25} inView>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Server className="h-5 w-5 text-primary" />
-                    Sunucu Özellikleri
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {service.product.resourceLimits.cpu && (
-                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                        <Cpu className="h-5 w-5 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">İşlemci</p>
-                          <p className="font-medium">{service.product.resourceLimits.cpu}</p>
-                        </div>
-                      </div>
-                    )}
-                    {service.product.resourceLimits.ram && (
-                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                        <MemoryStick className="h-5 w-5 text-purple-500" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">RAM</p>
-                          <p className="font-medium">{service.product.resourceLimits.ram}</p>
-                        </div>
-                      </div>
-                    )}
-                    {service.product.resourceLimits.storage && (
-                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                        <HardDrive className="h-5 w-5 text-blue-500" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Depolama</p>
-                          <p className="font-medium">{service.product.resourceLimits.storage}</p>
-                        </div>
-                      </div>
-                    )}
-                    {service.product.resourceLimits.bandwidth && (
-                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                        <Activity className="h-5 w-5 text-green-500" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Bant Genişliği</p>
-                          <p className="font-medium">{service.product.resourceLimits.bandwidth}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </BlurFade>
-          )}
-
-          {/* SSL Details */}
-          {isSsl && (
-            <BlurFade delay={0.2} inView>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-primary" />
-                    Sertifika Detayları
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="p-4 rounded-lg border">
-                      <p className="text-sm text-muted-foreground">Sertifika Tipi</p>
-                      <p className="font-semibold mt-1">{service.product.name}</p>
-                    </div>
-                    <div className="p-4 rounded-lg border">
-                      <p className="text-sm text-muted-foreground">Kapsam</p>
-                      <p className="font-semibold mt-1">{service.domain || "-"}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </BlurFade>
-          )}
-
-          {/* Features */}
-          {Array.isArray(service.product.features) && service.product.features.length > 0 && (
-            <BlurFade delay={0.3} inView>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Zap className="h-5 w-5 text-primary" />
-                    Özellikler
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {service.product.features.map((feature, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        {String(feature)}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </BlurFade>
-          )}
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Service Info */}
-          <BlurFade delay={0.35} inView>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Hizmet Bilgileri</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Kategori</span>
-                    <span className="font-medium">{service.product.category?.name || "-"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Başlangıç</span>
-                    <span className="font-medium">
-                      {new Date(service.createdAt).toLocaleDateString("tr-TR")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Bitiş</span>
-                    <span className="font-medium">
-                      {service.nextDueDate
-                        ? new Date(service.nextDueDate).toLocaleDateString("tr-TR")
-                        : service.expiresAt
-                        ? new Date(service.expiresAt).toLocaleDateString("tr-TR")
-                        : "-"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Fiyat</span>
-                    <span className="font-medium">
-                      {currencyFormatter.format(service.amount)} / {billingPeriodLabels[service.billingPeriod] || service.billingPeriod}
-                    </span>
-                  </div>
-                  {service.ipAddress && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">IP Adresi</span>
-                      <div className="flex items-center gap-1">
-                        <span className="font-mono text-xs">{service.ipAddress}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => navigator.clipboard.writeText(service.ipAddress!)}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {service.pendingCancellation && (
-                  <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-3 text-sm">
-                    <p className="font-medium text-orange-600 dark:text-orange-400">
-                      İptal talebi bekliyor
-                    </p>
-                    <p className="text-muted-foreground mt-1">
-                      {new Date(service.pendingCancellation.createdAt).toLocaleDateString("tr-TR")} tarihinde gönderildi
-                    </p>
-                    <p className="text-muted-foreground mt-2 line-clamp-3">
-                      {service.pendingCancellation.reason}
-                    </p>
-                  </div>
-                )}
-
-                <div className="pt-4 border-t space-y-2">
-                  <Button className="w-full" variant="outline" asChild>
-                    <Link href={`/musteri/panel/hizmetlerim/${service.id}/yenile`}>
-                      <RefreshCcw className="mr-2 h-4 w-4" />
-                      Hizmeti Yenile
-                    </Link>
-                  </Button>
-                  {service.status === "ACTIVE" && (
-                    <Button className="w-full" variant="outline" asChild>
-                      <Link href={`/musteri/panel/hizmetlerim/${service.id}/yukselt`}>
-                        <ArrowUpDown className="mr-2 h-4 w-4" />
-                        Paket Değiştir
-                      </Link>
-                    </Button>
-                  )}
-                  <Button className="w-full" variant="outline" asChild>
-                    <Link href={`/musteri/panel/hizmetlerim/${service.id}/fatura`}>
-                      <CreditCard className="mr-2 h-4 w-4" />
-                      Faturayı Görüntüle
-                    </Link>
-                  </Button>
-                  {canRequestCancellation && (
-                    <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button className="w-full" variant="outline">
-                          <Ban className="mr-2 h-4 w-4 text-red-500" />
-                          İptal Talebi Gönder
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Hizmet İptal Talebi</DialogTitle>
-                          <DialogDescription>
-                            İptal talebiniz yönetici onayından sonra işleme alınır. Lütfen iptal nedeninizi açıklayın.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-2 py-2">
-                          <Label htmlFor="cancel-reason">İptal Nedeni</Label>
-                          <Textarea
-                            id="cancel-reason"
-                            placeholder="İptal nedeninizi en az 10 karakter olacak şekilde yazın..."
-                            value={cancelReason}
-                            onChange={(e) => setCancelReason(e.target.value)}
-                            rows={4}
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            {cancelReason.trim().length}/1000 karakter (minimum 10)
-                          </p>
-                        </div>
-                        <DialogFooter>
-                          <Button
-                            variant="outline"
-                            onClick={() => setIsCancelDialogOpen(false)}
-                            disabled={isSubmittingCancel}
-                          >
-                            Vazgeç
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={() => void handleSubmitCancellation()}
-                            disabled={isSubmittingCancel || cancelReason.trim().length < 10}
-                          >
-                            {isSubmittingCancel && (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            )}
-                            {isSubmittingCancel ? "Gönderiliyor..." : "Talebi Gönder"}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
-
-          {/* Support */}
-          <BlurFade delay={0.4} inView>
-            <Card className="border-dashed">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Users className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="text-sm">
-                    <p className="font-medium mb-1">Yardıma mı ihtiyacınız var?</p>
-                    <p className="text-muted-foreground mb-3">
-                      7/24 teknik destek ekibimiz size yardımcı olmaya hazır.
-                    </p>
-                    <Button size="sm" variant="outline" asChild>
-                      <Link href="/musteri/panel/destek">
-                        Destek Talebi Aç
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </BlurFade>
-        </div>
       </div>
-    </div>
+    </>
   );
 }

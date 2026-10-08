@@ -1,26 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  ArrowLeft,
-  ArrowUp,
-  ArrowDown,
-  CreditCard,
-  Building2,
-  CheckCircle2,
-  Shield,
-  Loader2,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Building2, Check, CreditCard, Loader2 } from "lucide-react";
+import { AppBreadcrumbLabel, EmptyState, PageHeader, SectionCard, appButton } from "@/components/app";
 import type { CustomerPaymentMethod } from "@/lib/payments/methods";
 import { cn } from "@/lib/utils";
 import { submitPlanChange } from "@/lib/actions/customer/plan-change";
 import { handleCreditCardCheckoutRedirect } from "@/lib/payments/checkout-redirect";
 import { toast } from "@/lib/toast";
+import { formatTRY } from "@/lib/format/price";
+import { billingPeriodLabel } from "@/lib/format/date";
 
 interface PlanOption {
   id: string;
@@ -58,19 +48,12 @@ interface ServicePlanChangeContentProps {
   service: ServiceData;
 }
 
-const billingPeriodLabels: Record<string, string> = {
-  monthly: "Aylık",
-  quarterly: "3 Aylık",
-  semiannual: "6 Aylık",
-  yearly: "Yıllık",
-  biennial: "2 Yıllık",
-  triennial: "3 Yıllık",
-};
+const money = (n: number) => formatTRY(n, { keepDecimals: true });
 
-const currencyFormatter = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
+const paymentMethods = [
+  { id: "credit-card", name: "Kredi kartı", icon: CreditCard },
+  { id: "bank-transfer", name: "Banka havalesi", icon: Building2 },
+];
 
 export function ServicePlanChangeContent({ service }: ServicePlanChangeContentProps) {
   const router = useRouter();
@@ -85,14 +68,8 @@ export function ServicePlanChangeContent({ service }: ServicePlanChangeContentPr
 
   const selectedOption = allOptions.find((option) => option.sku === selectedSku) ?? null;
   const isDowngrade = selectedOption?.type === "downgrade";
-  const chargeAmount = selectedOption
-    ? Math.max(0, selectedOption.proratedAmount)
-    : 0;
-
-  const paymentMethods = [
-    { id: "credit-card", name: "Kredi Kartı", icon: CreditCard },
-    { id: "bank-transfer", name: "Banka Havalesi", icon: Building2 },
-  ];
+  const chargeAmount = selectedOption ? Math.max(0, selectedOption.proratedAmount) : 0;
+  const periodLabel = billingPeriodLabel(service.billingPeriod).toLocaleLowerCase("tr-TR");
 
   const handleSubmit = async () => {
     if (!selectedSku || isProcessing) return;
@@ -137,250 +114,180 @@ export function ServicePlanChangeContent({ service }: ServicePlanChangeContentPr
     router.refresh();
   };
 
-  const renderOptionCard = (
-    option: PlanOption & { type: "upgrade" | "downgrade" }
-  ) => {
+  const renderOption = (option: PlanOption & { type: "upgrade" | "downgrade" }) => {
     const isSelected = selectedSku === option.sku;
     const isUpgrade = option.type === "upgrade";
+    const Icon = isUpgrade ? ArrowUp : ArrowDown;
 
     return (
-      <div
+      <button
         key={option.sku}
+        type="button"
+        role="radio"
+        aria-checked={isSelected}
         onClick={() => setSelectedSku(option.sku)}
         className={cn(
-          "relative p-4 rounded-lg border-2 cursor-pointer transition-all",
-          isSelected
-            ? "border-primary bg-primary/5"
-            : "border-border hover:border-primary/50"
+          "flex w-full items-start gap-3 rounded-md border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          isSelected ? "border-foreground bg-muted/50 ring-1 ring-foreground" : "hover:bg-muted/40"
         )}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              {isUpgrade ? (
-                <ArrowUp className="h-4 w-4 text-green-500" />
-              ) : (
-                <ArrowDown className="h-4 w-4 text-orange-500" />
-              )}
-              <p className="font-semibold">{option.name}</p>
-            </div>
-            {option.shortDescription && (
-              <p className="text-sm text-muted-foreground mt-1">{option.shortDescription}</p>
-            )}
-            <p className="text-xs text-muted-foreground mt-2">
-              Yeni dönem fiyatı: {currencyFormatter.format(option.newPrice)} /{" "}
-              {billingPeriodLabels[service.billingPeriod] || service.billingPeriod}
-            </p>
-          </div>
-          <div className="text-right">
-            {isUpgrade ? (
-              <>
-                <p className="text-lg font-bold text-primary">
-                  {currencyFormatter.format(Math.max(0, option.proratedAmount))}
-                </p>
-                <p className="text-xs text-muted-foreground">orantılı fark</p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-medium text-orange-500">Onay gerekir</p>
-                <p className="text-xs text-muted-foreground">ücretsiz düşürme</p>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+        <span
+          aria-hidden
+          className={cn(
+            "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
+            isSelected && "border-foreground bg-foreground text-background"
+          )}
+        >
+          {isSelected ? <Check className="size-3" /> : null}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5 font-medium">
+            <Icon aria-hidden className="size-3.5 text-muted-foreground" />
+            {option.name}
+          </span>
+          {option.shortDescription ? (
+            <span className="mt-1 block text-sm text-muted-foreground">{option.shortDescription}</span>
+          ) : null}
+          <span className="mt-2 block text-xs text-muted-foreground">
+            Yeni dönem fiyatı: <span className="tabular-nums">{money(option.newPrice)}</span> / {periodLabel}
+          </span>
+        </span>
+        <span className="shrink-0 text-right">
+          {isUpgrade ? (
+            <>
+              <span className="block font-semibold tabular-nums">{money(Math.max(0, option.proratedAmount))}</span>
+              <span className="block text-xs text-muted-foreground">orantılı fark</span>
+            </>
+          ) : (
+            <>
+              <span className="block text-sm font-medium">Onay gerekir</span>
+              <span className="block text-xs text-muted-foreground">ücretsiz düşürme</span>
+            </>
+          )}
+        </span>
+      </button>
     );
   };
 
   return (
-    <div className="space-y-6">
-      <BlurFade delay={0.1} inView>
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href={`/musteri/panel/hizmetlerim/${service.id}`}>
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Paket Değiştir</h1>
-            <p className="text-muted-foreground">
-              {service.product.name} - {service.domain || service.label || "-"}
-            </p>
-          </div>
-        </div>
-      </BlurFade>
+    <>
+      <AppBreadcrumbLabel segment={service.id} label={service.product.name} />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          {service.upgrades.length > 0 && (
-            <BlurFade delay={0.15} inView>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ArrowUp className="h-5 w-5 text-green-500" />
-                    Yükseltme Seçenekleri
-                  </CardTitle>
-                  <CardDescription>
-                    Daha üst paketlere geçiş yapın; kalan süre için orantılı fark tahsil edilir
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {service.upgrades.map((option) =>
-                    renderOptionCard({ ...option, type: "upgrade" })
-                  )}
-                </CardContent>
-              </Card>
-            </BlurFade>
-          )}
+      <PageHeader
+        back={{ href: `/musteri/panel/hizmetlerim/${service.id}`, label: service.product.name }}
+        title="Paket değiştir"
+        description={`${service.product.name} · ${service.domain || service.label || "—"}`}
+      />
 
-          {service.downgrades.length > 0 && (
-            <BlurFade delay={0.2} inView>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ArrowDown className="h-5 w-5 text-orange-500" />
-                    Düşürme Seçenekleri
-                  </CardTitle>
-                  <CardDescription>
-                    Alt paketlere geçiş için yönetici onayı gerekir
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {service.downgrades.map((option) =>
-                    renderOptionCard({ ...option, type: "downgrade" })
-                  )}
-                </CardContent>
-              </Card>
-            </BlurFade>
-          )}
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
+          {service.upgrades.length > 0 ? (
+            <SectionCard
+              title="Yükseltme seçenekleri"
+              description="Üst pakete geçişte kalan süre için orantılı fark tahsil edilir."
+            >
+              <div role="radiogroup" aria-label="Yükseltme seçenekleri" className="space-y-2">
+                {service.upgrades.map((option) => renderOption({ ...option, type: "upgrade" }))}
+              </div>
+            </SectionCard>
+          ) : null}
 
-          {allOptions.length === 0 && (
-            <Card>
-              <CardContent className="p-8 text-center text-muted-foreground">
-                Bu hizmet için uygun paket değişikliği seçeneği bulunamadı.
-              </CardContent>
-            </Card>
-          )}
+          {service.downgrades.length > 0 ? (
+            <SectionCard title="Düşürme seçenekleri" description="Alt pakete geçiş yönetici onayıyla uygulanır.">
+              <div role="radiogroup" aria-label="Düşürme seçenekleri" className="space-y-2">
+                {service.downgrades.map((option) => renderOption({ ...option, type: "downgrade" }))}
+              </div>
+            </SectionCard>
+          ) : null}
 
-          {selectedOption && !isDowngrade && (
-            <BlurFade delay={0.25} inView>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CreditCard className="h-5 w-5 text-primary" />
-                    Ödeme Yöntemi
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {paymentMethods.map((method) => (
-                      <div
-                        key={method.id}
-                        onClick={() => setSelectedPayment(method.id)}
-                        className={cn(
-                          "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all",
-                          selectedPayment === method.id
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/50"
-                        )}
-                      >
-                        <method.icon
-                          className={cn(
-                            "h-5 w-5",
-                            selectedPayment === method.id
-                              ? "text-primary"
-                              : "text-muted-foreground"
-                          )}
-                        />
-                        <span className="font-medium">{method.name}</span>
-                        {selectedPayment === method.id && (
-                          <CheckCircle2 className="h-5 w-5 text-primary ml-auto" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </BlurFade>
-          )}
+          {allOptions.length === 0 ? (
+            <EmptyState
+              icon={ArrowUpDown}
+              title="Uygun paket bulunamadı"
+              description="Bu hizmet için şu anda geçiş yapılabilecek başka bir paket yok."
+            />
+          ) : null}
+
+          {selectedOption && !isDowngrade ? (
+            <SectionCard title="Ödeme yöntemi">
+              <div role="radiogroup" aria-label="Ödeme yöntemi" className="grid gap-2 sm:grid-cols-2">
+                {paymentMethods.map((method) => {
+                  const selected = selectedPayment === method.id;
+                  return (
+                    <button
+                      key={method.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setSelectedPayment(method.id)}
+                      className={cn(
+                        "flex min-h-[52px] items-center gap-3 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        selected ? "border-foreground bg-muted/50 ring-1 ring-foreground" : "hover:bg-muted/40"
+                      )}
+                    >
+                      <method.icon aria-hidden className="size-4 text-muted-foreground" />
+                      <span className="flex-1 text-sm font-medium">{method.name}</span>
+                      {selected ? <Check aria-hidden className="size-4" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </SectionCard>
+          ) : null}
         </div>
 
-        <div className="lg:col-span-1">
-          <BlurFade delay={0.3} inView>
-            <Card className="sticky top-6">
-              <CardHeader>
-                <CardTitle>Özet</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Mevcut Paket</p>
-                  <p className="font-medium">{service.product.name}</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {currencyFormatter.format(service.amount)} /{" "}
-                    {billingPeriodLabels[service.billingPeriod] || service.billingPeriod}
-                  </p>
-                </div>
-
-                {selectedOption ? (
-                  <>
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <p className="text-sm text-muted-foreground">Yeni Paket</p>
-                      <p className="font-medium">{selectedOption.name}</p>
-                    </div>
-
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Kalan gün</span>
-                      <span>{selectedOption.remainingDays} gün</span>
-                    </div>
-
-                    {!isDowngrade && (
-                      <div className="flex items-center justify-between font-semibold text-lg pt-2 border-t">
-                        <span>Ödenecek</span>
-                        <span className="text-primary">
-                          {currencyFormatter.format(chargeAmount)}
-                        </span>
-                      </div>
-                    )}
-
-                    {isDowngrade && (
-                      <p className="text-sm text-orange-600 dark:text-orange-400">
-                        Düşürme talebi yönetici onayından sonra uygulanır.
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Devam etmek için bir paket seçin.
-                  </p>
-                )}
-
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={() => void handleSubmit()}
-                  disabled={!selectedSku || isProcessing}
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      İşleniyor...
-                    </>
-                  ) : isDowngrade ? (
-                    "Düşürme Talebi Gönder"
-                  ) : (
-                    "Yükseltmeyi Tamamla"
-                  )}
-                </Button>
-
-                <p className="text-xs text-center text-muted-foreground">
-                  <Shield className="inline h-3 w-3 mr-1" />
-                  Güvenli işlem
+        <SectionCard title="Özet" className="lg:sticky lg:top-20">
+          <div className="space-y-2">
+            <div className="rounded-md border p-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Mevcut paket</p>
+              <p className="mt-1 text-sm font-medium">{service.product.name}</p>
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {money(service.amount)} / {periodLabel}
+              </p>
+            </div>
+            {selectedOption ? (
+              <div className="rounded-md border border-foreground/40 p-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Yeni paket</p>
+                <p className="mt-1 text-sm font-medium">{selectedOption.name}</p>
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {money(selectedOption.newPrice)} / {periodLabel}
                 </p>
-              </CardContent>
-            </Card>
-          </BlurFade>
-        </div>
+              </div>
+            ) : null}
+          </div>
+
+          {selectedOption ? (
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Kalan gün</dt>
+                <dd className="tabular-nums">{selectedOption.remainingDays} gün</dd>
+              </div>
+              {!isDowngrade ? (
+                <div className="flex items-baseline justify-between gap-3 border-t border-dashed pt-2">
+                  <dt className="font-medium">Ödenecek</dt>
+                  <dd className="text-xl font-semibold tabular-nums tracking-tight">{money(chargeAmount)}</dd>
+                </div>
+              ) : (
+                <p className="rounded-md border border-dashed p-3 text-[13px] text-muted-foreground">
+                  Düşürme talebi yönetici onayından sonra uygulanır.
+                </p>
+              )}
+            </dl>
+          ) : (
+            <p className="mt-4 text-sm text-muted-foreground">Devam etmek için bir paket seçin.</p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={!selectedSku || isProcessing}
+            className={appButton({ className: "mt-4 w-full md:h-10" })}
+          >
+            {isProcessing ? <Loader2 aria-hidden className="animate-spin" /> : null}
+            {isProcessing ? "İşleniyor…" : isDowngrade ? "Düşürme talebi gönder" : "Yükseltmeyi tamamla"}
+          </button>
+        </SectionCard>
       </div>
-    </div>
+    </>
   );
 }

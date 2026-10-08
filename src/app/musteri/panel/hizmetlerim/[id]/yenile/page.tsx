@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getServiceById } from "@/lib/dal/services";
 import { ServiceRenewalContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Hizmeti yenile" };
 
 interface Props {
   params: Promise<{ id: string }>;

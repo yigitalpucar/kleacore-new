@@ -1,249 +1,419 @@
 "use client";
 
 import Link from "next/link";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useMemo } from "react";
+import { AlertTriangle, ArrowRight, CalendarClock, FileText, Globe, Headphones, Package, Plus, Wallet } from "lucide-react";
 import {
-  Package,
-  Headphones,
-  ArrowRight,
-  ChevronRight,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  XCircle,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-
-// Status map for service badges
-const statusMap: Record<string, { label: string; className: string; icon: typeof CheckCircle2 }> = {
-  ACTIVE: {
-    label: "Aktif",
-    className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    icon: CheckCircle2,
-  },
-  SUSPENDED: {
-    label: "Askıda",
-    className: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
-    icon: Clock,
-  },
-  EXPIRED: {
-    label: "Süresi Doldu",
-    className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    icon: XCircle,
-  },
-  CANCELLED: {
-    label: "İptal",
-    className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-    icon: AlertCircle,
-  },
-};
+  DataTable,
+  EmptyState,
+  ListRow,
+  PageHeader,
+  SectionCard,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+  appButton,
+  enumLabel,
+  type ColumnDef,
+} from "@/components/app";
+import { formatTRY } from "@/lib/format/price";
+import { billingPeriodUnit, daysUntil, formatDate, formatDateTime } from "@/lib/format/date";
 
 interface DashboardService {
   id: string;
   label: string;
   domain: string | null;
   status: string;
+  amount: number;
+  billingPeriod: string;
   nextDueDate: string | null;
-  product: {
-    id: string;
-    name: string;
-  };
+  product: { id: string; name: string };
+}
+
+interface DashboardDomain {
+  id: string;
+  name: string;
+  status: string;
+  expiresAt: string;
+  autoRenew: boolean;
+}
+
+interface DashboardInvoice {
+  id: string;
+  invoiceNumber: string;
+  status: string;
+  totalAmount: number;
+  paidAmount: number;
+  dueDate: string;
+  issuedAt: string;
+}
+
+interface DashboardTicket {
+  id: string;
+  ticketNumber: string;
+  subject: string;
+  status: string;
+  department: string;
+  updatedAt: string;
 }
 
 interface DashboardContentProps {
+  userName: string;
   stats: {
     activeServices: number;
     totalInvoices: number;
     unpaidInvoices: number;
     openTickets: number;
+    balance: number;
   };
   services: DashboardService[];
+  domains: DashboardDomain[];
+  invoices: DashboardInvoice[];
+  tickets: DashboardTicket[];
 }
 
-export function DashboardContent({ stats, services }: DashboardContentProps) {
-  const statCards = [
-    {
-      title: "Aktif Hizmetler",
-      value: String(stats.activeServices),
-      description: "Toplam aktif hizmet sayınız",
-      href: "/musteri/panel/hizmetlerim",
-      bgColor: "bg-blue-600",
-    },
-    {
-      title: "Aktif Domainler",
-      value: "0",
-      description: "Toplam aktif domain sayınız",
-      href: "/musteri/panel/domainler",
-      bgColor: "bg-green-600",
-    },
-    {
-      title: "Destek Talepleri",
-      value: String(stats.openTickets),
-      description: "Aktif destek talebi sayınız",
-      href: "/musteri/panel/destek",
-      bgColor: "bg-orange-500",
-    },
-    {
-      title: "Faturalar",
-      value: String(stats.unpaidInvoices),
-      description: "Ödenmemiş fatura sayınız",
-      href: "/musteri/panel/faturalar",
-      bgColor: "bg-red-500",
-    },
-  ];
+const P = "/musteri/panel";
+const money = (n: number) => formatTRY(n, { keepDecimals: true });
+
+const serviceColumns: ColumnDef<DashboardService>[] = [
+  {
+    id: "product",
+    header: "Hizmet",
+    accessorFn: (s) => s.product.name,
+    enableSorting: false,
+    cell: ({ row }) => (
+      <div className="min-w-0">
+        <Link href={`${P}/hizmetlerim/${row.original.id}`} className="font-medium hover:underline">
+          {row.original.product.name}
+        </Link>
+        <p className="truncate text-xs text-muted-foreground">{row.original.domain || row.original.label || "—"}</p>
+      </div>
+    ),
+  },
+  {
+    id: "due",
+    header: "Sonraki ödeme",
+    enableSorting: false,
+    cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{formatDate(row.original.nextDueDate)}</span>,
+  },
+  {
+    id: "amount",
+    header: "Tutar",
+    enableSorting: false,
+    meta: { align: "right" },
+    cell: ({ row }) => (
+      <span className="whitespace-nowrap tabular-nums">
+        {money(row.original.amount)}
+        <span className="text-muted-foreground"> / {billingPeriodUnit(row.original.billingPeriod)}</span>
+      </span>
+    ),
+  },
+  {
+    id: "status",
+    header: "Durum",
+    enableSorting: false,
+    meta: { align: "right" },
+    cell: ({ row }) => <StatusBadge kind="service" status={row.original.status} />,
+  },
+];
+
+export function DashboardContent({ userName, stats, services, domains, invoices, tickets }: DashboardContentProps) {
+  const firstName = userName.trim().split(/\s+/)[0] ?? "";
+
+  const derived = useMemo(() => {
+    const unpaid = invoices.filter((i) => i.status === "PENDING" || i.status === "OVERDUE");
+    const overdue = unpaid.filter((i) => i.status === "OVERDUE");
+    const unpaidTotal = unpaid.reduce((sum, i) => sum + Math.max(i.totalAmount - i.paidAmount, 0), 0);
+    const activeDomains = domains.filter((d) => d.status === "ACTIVE");
+    const within = (date: string | null, days: number) => {
+      const d = daysUntil(date);
+      return d !== null && d >= 0 && d <= days;
+    };
+    const renewals = [
+      ...services
+        .filter((s) => s.status === "ACTIVE" && within(s.nextDueDate, 30))
+        .map((s) => ({
+          key: `s-${s.id}`,
+          title: s.product.name,
+          subtitle: s.domain || s.label || "Hizmet",
+          date: s.nextDueDate!,
+          href: `${P}/hizmetlerim/${s.id}/yenile`,
+          icon: Package,
+        })),
+      ...activeDomains
+        .filter((d) => within(d.expiresAt, 30))
+        .map((d) => ({
+          key: `d-${d.id}`,
+          title: d.name,
+          subtitle: d.autoRenew ? "Alan adı · otomatik yenileme açık" : "Alan adı",
+          date: d.expiresAt,
+          href: `${P}/domainler/${d.id}`,
+          icon: Globe,
+        })),
+    ].sort((a, b) => a.date.localeCompare(b.date));
+    const openTickets = tickets.filter((t) => t.status !== "CLOSED");
+    const activeServices = services.filter((s) => s.status === "ACTIVE");
+    return { unpaid, overdue, unpaidTotal, activeDomains, renewals, openTickets, activeServices };
+  }, [services, domains, invoices, tickets]);
+
+  const servicesPreview = derived.activeServices.length ? derived.activeServices : services;
 
   return (
-    <div className="space-y-6">
-      {/* Stat Cards */}
-      <BlurFade delay={0.1} inView>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {statCards.map((card) => (
-            <Link key={card.title} href={card.href}>
-              <Card
-                className={cn(
-                  "text-white border-0 hover:opacity-90 transition-opacity cursor-pointer h-full",
-                  card.bgColor
-                )}
-              >
-                <CardContent className="p-5">
-                  <p className="text-sm font-medium text-white/80">{card.title}</p>
-                  <p className="text-3xl font-bold mt-1">{card.value}</p>
-                  <p className="text-xs text-white/70 mt-2">{card.description}</p>
-                  <div className="flex items-center gap-1 mt-3 text-sm text-white/90">
-                    Görüntüle
-                    <ChevronRight className="h-4 w-4" />
-                  </div>
-                </CardContent>
-              </Card>
+    <>
+      <PageHeader
+        eyebrow="Genel bakış"
+        title={firstName ? `Hoş geldiniz, ${firstName}` : "Hoş geldiniz"}
+        description="Hizmetleriniz, faturalarınız ve destek talepleriniz tek bakışta."
+        actions={
+          <>
+            <Link href={`${P}/destek/yeni`} className={appButton({ variant: "outline" })}>
+              <Headphones aria-hidden />
+              Destek talebi
             </Link>
-          ))}
+            <Link href="/hosting/linux" className={appButton()}>
+              <Plus aria-hidden />
+              Yeni hizmet al
+            </Link>
+          </>
+        }
+      />
+
+      {derived.unpaid.length > 0 ? (
+        <div
+          role="status"
+          className="flex flex-col gap-3 rounded-lg border border-dashed border-foreground/25 bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-amber-500" />
+            <div className="text-sm">
+              <p className="font-medium">
+                {derived.unpaid.length} ödenmemiş faturanız var
+                {derived.overdue.length ? `, ${derived.overdue.length} tanesinin vadesi geçti` : ""}.
+              </p>
+              <p className="text-muted-foreground">
+                Toplam ödenecek tutar <span className="font-medium text-foreground tabular-nums">{money(derived.unpaidTotal)}</span>.
+                Vadesi geçen faturalar hizmetlerinizin askıya alınmasına neden olabilir.
+              </p>
+            </div>
+          </div>
+          <Link href={`${P}/faturalar`} className={appButton({ className: "shrink-0" })}>
+            Faturalara git
+          </Link>
         </div>
-      </BlurFade>
+      ) : null}
 
-      {/* Active Services Table */}
-      <BlurFade delay={0.15} inView>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Package className="h-5 w-5 text-primary" />
-              Aktif Hizmetler ({services.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b text-left text-sm text-muted-foreground">
-                    <th className="pb-3 font-medium">Ürün/Hizmet</th>
-                    <th className="pb-3 font-medium">Domain</th>
-                    <th className="pb-3 font-medium">Sonraki Ödeme</th>
-                    <th className="pb-3 font-medium">Durum</th>
-                    <th className="pb-3 font-medium"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {services.map((service) => {
-                    const statusInfo = statusMap[service.status] || statusMap.ACTIVE;
-                    const StatusIcon = statusInfo.icon;
-                    return (
-                      <tr key={service.id} className="border-b last:border-0">
-                        <td className="py-4">
-                          <span className="text-primary font-medium">{service.product.name}</span>
-                          {service.label && (
-                            <span className="text-muted-foreground text-sm ml-2">({service.label})</span>
-                          )}
-                        </td>
-                        <td className="py-4 text-muted-foreground">{service.domain || "-"}</td>
-                        <td className="py-4 text-muted-foreground">
-                          {service.nextDueDate
-                            ? new Date(service.nextDueDate).toLocaleDateString("tr-TR")
-                            : "-"}
-                        </td>
-                        <td className="py-4">
-                          <span className={cn(
-                            "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
-                            statusInfo.className
-                          )}>
-                            <StatusIcon className="h-3 w-3" />
-                            {statusInfo.label}
-                          </span>
-                        </td>
-                        <td className="py-4 text-right">
-                          <Button size="sm" asChild>
-                            <Link href={`/musteri/panel/hizmetlerim/${service.id}`}>
-                              Yönet
-                            </Link>
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {services.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground italic">
-                        Aktif hizmet bulunmuyor.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-end mt-4">
-              <Button variant="link" asChild>
-                <Link href="/musteri/panel/hizmetlerim">
-                  Tüm Hizmetler
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
+      <StatGrid>
+        <StatCard
+          label="Aktif hizmet"
+          value={stats.activeServices}
+          hint={
+            derived.renewals.filter((r) => r.key.startsWith("s-")).length
+              ? `${derived.renewals.filter((r) => r.key.startsWith("s-")).length} tanesi 30 gün içinde yenilenecek`
+              : `Toplam ${services.length} hizmet`
+          }
+          href={`${P}/hizmetlerim`}
+        />
+        <StatCard
+          label="Alan adı"
+          value={derived.activeDomains.length}
+          hint={
+            derived.renewals.filter((r) => r.key.startsWith("d-")).length
+              ? `${derived.renewals.filter((r) => r.key.startsWith("d-")).length} tanesinin süresi yakında doluyor`
+              : `Toplam ${domains.length} alan adı`
+          }
+          tone={derived.renewals.some((r) => r.key.startsWith("d-")) ? "warning" : undefined}
+          href={`${P}/domainler`}
+        />
+        <StatCard
+          label="Ödenmemiş fatura"
+          value={stats.unpaidInvoices}
+          hint={stats.unpaidInvoices ? `Toplam ${money(derived.unpaidTotal)}` : "Tüm faturalar ödendi"}
+          tone={derived.overdue.length ? "danger" : stats.unpaidInvoices ? "warning" : undefined}
+          href={`${P}/faturalar`}
+        />
+        <StatCard
+          label="Açık destek talebi"
+          value={stats.openTickets}
+          hint={
+            derived.openTickets.filter((t) => t.status === "ADMIN_REPLY").length
+              ? `${derived.openTickets.filter((t) => t.status === "ADMIN_REPLY").length} talebe yanıt verildi`
+              : "Yeni yanıt yok"
+          }
+          tone={derived.openTickets.some((t) => t.status === "ADMIN_REPLY") ? "info" : undefined}
+          href={`${P}/destek`}
+        />
+      </StatGrid>
 
-      {/* Support Tickets Table */}
-      <BlurFade delay={0.2} inView>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Headphones className="h-5 w-5 text-red-500" />
-              Aktif Destek Talepleri ({stats.openTickets})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b text-left text-sm text-muted-foreground">
-                    <th className="pb-3 font-medium">Talep No</th>
-                    <th className="pb-3 font-medium">Konu</th>
-                    <th className="pb-3 font-medium">Departman</th>
-                    <th className="pb-3 font-medium">Son Güncelleme</th>
-                    <th className="pb-3 font-medium">Durum</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.openTickets === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground italic">
-                        Aktif destek talebi bulunmuyor.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <SectionCard
+          className="lg:col-span-2"
+          title="Hizmetlerim"
+          description={derived.activeServices.length ? "Aktif hizmetleriniz" : undefined}
+          actions={
+            <Link href={`${P}/hizmetlerim`} className={appButton({ variant: "ghost", size: "sm" })}>
+              Tümü
+              <ArrowRight aria-hidden />
+            </Link>
+          }
+          flush
+        >
+          <DataTable
+            framed={false}
+            columns={serviceColumns}
+            data={servicesPreview.slice(0, 5)}
+            pageSize={0}
+            rowHref={(s) => `${P}/hizmetlerim/${s.id}`}
+            caption="Hizmetlerim"
+            mobileCard={(s) => (
+              <ListRow
+                title={s.product.name}
+                subtitle={s.domain || s.label || "—"}
+                trailing={<StatusBadge kind="service" status={s.status} />}
+                meta={<span>Sonraki ödeme {formatDate(s.nextDueDate)}</span>}
+              />
+            )}
+            emptyState={
+              <EmptyState
+                compact
+                className="m-4"
+                icon={Package}
+                title="Henüz hizmetiniz yok"
+                description="Hosting, sunucu veya alan adı alarak başlayabilirsiniz."
+                action={
+                  <Link href="/hosting/linux" className={appButton({ size: "sm" })}>
+                    Paketleri incele
+                  </Link>
+                }
+              />
+            }
+          />
+        </SectionCard>
+
+        <div className="space-y-6">
+          <SectionCard title="Yaklaşan yenilemeler" description="Önümüzdeki 30 gün">
+            {derived.renewals.length ? (
+              <ul className="-my-1 divide-y divide-dashed">
+                {derived.renewals.slice(0, 5).map((r) => {
+                  const days = daysUntil(r.date) ?? 0;
+                  return (
+                    <li key={r.key}>
+                      <Link
+                        href={r.href}
+                        className="-mx-2 flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <r.icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{r.title}</span>
+                          <span className="block truncate text-xs text-muted-foreground">{r.subtitle}</span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="block text-xs font-medium tabular-nums">{days === 0 ? "Bugün" : `${days} gün`}</span>
+                          <span className="block font-mono text-[10px] text-muted-foreground">{formatDate(r.date)}</span>
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <CalendarClock aria-hidden className="size-4" />
+                30 gün içinde yenilenecek hizmet yok.
+              </div>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Hesap bakiyesi">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-2xl font-semibold tabular-nums tracking-tight">{money(stats.balance)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Fatura ödemelerinde kullanılabilir.</p>
+              </div>
+              <Link href={`${P}/kredi`} className={appButton({ variant: "outline", size: "sm" })}>
+                <Wallet aria-hidden />
+                Bakiye yükle
+              </Link>
             </div>
-            <div className="flex justify-end mt-4">
-              <Button asChild>
-                <Link href="/musteri/panel/destek">
-                  Yeni Destek Talebi
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </BlurFade>
-    </div>
+          </SectionCard>
+        </div>
+      </div>
+
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <SectionCard
+          title="Son faturalar"
+          actions={
+            <Link href={`${P}/faturalar`} className={appButton({ variant: "ghost", size: "sm" })}>
+              Tümü
+              <ArrowRight aria-hidden />
+            </Link>
+          }
+          flush
+        >
+          {invoices.length ? (
+            <ul className="divide-y">
+              {invoices.slice(0, 5).map((inv) => (
+                <li key={inv.id}>
+                  <Link
+                    href={`${P}/faturalar/${inv.id}`}
+                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none md:px-5"
+                  >
+                    <FileText aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-mono text-[13px] font-medium">{inv.invoiceNumber}</span>
+                      <span className="block text-xs text-muted-foreground">Son ödeme {formatDate(inv.dueDate)}</span>
+                    </span>
+                    <span className="hidden shrink-0 text-sm font-medium tabular-nums sm:block">{money(inv.totalAmount)}</span>
+                    <StatusBadge kind="invoice" status={inv.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState compact className="m-4" icon={FileText} title="Henüz faturanız yok" />
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title="Destek talepleri"
+          actions={
+            <Link href={`${P}/destek/yeni`} className={appButton({ variant: "outline", size: "sm" })}>
+              <Plus aria-hidden />
+              Yeni talep
+            </Link>
+          }
+          flush
+        >
+          {derived.openTickets.length ? (
+            <ul className="divide-y">
+              {derived.openTickets.slice(0, 5).map((t) => (
+                <li key={t.id}>
+                  <Link
+                    href={`${P}/destek/${t.id}`}
+                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none md:px-5"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{t.subject}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        <span className="font-mono">#{t.ticketNumber}</span> · {enumLabel("ticketDepartment", t.department)} ·{" "}
+                        {formatDateTime(t.updatedAt)}
+                      </span>
+                    </span>
+                    <StatusBadge kind="ticket" status={t.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState
+              compact
+              className="m-4"
+              icon={Headphones}
+              title="Açık destek talebiniz yok"
+              description="Bir sorun yaşarsanız yeni talep oluşturabilirsiniz."
+            />
+          )}
+        </SectionCard>
+      </div>
+    </>
   );
 }

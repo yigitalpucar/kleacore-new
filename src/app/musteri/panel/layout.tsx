@@ -1,44 +1,50 @@
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { PanelProfileHeader } from "@/components/panel/panel-profile-header";
-import { PanelTabs } from "@/components/panel/panel-tabs";
+import type { Metadata } from "next";
+import { CustomerShell } from "@/components/panel/customer-shell";
 import { auth } from "@/lib/auth";
+import { getCustomerDashboardStats } from "@/lib/dal/dashboard";
+import { getNotifications } from "@/lib/dal/notifications";
 import { isResellerUser } from "@/lib/reseller";
 
-export default async function PanelLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export const metadata: Metadata = {
+  title: {
+    default: "Müşteri Paneli | KLEACORE",
+    template: "%s · Müşteri Paneli | KLEACORE",
+  },
+  robots: { index: false, follow: false },
+};
+
+export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   const user = session?.user;
-  const isReseller = user?.id ? await isResellerUser(user.id) : false;
+  const userId = user?.id;
+
+  const [isReseller, stats, notifications] = userId
+    ? await Promise.all([
+        isResellerUser(userId),
+        getCustomerDashboardStats(userId),
+        getNotifications(userId),
+      ])
+    : [false, null, []];
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-
-      {/* Profile Header */}
-      <PanelProfileHeader
-        userName={user?.name || "Kullanıcı"}
-        userEmail={user?.email || ""}
-      />
-
-      {/* Tab Navigation */}
-      <PanelTabs isReseller={isReseller} />
-
-      {/* Panel Content Area */}
-      <div className="flex-1 bg-muted/30">
-        <div className="container py-6">
-          <div className="space-y-6">
-            {children}
-          </div>
-        </div>
-      </div>
-
-      <Footer />
-    </div>
+    <CustomerShell
+      user={{ name: user?.name || "Müşteri", email: user?.email }}
+      isReseller={isReseller}
+      counts={{
+        unpaidInvoices: stats?.unpaidInvoices ?? 0,
+        openTickets: stats?.openTickets ?? 0,
+      }}
+      notifications={notifications.slice(0, 10).map((n) => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        createdAt: n.createdAt.toISOString(),
+        isRead: n.isRead,
+        link: n.link,
+        type: n.type,
+      }))}
+    >
+      {children}
+    </CustomerShell>
   );
 }

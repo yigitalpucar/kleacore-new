@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getDomainsByCustomer } from "@/lib/dal/domains";
 import { DomainlerContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Alan adlarım" };
 
 export default async function DomainlerPage() {
   const session = await auth();

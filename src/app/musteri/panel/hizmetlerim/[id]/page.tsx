@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -5,6 +6,8 @@ import { getServiceById } from "@/lib/dal/services";
 import { HizmetDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Hizmet detayı" };
 
 interface Props {
   params: Promise<{ id: string }>;

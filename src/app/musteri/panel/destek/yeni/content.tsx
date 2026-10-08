@@ -1,13 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -16,15 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  ArrowLeft,
-  Send,
-  Paperclip,
-  X,
-  FileText,
-  Image as ImageIcon,
-  File,
-} from "lucide-react";
+import { Check, FileText, Image as ImageIcon, Loader2, Paperclip, Send, X } from "lucide-react";
+import { FormField, PageHeader, SectionCard, appButton } from "@/components/app";
+import { cn } from "@/lib/utils";
 import { createTicket } from "@/lib/actions/customer/tickets";
 import { toast } from "@/lib/toast";
 
@@ -41,7 +30,7 @@ interface YeniDestekContentProps {
 
 const departments = [
   { value: "GENERAL", label: "Genel", description: "Genel sorular" },
-  { value: "TECHNICAL", label: "Teknik Destek", description: "Sunucu, hosting, domain sorunları" },
+  { value: "TECHNICAL", label: "Teknik destek", description: "Sunucu, hosting, domain sorunları" },
   { value: "SALES", label: "Satış", description: "Fiyatlandırma, yeni hizmetler" },
   { value: "BILLING", label: "Muhasebe", description: "Fatura, ödeme sorunları" },
 ];
@@ -157,249 +146,205 @@ export function YeniDestekContent({ services }: YeniDestekContentProps) {
     }
   };
 
-  const getFileIcon = (type: string) => {
-    switch (type) {
-      case "image":
-        return ImageIcon;
-      case "document":
-        return FileText;
-      default:
-        return File;
-    }
-  };
+  const getFileIcon = (type: string) => (type === "image" ? ImageIcon : FileText);
 
   const isFormValid = department && subject.trim() && message.trim();
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <BlurFade delay={0.1} inView>
-        <div className="flex items-center gap-4">
-          <Link href="/musteri/panel/destek">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Yeni Destek Talebi</h1>
-            <p className="text-muted-foreground">
-              Sorununuzu detayli aciklayin, size en kisa surede yardimci olalim.
-            </p>
-          </div>
-        </div>
-      </BlurFade>
+    <>
+      <PageHeader
+        back={{ href: "/musteri/panel/destek", label: "Destek talepleri" }}
+        title="Yeni destek talebi"
+        description="Sorununuzu ayrıntılı açıklayın; ekibimiz talebinizi en kısa sürede yanıtlasın."
+      />
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+      {error ? (
+        <div role="alert" className="rounded-lg border border-red-500/40 bg-card p-4 text-sm text-red-600 dark:text-red-400">
           {error}
         </div>
-      )}
+      ) : null}
 
       <form onSubmit={handleSubmit}>
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main Form */}
-          <div className="lg:col-span-2 space-y-6">
-            <BlurFade delay={0.15} inView>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Talep Detaylari</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Department */}
-                  <div className="space-y-2">
-                    <Label htmlFor="department">Departman *</Label>
-                    <Select value={department} onValueChange={setDepartment}>
-                      <SelectTrigger id="department">
-                        <SelectValue placeholder="Departman secin" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {departments.map((dept) => (
-                          <SelectItem key={dept.value} value={dept.value}>
-                            <div>
-                              <p className="font-medium">{dept.label}</p>
-                              <p className="text-xs text-muted-foreground">{dept.description}</p>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Related Service */}
-                  <div className="space-y-2">
-                    <Label htmlFor="service">İlgili Hizmet</Label>
-                    <Select value={service} onValueChange={setService}>
-                      <SelectTrigger id="service">
-                        <SelectValue placeholder="Hizmet secin (opsiyonel)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {services.map((svc) => (
-                          <SelectItem key={svc.id} value={svc.id}>
-                            {svc.label || svc.productName}
-                            {svc.domain ? ` - ${svc.domain}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Subject */}
-                  <div className="space-y-2">
-                    <Label htmlFor="subject">Konu *</Label>
-                    <Input
-                      id="subject"
-                      placeholder="Sorununuzu kisaca ozetleyin"
-                      value={subject}
-                      onChange={(e) => setSubject(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Message */}
-                  <div className="space-y-2">
-                    <Label htmlFor="message">Mesaj *</Label>
-                    <Textarea
-                      id="message"
-                      placeholder="Sorununuzu detayli aciklayin. Ne zaman basladi? Ne denediniz? Hata mesaji var mi?"
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      rows={8}
-                    />
-                  </div>
-
-                  {/* Attachments */}
-                  <div className="space-y-2">
-                    <Label>Dosya Ekleri</Label>
-                    <div className="border-2 border-dashed rounded-lg p-4">
-                      {attachedFiles.length > 0 && (
-                        <div className="space-y-2 mb-4">
-                          {attachedFiles.map((file) => {
-                            const FileIcon = getFileIcon(file.type);
-                            return (
-                              <div
-                                key={file.id}
-                                className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <FileIcon className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-sm">{file.name}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    ({file.size})
-                                  </span>
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6"
-                                  onClick={() => removeFile(file.id)}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full"
-                        onClick={handleFileAttach}
-                      >
-                        <Paperclip className="mr-2 h-4 w-4" />
-                        Dosya Ekle
-                      </Button>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        multiple
-                        className="hidden"
-                        onChange={handleFileChange}
-                        accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,.zip,.rar,.doc,.docx"
-                      />
-                      <p className="text-xs text-muted-foreground mt-2 text-center">
-                        PNG, JPG, PDF, ZIP - Maksimum 10MB
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </BlurFade>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <BlurFade delay={0.2} inView>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Oncelik</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {priorities.map((p) => (
-                      <label
-                        key={p.value}
-                        className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                          priority === p.value
-                            ? "border-primary bg-primary/5"
-                            : "hover:bg-muted/50"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="priority"
-                          value={p.value}
-                          checked={priority === p.value}
-                          onChange={(e) => setPriority(e.target.value)}
-                          className="mt-1"
-                        />
+        <div className="grid items-start gap-6 lg:grid-cols-3">
+          <SectionCard title="Talep ayrıntıları" className="lg:col-span-2" bodyClassName="space-y-5">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <FormField label="Departman" htmlFor="department" required>
+                <Select value={department} onValueChange={setDepartment}>
+                  <SelectTrigger id="department" className="h-11 md:h-10">
+                    <SelectValue placeholder="Departman seçin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.value} value={dept.value}>
                         <div>
-                          <p className="font-medium">{p.label}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {p.description}
-                          </p>
+                          <p className="font-medium">{dept.label}</p>
+                          <p className="text-xs text-muted-foreground">{dept.description}</p>
                         </div>
-                      </label>
+                      </SelectItem>
                     ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </BlurFade>
+                  </SelectContent>
+                </Select>
+              </FormField>
 
-            <BlurFade delay={0.25} inView>
-              <Card className="bg-muted/30">
-                <CardContent className="p-4">
-                  <h4 className="font-medium mb-2">Hızlı İpuçları</h4>
-                  <ul className="text-sm text-muted-foreground space-y-2">
-                    <li>&bull; Sorunu detayli aciklayin</li>
-                    <li>&bull; Hata mesajlarini ekleyin</li>
-                    <li>&bull; Ekran goruntusu paylasin</li>
-                    <li>&bull; Domain/IP bilgisi verin</li>
+              <FormField label="İlgili hizmet" htmlFor="service" hint="İsteğe bağlı">
+                <Select value={service} onValueChange={setService}>
+                  <SelectTrigger id="service" className="h-11 md:h-10">
+                    <SelectValue placeholder={services.length ? "Hizmet seçin" : "Hizmetiniz yok"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {services.map((svc) => (
+                      <SelectItem key={svc.id} value={svc.id}>
+                        {svc.label || svc.productName}
+                        {svc.domain ? ` · ${svc.domain}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+            </div>
+
+            <FormField label="Konu" htmlFor="subject" required>
+              <Input
+                id="subject"
+                placeholder="Sorununuzu kısaca özetleyin"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="h-11 md:h-10"
+              />
+            </FormField>
+
+            <FormField
+              label="Mesaj"
+              htmlFor="message"
+              required
+              hint="Sorun ne zaman başladı, neler denediniz, bir hata mesajı görüyor musunuz? Alan adı veya IP bilgisini eklemeyi unutmayın."
+            >
+              <Textarea
+                id="message"
+                placeholder="Sorununuzu ayrıntılı olarak açıklayın…"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={8}
+              />
+            </FormField>
+
+            <div className="space-y-1.5">
+              <p id="attachments-label" className="text-sm font-medium leading-none">
+                Dosya ekleri
+              </p>
+              <div className="rounded-md border border-dashed p-3">
+                {attachedFiles.length > 0 ? (
+                  <ul aria-labelledby="attachments-label" className="mb-3 space-y-1.5">
+                    {attachedFiles.map((file) => {
+                      const FileIcon = getFileIcon(file.type);
+                      return (
+                        <li key={file.id} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 py-1 pl-2.5 pr-1">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <FileIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                            <span className="truncate text-sm">{file.name}</span>
+                            <span className="shrink-0 text-xs text-muted-foreground">{file.size}</span>
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`${file.name} dosyasını kaldır`}
+                            className={appButton({ variant: "ghost", size: "icon-sm" })}
+                            onClick={() => removeFile(file.id)}
+                          >
+                            <X aria-hidden />
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
-                </CardContent>
-              </Card>
-            </BlurFade>
+                ) : null}
+                <button
+                  type="button"
+                  className={appButton({ variant: "outline", className: "w-full" })}
+                  onClick={handleFileAttach}
+                >
+                  <Paperclip aria-hidden />
+                  Dosya ekle
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  aria-labelledby="attachments-label"
+                  onChange={handleFileChange}
+                  accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,.zip,.rar,.doc,.docx"
+                />
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  PNG, JPG, PDF, ZIP · dosya başına en fazla 10 MB, en fazla {MAX_ATTACHMENTS} dosya
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Not: Şimdilik talebe yalnızca dosya adları eklenir; dosya içeriği yüklenmez. Gerekirse ekibimiz dosyayı
+                sizden ayrıca isteyecektir.
+              </p>
+            </div>
+          </SectionCard>
 
-            <BlurFade delay={0.3} inView>
-              <Button
-                type="submit"
-                className="w-full"
-                size="lg"
-                disabled={!isFormValid || isSubmitting}
-              >
-                {isSubmitting ? (
-                  "Gonderiliyor..."
-                ) : (
-                  <>
-                    <Send className="mr-2 h-4 w-4" />
-                    Talebi Gonder
-                  </>
-                )}
-              </Button>
-            </BlurFade>
+          <div className="space-y-6 lg:sticky lg:top-20">
+            <SectionCard title="Öncelik">
+              <div role="radiogroup" aria-label="Öncelik" className="space-y-2">
+                {priorities.map((p) => {
+                  const selected = priority === p.value;
+                  return (
+                    <label
+                      key={p.value}
+                      className={cn(
+                        "flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors focus-within:ring-2 focus-within:ring-ring",
+                        selected ? "border-foreground bg-muted/50" : "hover:bg-muted/40"
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="priority"
+                        value={p.value}
+                        checked={selected}
+                        onChange={(e) => setPriority(e.target.value)}
+                        className="sr-only"
+                      />
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
+                          selected && "border-foreground bg-foreground text-background"
+                        )}
+                      >
+                        {selected ? <Check className="size-3" /> : null}
+                      </span>
+                      <span>
+                        <span className="block text-sm font-medium">{p.label}</span>
+                        <span className="block text-xs text-muted-foreground">{p.description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </SectionCard>
+
+            <div className="rounded-lg border border-dashed p-4 text-sm">
+              <p className="font-medium">Hızlı ipuçları</p>
+              <ul className="mt-2 space-y-1.5 text-muted-foreground">
+                <li>Sorunu adım adım açıklayın.</li>
+                <li>Gördüğünüz hata mesajını aynen yazın.</li>
+                <li>İlgili alan adı veya IP adresini belirtin.</li>
+              </ul>
+            </div>
+
+            <button
+              type="submit"
+              className={appButton({ className: "w-full md:h-10" })}
+              disabled={!isFormValid || isSubmitting}
+            >
+              {isSubmitting ? <Loader2 aria-hidden className="animate-spin" /> : <Send aria-hidden />}
+              {isSubmitting ? "Gönderiliyor…" : "Talebi gönder"}
+            </button>
           </div>
         </div>
       </form>
-    </div>
+    </>
   );
 }
