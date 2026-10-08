@@ -316,7 +316,7 @@ export function InvoiceDetailContent({
                           </>
                         ) : null}
                       </p>
-                      {payment.notes ? <p className="text-xs text-muted-foreground">{payment.notes}</p> : null}
+                      {payment.notes ? <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{payment.notes}</p> : null}
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <span className="font-medium tabular-nums">{money(payment.amount)}</span>
