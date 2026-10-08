@@ -1,6 +1,7 @@
 export {
   checkDomainAvailability,
   checkDomainsAvailability,
+  getDomainInfoFromRegistrar,
   getRegistrarProvider,
   registerDomainWithRegistrar,
   renewDomainWithRegistrar,
@@ -13,7 +14,9 @@ export {
   type GriTldPricingRow,
   type NameserverInput,
   type RegisterDomainInput,
+  type RegistrarDomainInfo,
   type RenewDomainInput,
+  type RenewDomainResultData,
   type RegistrarProvider,
   type TransferInput,
 } from "./registrar/index";

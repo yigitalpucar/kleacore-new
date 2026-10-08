@@ -138,3 +138,55 @@ export async function getDomainsByCustomer(customerId: string) {
     orderBy: { createdAt: "desc" },
   });
 }
+
+/** The renewal of the domain's current period (periodStart = expiresAt), if any. */
+export async function getCurrentDomainRenewal(domainId: string, expiresAt: Date) {
+  return db.domainRenewal.findUnique({
+    where: { domainId_periodStart: { domainId, periodStart: expiresAt } },
+    select: {
+      id: true,
+      status: true,
+      invoice: { select: { id: true, invoiceNumber: true, status: true } },
+    },
+  });
+}
+
+/** Admin domain detail: domain + customer + renewals + lifecycle history. */
+export async function getAdminDomainDetail(id: string) {
+  return db.domain.findUnique({
+    where: { id },
+    include: {
+      customer: { select: { id: true, name: true, surname: true, email: true } },
+      renewals: {
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        include: { invoice: { select: { id: true, invoiceNumber: true, status: true, totalAmount: true } } },
+      },
+      notices: { orderBy: { sentAt: "desc" }, take: 20 },
+      lifecycleEvents: { orderBy: { createdAt: "desc" }, take: 100 },
+      _count: { select: { dnsRecords: true } },
+    },
+  });
+}
+
+/** Admin domain list (all domains, newest expiry first is not useful — soonest first). */
+export async function getAdminDomainList() {
+  return db.domain.findMany({
+    orderBy: { expiresAt: "asc" },
+    take: 1000,
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      expiresAt: true,
+      autoRenew: true,
+      registrar: true,
+      lastSyncedAt: true,
+      customer: { select: { id: true, name: true, surname: true, email: true } },
+      renewals: {
+        where: { status: { in: ["PENDING", "PAID", "PROCESSING", "FAILED"] } },
+        select: { status: true },
+      },
+    },
+  });
+}

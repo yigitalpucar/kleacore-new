@@ -7,6 +7,7 @@ import type {
   DomainCustomer,
   NameserverInput,
   RegisterDomainInput,
+  RegistrarDomainInfo,
   RenewDomainInput,
   TransferInput,
 } from "../types";
@@ -27,6 +28,79 @@ interface GriMutationResponse {
   status?: boolean;
   id?: string | number;
   message?: string;
+}
+
+const EXPIRY_KEYS = [
+  "expiration_date",
+  "expire_date",
+  "expiry_date",
+  "expires_at",
+  "expired_at",
+  "end_date",
+  "expirationDate",
+  "expireDate",
+] as const;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Gri wraps payloads as `{ data: { attributes } }`, `{ data }` or flat; flatten them. */
+function griPayload(raw: unknown): Record<string, unknown> {
+  const root = asRecord(raw) ?? {};
+  const data = asRecord(root.data);
+  const attributes = asRecord(data?.attributes) ?? asRecord(root.attributes);
+  return { ...root, ...(data ?? {}), ...(attributes ?? {}) };
+}
+
+function parseDate(value: unknown): Date | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  if (typeof value === "string" && !value.trim()) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) || date.getTime() <= 0 ? null : date;
+}
+
+function parseNameservers(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (typeof entry === "string") return entry;
+      const record = asRecord(entry);
+      return typeof record?.name === "string" ? record.name : typeof record?.host === "string" ? record.host : "";
+    })
+    .map((name) => name.trim().toLowerCase().replace(/\.$/, ""))
+    .filter(Boolean);
+}
+
+export function extractGriExpiry(raw: unknown): Date | null {
+  const payload = griPayload(raw);
+  for (const key of EXPIRY_KEYS) {
+    const date = parseDate(payload[key]);
+    if (date) return date;
+  }
+  return null;
+}
+
+/**
+ * Maps a Gri domain detail response to RegistrarDomainInfo. Gri's B2B API
+ * documents no stable schema for this endpoint, so field names are matched
+ * defensively; anything missing is left undefined ("unknown"), never empty.
+ */
+export function parseGriDomainInfo(domain: string, raw: unknown): RegistrarDomainInfo {
+  const payload = griPayload(raw);
+  const statusValue = payload.status ?? payload.domain_status ?? payload.state;
+  const status =
+    typeof statusValue === "string" && statusValue.trim() ? statusValue.trim() : null;
+  const nameservers = parseNameservers(payload.dns ?? payload.nameservers ?? payload.name_servers);
+
+  return {
+    domain,
+    expiresAt: extractGriExpiry(raw),
+    status,
+    nameservers: nameservers.length ? nameservers : undefined,
+  };
 }
 
 interface GriPricingAttributes {
@@ -189,11 +263,26 @@ export function createGriRegistrarProvider(config: GriRegistrarConfig): Registra
           }
         );
 
+        const ok = Boolean(response.status ?? true);
         return {
-          ok: Boolean(response.status ?? true),
+          ok,
           provider,
           reference: input.domain,
+          data: { expiresAt: extractGriExpiry(response) },
+          error: ok ? undefined : response.message || "GRI_RENEW_REJECTED",
         };
+      } catch (error) {
+        return toIntegrationError(error, provider);
+      }
+    },
+
+    getDomainInfo: async (domain) => {
+      const name = domain.trim().toLowerCase();
+      try {
+        const response = await client.request<unknown>(`/api/v2/domain/${encodeURIComponent(name)}`, {
+          method: "GET",
+        });
+        return { ok: true, provider, data: parseGriDomainInfo(name, response) };
       } catch (error) {
         return toIntegrationError(error, provider);
       }

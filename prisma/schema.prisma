@@ -745,6 +745,8 @@ model Domain {
   privacyEnabled Boolean      @default(false)
   status         DomainStatus @default(ACTIVE)
   nameservers    Json         @default("[]")
+  /// Last successful registrar status sync (daily domain-sync cron).
+  lastSyncedAt   DateTime?
 
   // WHOIS
   whoisName    String?
@@ -756,10 +758,88 @@ model Domain {
   dnsRecords    DnsRecord[]
   emailAccounts EmailAccount[]
 
+  // Lifecycle (renewal invoices, registrar renew, expiry notices, sync)
+  renewals        DomainRenewal[]
+  notices         DomainNotice[]
+  lifecycleEvents DomainLifecycleEvent[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("domains")
+}
+
+enum DomainRenewalStatus {
+  /// Renewal invoice issued, waiting for payment.
+  PENDING
+  /// Invoice paid; registrar renew queued (domain.renew).
+  PAID
+  /// A registrar renew attempt is running.
+  PROCESSING
+  COMPLETED
+  /// Registrar renew failed after all retries (admin action needed).
+  FAILED
+  /// Invoice cancelled before payment.
+  CANCELLED
+}
+
+/// One renewal period of a domain: the invoice that bills it and the
+/// registrar renew that fulfils it. `(domainId, periodStart)` is unique, so a
+/// period never gets a second renewal invoice (periodStart = the expiresAt the
+/// renewal extends from).
+model DomainRenewal {
+  id           String              @id @default(cuid())
+  domainId     String
+  domain       Domain              @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  /// Null for an admin renew without invoice.
+  invoiceId    String?             @unique
+  invoice      Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  periodStart  DateTime
+  years        Int                 @default(1)
+  status       DomainRenewalStatus @default(PENDING)
+  /// cron | customer | admin
+  source       String              @default("cron")
+  attempts     Int                 @default(0)
+  lastError    String?
+  newExpiresAt DateTime?
+  renewedAt    DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([domainId, periodStart])
+  @@index([status])
+  @@map("domain_renewals")
+}
+
+/// Sent-marker of an expiry notice: one per domain + kind + period.
+model DomainNotice {
+  id          String   @id @default(cuid())
+  domainId    String
+  domain      Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  /// expiring_30 | expiring_7 | expiring_1 | expired | grace_ending | redemption
+  kind        String
+  /// The domain's expiresAt the notice was about.
+  periodStart DateTime
+  sentAt      DateTime @default(now())
+
+  @@unique([domainId, kind, periodStart])
+  @@map("domain_notices")
+}
+
+/// Admin-visible lifecycle history of a domain (renewals, sync diffs, notices).
+model DomainLifecycleEvent {
+  id        String   @id @default(cuid())
+  domainId  String
+  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  details   Json?
+  /// User who triggered it; null for cron/queue.
+  actorId   String?
+  createdAt DateTime @default(now())
+
+  @@index([domainId, createdAt])
+  @@map("domain_lifecycle_events")
 }
 
 model DnsRecord {
@@ -857,6 +937,7 @@ model Invoice {
   items          InvoiceItem[]
   payments       Payment[]
   eInvoiceRecord EInvoiceRecord?
+  domainRenewal  DomainRenewal?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

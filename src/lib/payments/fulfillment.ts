@@ -17,6 +17,7 @@ import { applyPlanChangeFromOrder } from "@/lib/services/plan-change";
 import { unsuspendServiceIfNeeded } from "@/lib/payments/service-lifecycle";
 import { provisionCompletedOrder } from "@/lib/provisioning/internal";
 import { toNumber, type MoneyInput } from "@/lib/money";
+import { onDomainRenewalPaid } from "@/lib/domains/renew";
 
 interface FulfillInvoicePaymentInput {
   invoiceId: string;
@@ -252,6 +253,10 @@ export async function fulfillInvoicePayment(
   }
 
   await completeInvoicePayment(tx, invoice.id, now, input);
+
+  // Domain renewal invoices carry no order: route the payment to the
+  // registrar renew (domain.renew job, enqueued in this transaction).
+  await onDomainRenewalPaid(invoice.id, tx);
 
   let renewal: RenewalResult | null = null;
   let orderCompleted = false;

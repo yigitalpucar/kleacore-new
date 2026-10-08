@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   applyPlanChangeFromOrder: vi.fn(),
   provisionCompletedOrder: vi.fn(),
   unsuspendServiceIfNeeded: vi.fn(),
+  onDomainRenewalPaid: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({ db: {} }));
@@ -28,6 +29,7 @@ vi.mock("@/lib/services/plan-change", () => ({
 vi.mock("@/lib/provisioning/internal", () => ({
   provisionCompletedOrder: mocks.provisionCompletedOrder,
 }));
+vi.mock("@/lib/domains/renew", () => ({ onDomainRenewalPaid: mocks.onDomainRenewalPaid }));
 vi.mock("@/lib/payments/service-lifecycle", () => ({
   unsuspendServiceIfNeeded: mocks.unsuspendServiceIfNeeded,
   runUnsuspendJobsForInvoices: vi.fn(),
@@ -210,6 +212,9 @@ describe("fulfillInvoicePayment idempotency", () => {
     expect(mocks.applyAffiliateCommission).toHaveBeenCalledTimes(1);
     expect(mocks.dispatchEvents).toHaveBeenCalledTimes(1);
     expect(mocks.queueEInvoiceDraft).toHaveBeenCalledTimes(1);
+    // Domain renewal routing runs once, inside the paying transaction.
+    expect(mocks.onDomainRenewalPaid).toHaveBeenCalledTimes(1);
+    expect(mocks.onDomainRenewalPaid).toHaveBeenCalledWith("inv-1", tx);
     expect(state.invoices.get("inv-1")?.status).toBe("PAID");
     expect(state.payments[0]).toMatchObject({ status: "COMPLETED", transactionId: "sess-1" });
   });
