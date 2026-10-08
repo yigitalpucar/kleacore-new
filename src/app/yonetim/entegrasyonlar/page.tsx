@@ -126,6 +126,12 @@ export default async function EntegrasyonlarPage({ searchParams }: Entegrasyonla
   const paytrMerchantId = getSettingValue(settings, "paytr_merchant_id", "");
   const paytrMerchantKey = getSettingValue(settings, "paytr_merchant_key", "");
   const paytrMerchantSalt = getSettingValue(settings, "paytr_merchant_salt", "");
+  const kuveytturkEnabled = getSettingValue(settings, "kuveytturk_enabled", "false") === "true";
+  const kuveytturkMerchantId = getSettingValue(settings, "kuveytturk_merchant_id", "");
+  const kuveytturkCustomerId = getSettingValue(settings, "kuveytturk_customer_id", "");
+  const kuveytturkUsername = getSettingValue(settings, "kuveytturk_username", "");
+  const kuveytturkPassword = getSettingValue(settings, "kuveytturk_password", "");
+  const kuveytturkTestMode = getSettingValue(settings, "kuveytturk_test_mode", "true") === "true";
 
   const efaturaEnabled = getSettingValue(settings, "efatura_enabled", "false") === "true";
   const efaturaProvider = getSettingValue(settings, "efatura_provider", "disabled");
@@ -226,6 +232,14 @@ export default async function EntegrasyonlarPage({ searchParams }: Entegrasyonla
           merchantId: paytrMerchantId,
           hasMerchantKey: Boolean(paytrMerchantKey),
           hasMerchantSalt: Boolean(paytrMerchantSalt),
+        },
+        kuveytturk: {
+          enabled: kuveytturkEnabled,
+          merchantId: kuveytturkMerchantId,
+          customerId: kuveytturkCustomerId,
+          username: kuveytturkUsername,
+          hasPassword: Boolean(kuveytturkPassword),
+          testMode: kuveytturkTestMode,
         },
       }}
       efatura={{

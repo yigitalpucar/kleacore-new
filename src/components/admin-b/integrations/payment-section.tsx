@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import {
   savePaymentGatewayIntegrationSettings,
   testIyzicoConnection,
+  testKuveytTurkConnection,
   testPaytrConnection,
   testStripeConnection,
 } from "@/lib/actions/admin/integrations";
@@ -22,11 +23,84 @@ export function PaymentSection({ paymentGateway, env }: { paymentGateway: Paymen
               defaultValue={paymentGateway.provider}
               className={selectClass}
             >
-              <option value="stripe">Stripe (varsayılan)</option>
+              <option value="kuveytturk">Kuveyt Türk Sanal POS (önerilen)</option>
+              <option value="stripe">Stripe</option>
               <option value="iyzico">iyzico</option>
               <option value="paytr">PayTR</option>
             </select>
           </FormField>
+        </FormSection>
+
+        <FormSection
+          title="Kuveyt Türk Sanal POS"
+          description="3D Model (TDV2.0.0) ile tek çekim kredi kartı ödemesi. Kart formu sitemizde açılır, kart bilgisi saklanmaz."
+          footer={
+            <button type="submit" formAction={testKuveytTurkConnection} className={appButton({ variant: "outline" })}>
+              Kuveyt Türk yapılandırmasını kontrol et
+            </button>
+          }
+        >
+          <ToggleRow
+            title="Kuveyt Türk aktif"
+            description="Aktif sağlayıcı olarak seçildiğinde kart ödemeleri bu POS üzerinden alınır."
+            fieldName="kuveytturk_enabled"
+            defaultChecked={paymentGateway.kuveytturk.enabled}
+          />
+          <FieldGrid>
+            <FormField label="Üye işyeri no (MerchantId)" htmlFor="kuveytturk_merchant_id">
+              <Input
+                id="kuveytturk_merchant_id"
+                name="kuveytturk_merchant_id"
+                defaultValue={paymentGateway.kuveytturk.merchantId}
+                inputMode="numeric"
+                autoComplete="off"
+                className={inputClass}
+              />
+            </FormField>
+            <FormField label="Müşteri no (CustomerId)" htmlFor="kuveytturk_customer_id">
+              <Input
+                id="kuveytturk_customer_id"
+                name="kuveytturk_customer_id"
+                defaultValue={paymentGateway.kuveytturk.customerId}
+                inputMode="numeric"
+                autoComplete="off"
+                className={inputClass}
+              />
+            </FormField>
+          </FieldGrid>
+          <FieldGrid>
+            <FormField label="API kullanıcı adı (UserName)" htmlFor="kuveytturk_username">
+              <Input
+                id="kuveytturk_username"
+                name="kuveytturk_username"
+                defaultValue={paymentGateway.kuveytturk.username}
+                autoComplete="off"
+                className={inputClass}
+              />
+            </FormField>
+            <FormField label="API şifresi" htmlFor="kuveytturk_password">
+              <Input
+                id="kuveytturk_password"
+                name="kuveytturk_password"
+                type="password"
+                defaultValue={paymentGateway.kuveytturk.hasPassword ? "********" : ""}
+                autoComplete="new-password"
+                className={inputClass}
+              />
+            </FormField>
+          </FieldGrid>
+          <FormField label="Ortam" htmlFor="kuveytturk_test_mode">
+            <select
+              id="kuveytturk_test_mode"
+              name="kuveytturk_test_mode"
+              defaultValue={paymentGateway.kuveytturk.testMode ? "true" : "false"}
+              className={selectClass}
+            >
+              <option value="true">Test (boatest.kuveytturk.com.tr)</option>
+              <option value="false">Canlı</option>
+            </select>
+          </FormField>
+          <CodeValue label="OkUrl / FailUrl" value={`${env.appBaseUrl}/api/payments/kuveytturk/callback`} />
         </FormSection>
 
         <FormSection

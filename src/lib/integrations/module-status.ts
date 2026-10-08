@@ -97,6 +97,11 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       { key: "paytr_merchant_id" },
       { key: "paytr_merchant_key" },
       { key: "paytr_merchant_salt" },
+      { key: "kuveytturk_enabled" },
+      { key: "kuveytturk_merchant_id" },
+      { key: "kuveytturk_customer_id" },
+      { key: "kuveytturk_username" },
+      { key: "kuveytturk_password" },
       { key: "smtp_server" },
       { key: "smtp_username" },
       { key: "smtp_password" },
@@ -172,6 +177,14 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
     isEnabled(settings.paytr_enabled) &&
     Boolean(
       settings.paytr_merchant_id && settings.paytr_merchant_key && settings.paytr_merchant_salt
+    );
+  const kuveytturkConfigured =
+    isEnabled(settings.kuveytturk_enabled) &&
+    Boolean(
+      settings.kuveytturk_merchant_id &&
+        settings.kuveytturk_customer_id &&
+        settings.kuveytturk_username &&
+        settings.kuveytturk_password
     );
   const cronConfigured = Boolean(env("CRON_SECRET"));
 
@@ -282,6 +295,26 @@ export async function getIntegrationModulesOverview(): Promise<IntegrationOvervi
       message:
         paymentGatewayProvider === "iyzico" && !iyzicoConfigured
           ? "iyzico API bilgileri eksik"
+          : undefined,
+      configSource: "settings",
+      tab: "payment",
+    },
+    {
+      id: "kuveytturk",
+      name: "Kuveyt Türk Sanal POS",
+      description: "3D Secure kredi kartı ödemesi (birincil sanal POS)",
+      category: "payment",
+      status:
+        paymentGatewayProvider === "kuveytturk"
+          ? kuveytturkConfigured
+            ? "active"
+            : "error"
+          : "inactive",
+      configured: kuveytturkConfigured,
+      provider: "kuveytturk",
+      message:
+        paymentGatewayProvider === "kuveytturk" && !kuveytturkConfigured
+          ? "Kuveyt Türk üye işyeri bilgileri eksik"
           : undefined,
       configSource: "settings",
       tab: "payment",

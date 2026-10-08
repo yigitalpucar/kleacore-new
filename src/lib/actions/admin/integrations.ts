@@ -12,6 +12,7 @@ import { getSslProvider } from "@/lib/integrations/ssl";
 import { getSmsProvider } from "@/lib/integrations/sms";
 import { getPaymentGatewayConfig } from "@/lib/integrations/payment-gateways";
 import { createIyzicoPaymentGatewayProvider } from "@/lib/integrations/payment-gateways/providers/iyzico";
+import { createKuveytTurkPaymentGatewayProvider } from "@/lib/integrations/payment-gateways/providers/kuveytturk";
 import { getStripe } from "@/lib/stripe";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
@@ -417,6 +418,7 @@ export async function savePaymentGatewayIntegrationSettings(formData: FormData) 
   const currentIyzicoSecret = getSettingValue(settings, "iyzico_secret_key", "");
   const currentPaytrKey = getSettingValue(settings, "paytr_merchant_key", "");
   const currentPaytrSalt = getSettingValue(settings, "paytr_merchant_salt", "");
+  const currentKuveytturkPassword = getSettingValue(settings, "kuveytturk_password", "");
 
   const result = await updateSettings([
     {
@@ -439,6 +441,18 @@ export async function savePaymentGatewayIntegrationSettings(formData: FormData) 
     {
       key: "paytr_merchant_salt",
       value: getSecretFormValue(formData, "paytr_merchant_salt", currentPaytrSalt),
+    },
+    { key: "kuveytturk_enabled", value: getFormValue(formData, "kuveytturk_enabled", "false") },
+    { key: "kuveytturk_merchant_id", value: getFormValue(formData, "kuveytturk_merchant_id") },
+    { key: "kuveytturk_customer_id", value: getFormValue(formData, "kuveytturk_customer_id") },
+    { key: "kuveytturk_username", value: getFormValue(formData, "kuveytturk_username") },
+    {
+      key: "kuveytturk_password",
+      value: getSecretFormValue(formData, "kuveytturk_password", currentKuveytturkPassword),
+    },
+    {
+      key: "kuveytturk_test_mode",
+      value: getFormValue(formData, "kuveytturk_test_mode", "true"),
     },
   ]);
 
@@ -500,6 +514,22 @@ export async function testIyzicoConnection() {
       : result.ok
         ? "iyzico bağlantısı başarılı."
         : result.error ?? "iyzico bağlantısı başarısız."
+  );
+}
+
+export async function testKuveytTurkConnection() {
+  await requireAdmin();
+
+  const config = await getPaymentGatewayConfig();
+  const result = await createKuveytTurkPaymentGatewayProvider(config).healthCheck();
+
+  revalidatePath(INTEGRATIONS_PATH);
+  redirectWithFeedback(
+    "payment",
+    result.ok,
+    result.ok
+      ? `Kuveyt Türk üye işyeri bilgileri tanımlı (${config.kuveytturk.testMode ? "test" : "canlı"} ortam).`
+      : "Kuveyt Türk yapılandırılmamış: üye işyeri no, müşteri no, API kullanıcı adı ve şifresi gerekli."
   );
 }
 

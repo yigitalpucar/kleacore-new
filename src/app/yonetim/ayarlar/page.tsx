@@ -222,7 +222,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const twoFactor = getSettingValue(settings, "two_factor", "true") === "true";
   const paymentProvider = getSettingValue(settings, "payment_gateway_provider", "stripe");
   const paymentProviderLabel =
-    ({ stripe: "Stripe", iyzico: "iyzico", paytr: "PayTR" } as Record<string, string>)[paymentProvider] ?? paymentProvider;
+    ({ stripe: "Stripe", iyzico: "iyzico", paytr: "PayTR", kuveytturk: "Kuveyt Türk" } as Record<string, string>)[paymentProvider] ?? paymentProvider;
   const emailTemplates = [
     { name: "Hoş geldiniz", description: "Yeni kayıt sonrası gönderilir" },
     { name: "Fatura bildirimi", description: "Yeni fatura oluşturulduğunda" },
