@@ -24,8 +24,12 @@ fi
 
 url="http://127.0.0.1:${PORT:-3000}/api/cron/${job}"
 echo "cron-run: POST /api/cron/${job}"
-wget -q -O - -T 900 \
+body="$(wget -q -O - -T 900 \
   --header "Authorization: Bearer ${CRON_SECRET}" \
   --post-data "" \
-  "$url"
-echo
+  "$url")"
+echo "$body"
+# Another run of the same job holds its advisory lock: not an error (exit 0).
+case "$body" in
+  *'"status":"locked"'*) echo "cron-run: ${job} skipped, another run is still in progress" ;;
+esac

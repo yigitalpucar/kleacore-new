@@ -6,9 +6,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  return runCronJob(request, checkSslExpiry);
+  return runCronJob(request, "ssl-expiry", checkSslExpiry, { oncePerDay: true });
 }
 
 export async function POST(request: NextRequest) {
-  return runCronJob(request, checkSslExpiry);
+  return runCronJob(request, "ssl-expiry", checkSslExpiry, { oncePerDay: true });
 }
