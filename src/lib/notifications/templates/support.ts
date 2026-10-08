@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { dateField, dateTime, panelPaths, templateSchema } from "./helpers";
+import { ticketMessageIdTag, ticketSubjectTag, REPLY_MARKER } from "@/lib/support/thread";
 import { defineTemplate } from "./types";
 
 const PREVIEW_LIMIT = 600;
@@ -19,11 +20,21 @@ const ticketShape = {
 
 const ticketSample = {
   ticketId: "ornek",
-  ticketNumber: "T-2026-000042",
+  ticketNumber: "T-482913",
   ticketSubject: "E-posta hesabı oluşturma",
   senderName: "KLEACORE Destek",
   messagePreview: "Merhaba, e-posta hesabınızı oluşturduk. Webmail üzerinden giriş yapabilirsiniz.",
 };
+
+/**
+ * Optional support mailbox address: when set, the customer may answer by
+ * e-mail (Reply-To + reply-above marker); the IMAP poller threads it back.
+ */
+const replyShape = { replyTo: z.string().email().optional() };
+
+function ticketMailHeaders(data: { ticketNumber: string; replyTo?: string }) {
+  return { messageIdTag: ticketMessageIdTag(data.ticketNumber), ...(data.replyTo ? { replyTo: data.replyTo } : {}) };
+}
 
 export const supportTicketReplied = defineTemplate({
   key: "support.ticket-replied",
@@ -31,16 +42,98 @@ export const supportTicketReplied = defineTemplate({
   group: "Destek",
   audience: "customer",
   inbox: "SUPPORT",
-  schema: templateSchema(ticketShape),
-  sample: { recipientName: "Ayşe Yılmaz", ...ticketSample },
+  schema: templateSchema({ ...ticketShape, ...replyShape }),
+  sample: { recipientName: "Ayşe Yılmaz", ...ticketSample, replyTo: "destek@kleacore.com" },
   render: (data, { baseUrl }) => ({
-    subject: `Destek talebiniz yanıtlandı: ${data.ticketNumber}`,
+    subject: `${ticketSubjectTag(data.ticketNumber)} Destek talebiniz yanıtlandı: ${data.ticketSubject}`,
+    ...(data.replyTo ? { replyMarker: REPLY_MARKER } : {}),
     heading: "Destek talebiniz yanıtlandı",
     greetingName: data.recipientName,
     intro: [`"${data.ticketSubject}" konulu ${data.ticketNumber} numaralı talebinize ${data.senderName} yanıt verdi:`, preview(data.messagePreview)],
     action: { label: "Talebi görüntüle ve yanıtla", url: `${baseUrl}${panelPaths.ticket(data.ticketId)}` },
-    note: "Bu e-postayı yanıtlamak yerine lütfen panel üzerinden yanıt verin.",
+    note: data.replyTo
+      ? "Bu e-postayı yanıtlayarak da talebinize mesaj ekleyebilirsiniz; yanıtınızı işaretli satırın üstüne yazın."
+      : "Bu e-postayı yanıtlamak yerine lütfen panel üzerinden yanıt verin.",
   }),
+  mailHeaders: ticketMailHeaders,
+});
+
+/** Acknowledgement of a ticket opened by e-mail (gives the customer the threaded subject). */
+export const supportTicketReceived = defineTemplate({
+  key: "support.ticket-received",
+  label: "Destek talebi alındı (e-posta ile)",
+  group: "Destek",
+  audience: "customer",
+  inbox: "SUPPORT",
+  schema: templateSchema({
+    ticketId: z.string(),
+    ticketNumber: z.string(),
+    ticketSubject: z.string(),
+    hasAccount: z.boolean(),
+    ...replyShape,
+  }),
+  sample: {
+    recipientName: "Ayşe Yılmaz",
+    ticketId: "ornek",
+    ticketNumber: "T-482913",
+    ticketSubject: "Web sitem açılmıyor",
+    hasAccount: true,
+    replyTo: "destek@kleacore.com",
+  },
+  render: (data, { baseUrl }) => ({
+    subject: `${ticketSubjectTag(data.ticketNumber)} Destek talebiniz alındı: ${data.ticketSubject}`,
+    ...(data.replyTo ? { replyMarker: REPLY_MARKER } : {}),
+    heading: "Destek talebiniz alındı",
+    greetingName: data.recipientName,
+    intro: [
+      `E-postanız ${data.ticketNumber} numaralı destek talebi olarak kaydedildi. Ekibimiz en kısa sürede yanıt verecek.`,
+      "Bu talebe ek bilgi göndermek için bu e-postayı yanıtlayabilirsiniz; konu satırındaki talep numarasını silmeyin.",
+    ],
+    ...(data.hasAccount
+      ? { action: { label: "Talebi panelde görüntüle", url: `${baseUrl}${panelPaths.ticket(data.ticketId)}` } }
+      : {}),
+  }),
+  mailHeaders: ticketMailHeaders,
+});
+
+/** Sent one day before an unanswered ticket (waiting on the customer) is closed automatically. */
+export const supportTicketAutoCloseWarning = defineTemplate({
+  key: "support.ticket-auto-close-warning",
+  label: "Destek talebi otomatik kapanacak",
+  group: "Destek",
+  audience: "customer",
+  inbox: "SUPPORT",
+  schema: templateSchema({
+    ticketId: z.string(),
+    ticketNumber: z.string(),
+    ticketSubject: z.string(),
+    closesAt: dateField,
+    hasAccount: z.boolean(),
+    ...replyShape,
+  }),
+  sample: {
+    recipientName: "Ayşe Yılmaz",
+    ticketId: "ornek",
+    ticketNumber: "T-482913",
+    ticketSubject: "Web sitem açılmıyor",
+    closesAt: "2026-10-12T09:00:00.000Z",
+    hasAccount: true,
+    replyTo: "destek@kleacore.com",
+  },
+  render: (data, { baseUrl }) => ({
+    subject: `${ticketSubjectTag(data.ticketNumber)} Destek talebiniz yakında kapatılacak: ${data.ticketSubject}`,
+    ...(data.replyTo ? { replyMarker: REPLY_MARKER } : {}),
+    heading: "Destek talebiniz yakında kapatılacak",
+    greetingName: data.recipientName,
+    intro: [
+      `${data.ticketNumber} numaralı talebinizde sizden yanıt bekliyoruz. Yanıt gelmezse talep ${dateTime(data.closesAt)} sonrasında otomatik olarak kapatılacak.`,
+      "Sorununuz devam ediyorsa talebe yanıt vermeniz yeterli; kapandıktan sonra da talebi yeniden açabilirsiniz.",
+    ],
+    ...(data.hasAccount
+      ? { action: { label: "Talebi görüntüle ve yanıtla", url: `${baseUrl}${panelPaths.ticket(data.ticketId)}` } }
+      : {}),
+  }),
+  mailHeaders: ticketMailHeaders,
 });
 
 /** Staff copy: a customer replied to a ticket (sent to the support address). */

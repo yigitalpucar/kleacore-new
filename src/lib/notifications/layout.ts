@@ -113,6 +113,7 @@ export function renderEmailLayout(
 </head>
 <body style="margin:0;padding:0;background:${COLORS.page};font-family:${FONT};color:${COLORS.text}">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(preheader)}</div>
+${content.replyMarker ? `<p style="margin:0;padding:12px 16px 0;font-size:12px;color:${COLORS.muted};text-align:center">${escapeHtml(content.replyMarker)}</p>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.page}">
 <tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
@@ -143,7 +144,7 @@ ${footer}
 }
 
 function renderText(content: EmailContent, brand: NotificationBrand, greeting: string | null) {
-  const lines: string[] = [content.heading, ""];
+  const lines: string[] = content.replyMarker ? [content.replyMarker, "", content.heading, ""] : [content.heading, ""];
   if (greeting) lines.push(greeting, "");
   for (const line of content.intro) lines.push(line);
   if (content.details?.length) {

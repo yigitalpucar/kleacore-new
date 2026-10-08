@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { db } from "@/lib/db";
 import { resolveSettingValue } from "@/lib/secrets/crypto";
@@ -16,6 +17,9 @@ interface MailInput {
   text: string;
   html?: string;
   attachments?: MailAttachment[];
+  replyTo?: string;
+  /** Message-ID becomes `<tag.random@sender-domain>` (ticket mail threading). */
+  messageIdTag?: string;
 }
 
 export interface MailResult {
@@ -94,9 +98,17 @@ export async function sendTransactionalEmail(input: MailInput): Promise<MailResu
     text: input.text,
     html: input.html,
     attachments: input.attachments,
+    ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+    ...(input.messageIdTag ? { messageId: threadMessageId(input.messageIdTag, from) } : {}),
   });
 
   return { sent: true, messageId: info.messageId };
+}
+
+function threadMessageId(tag: string, from: string) {
+  const domain = from.match(/@([a-z0-9.-]+)/i)?.[1] ?? "kleacore.com";
+  const safeTag = tag.replace(/[^A-Za-z0-9.-]/g, "");
+  return `<${safeTag}.${randomBytes(8).toString("hex")}@${domain}>`;
 }
 
 export function plainTextToHtml(text: string) {

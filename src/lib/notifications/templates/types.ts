@@ -42,6 +42,19 @@ export interface EmailContent {
   outro?: string[];
   /** Small muted note under the body (security hints etc.). */
   note?: string;
+  /**
+   * First line of the mail (e.g. "##- Yanıtınızı bu satırın üstüne yazın -##"):
+   * inbound mail processing cuts a reply at this line (src/lib/support/inbound).
+   */
+  replyMarker?: string;
+}
+
+/** Extra SMTP headers for mails customers may answer by e-mail (ticket threads). */
+export interface MailHeaders {
+  /** Reply-To address (the polled support mailbox). */
+  replyTo?: string;
+  /** Embedded in the Message-ID (`<tag.random@domain>`) so a reply's In-Reply-To finds the thread. */
+  messageIdTag?: string;
 }
 
 export type TemplateAudience = "customer" | "admin";
@@ -66,6 +79,8 @@ export interface NotificationTemplate<K extends string = string, S extends z.Zod
   render(data: z.output<S>, ctx: RenderContext): EmailContent;
   /** Optional short SMS text (sent only when an SMS provider is configured). */
   sms?(data: z.output<S>, ctx: RenderContext): string;
+  /** Optional mail headers (Reply-To, threading Message-ID). */
+  mailHeaders?(data: z.output<S>): MailHeaders;
 }
 
 export function defineTemplate<const K extends string, S extends z.ZodTypeAny>(

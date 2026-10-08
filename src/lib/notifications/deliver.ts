@@ -6,6 +6,7 @@ import { LOGO_CID } from "./layout";
 import { LOGO_PNG_BASE64 } from "./logo";
 import { loadRenderContext, renderNotification, revealSensitive } from "./render";
 import { getTemplate } from "./templates";
+import type { MailHeaders } from "./templates/types";
 
 const log = createLogger("notifications.deliver");
 
@@ -19,13 +20,19 @@ type Outcome =
   | { status: "SENT"; providerMessageId?: string }
   | { status: "SKIPPED"; reason: string };
 
-async function deliverEmail(to: string, rendered: ReturnType<typeof renderNotification>): Promise<Outcome> {
+async function deliverEmail(
+  to: string,
+  rendered: ReturnType<typeof renderNotification>,
+  headers: MailHeaders = {}
+): Promise<Outcome> {
   const result = await sendTransactionalEmail({
     to,
     subject: rendered.subject,
     text: rendered.text,
     html: rendered.html,
     attachments: [logoAttachment()],
+    ...(headers.replyTo ? { replyTo: headers.replyTo } : {}),
+    ...(headers.messageIdTag ? { messageIdTag: headers.messageIdTag } : {}),
   });
   if (result.sent) return { status: "SENT", providerMessageId: result.messageId };
   return { status: "SKIPPED", reason: result.reason ?? "EMAIL_NOT_SENT" };
@@ -57,7 +64,9 @@ export async function deliverNotificationLog(notificationLogId: string, context:
     const data = revealSensitive(template, (row.data ?? {}) as Record<string, unknown>);
     const rendered = renderNotification(row.template, data, await loadRenderContext());
 
-    const outcome = row.channel === "SMS" ? await deliverSms(row.to, rendered.sms) : await deliverEmail(row.to, rendered);
+    const headers = template.mailHeaders?.(template.schema.parse(data));
+    const outcome =
+      row.channel === "SMS" ? await deliverSms(row.to, rendered.sms) : await deliverEmail(row.to, rendered, headers);
 
     await db.notificationLog.update({
       where: { id: row.id },

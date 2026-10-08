@@ -24,6 +24,8 @@ import {
   adminDomainRenewalFailed,
   adminManualProvisioning,
   adminTicketCustomerReply,
+  supportTicketAutoCloseWarning,
+  supportTicketReceived,
   supportTicketReplied,
 } from "./support";
 import type { NotificationTemplate } from "./types";
@@ -52,6 +54,8 @@ const definitions = [
   domainRenewed,
   domainExpiryNotice,
   supportTicketReplied,
+  supportTicketReceived,
+  supportTicketAutoCloseWarning,
   adminTicketCustomerReply,
   adminManualProvisioning,
   adminDomainRenewalFailed,
