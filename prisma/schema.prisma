@@ -83,6 +83,11 @@ enum ProvisioningJobStatus {
   FAILED
 }
 
+enum ProvisioningJobKind {
+  PROVISION
+  UNSUSPEND
+}
+
 enum PlanChangeType {
   UPGRADE
   DOWNGRADE
@@ -704,6 +709,7 @@ model ProvisioningJob {
   order       Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
   serviceId   String?
   service     Service?              @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  kind        ProvisioningJobKind   @default(PROVISION)
   status      ProvisioningJobStatus @default(PENDING)
   attempts    Int                   @default(0)
   maxAttempts Int                   @default(5)
@@ -897,6 +903,10 @@ model Payment {
   paidAt        DateTime?
   createdAt     DateTime      @default(now())
 
+  // One row per invoice per gateway session: a callback for any session
+  // matches exactly one payment of each invoice it covers.
+  @@unique([invoiceId, transactionId])
+  @@index([transactionId])
   @@map("payments")
 }
 
@@ -1298,6 +1308,16 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@map("settings")
+}
+
+/// Gap-tolerant document counters (invoice/order numbers), one row per
+/// prefix + year, advanced with an atomic UPDATE ... RETURNING.
+model NumberSequence {
+  key       String   @id
+  value     Int
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("number_sequences")
 }
 
 // =====================

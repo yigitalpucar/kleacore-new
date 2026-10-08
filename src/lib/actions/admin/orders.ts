@@ -27,7 +27,7 @@ export async function approveOrder(id: string) {
       return { success: false, error: "Sadece bekleyen siparişler onaylanabilir" };
     }
 
-    const invoiceNumber = generateInvoiceNumber();
+    const invoiceNumber = await generateInvoiceNumber();
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 7);
 

@@ -18,6 +18,7 @@ import {
   getResellerDiscountForCustomer,
 } from "@/lib/reseller";
 import { getAppBaseUrl, getStripe } from "@/lib/stripe";
+import { persistGatewayCheckout } from "@/lib/integrations/payment-gateways/persist";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod, Prisma } from "@prisma/client";
 import {
@@ -457,7 +458,7 @@ export async function checkoutCart(input: CheckoutInput) {
 
         const order = await tx.order.create({
           data: {
-            orderNumber: generateOrderNumber(),
+            orderNumber: await generateOrderNumber(),
             customerId,
             productId: item.productId,
             domain:
@@ -503,7 +504,7 @@ export async function checkoutCart(input: CheckoutInput) {
 
         const invoice = await tx.invoice.create({
           data: {
-            invoiceNumber: generateInvoiceNumber(),
+            invoiceNumber: await generateInvoiceNumber(),
             customerId,
             orderId: order.id,
             subtotal: payableLineTotal,
@@ -581,9 +582,11 @@ export async function checkoutCart(input: CheckoutInput) {
               orderId: order.id,
               action: "PROVISIONED",
               description:
-                provisioned.type === "domain"
-                  ? "Domain kaydı aktifleştirildi"
-                  : "Hizmet aktifleştirildi",
+                "partialFailure" in provisioned && provisioned.partialFailure
+                  ? "Sağlama başarısız oldu, yeniden denenecek"
+                  : provisioned.type === "domain"
+                    ? "Domain kaydı registrara iletildi"
+                    : "Hizmet aktifleştirildi",
               performedBy: customerId,
               metadata: provisioned,
             },
@@ -658,14 +661,13 @@ export async function checkoutCart(input: CheckoutInput) {
         ],
       });
 
-      await db.payment.updateMany({
-        where: {
-          invoiceId: { in: result.invoiceIds },
-          status: "PENDING",
-        },
-        data: {
-          transactionId: session.id,
-        },
+      await persistGatewayCheckout({
+        invoiceIds: result.invoiceIds,
+        gatewaySessionId: session.id,
+        provider: "stripe",
+        customerId,
+        context: "cart",
+        notesPrefix: "Stripe Checkout ödemesi",
       });
 
       return {

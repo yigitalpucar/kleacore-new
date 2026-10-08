@@ -6,7 +6,7 @@ import {
   generateOrderNumber,
   generateTicketNumber,
 } from "@/lib/utils/number-generators";
-import { transferDomainWithRegistrar } from "@/lib/integrations/registrar";
+import { encryptSecret } from "@/lib/secrets/crypto";
 import { calculateDomainTransferPricing, matchDomainTld } from "@/lib/domains/transfer-pricing";
 import { getTaxRate } from "@/lib/billing/tax";
 
@@ -161,7 +161,7 @@ export async function processAutomatedDomainTransfer(
 
     const order = await tx.order.create({
       data: {
-        orderNumber: generateOrderNumber(),
+        orderNumber: await generateOrderNumber(),
         customerId: customer.id,
         productId: domainProduct.product.id,
         domain: normalizedDomain,
@@ -188,6 +188,9 @@ export async function processAutomatedDomainTransfer(
               tld: domainProduct.tld,
               renewPrice: domainProduct.renewPrice,
               contactEmail: input.email,
+              // Needed by fulfilment to start the transfer after payment;
+              // stored encrypted like other secrets.
+              eppCode: encryptSecret(input.eppCode),
             },
           },
         },
@@ -196,7 +199,7 @@ export async function processAutomatedDomainTransfer(
 
     const invoice = await tx.invoice.create({
       data: {
-        invoiceNumber: generateInvoiceNumber(),
+        invoiceNumber: await generateInvoiceNumber(),
         customerId: customer.id,
         orderId: order.id,
         subtotal: pricing.subtotal,
@@ -252,102 +255,23 @@ export async function processAutomatedDomainTransfer(
     };
   });
 
-  const registrarResult = await transferDomainWithRegistrar({
-    domain: normalizedDomain,
-    eppCode: input.eppCode,
-    customer: {
-      ...customer,
-      country: customer.country ?? "TR",
-    },
-  });
-
-  if (registrarResult.ok && !registrarResult.skipped) {
-    const expiresAt = new Date();
-    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-
-    await db.domain.create({
-      data: {
-        customerId: customer.id,
-        name: normalizedDomain,
-        registrar: registrarResult.provider ?? "Gri",
-        registeredAt: new Date(),
-        expiresAt,
-        status: "TRANSFERRING",
-        nameservers: ["ns1.kleacore.com", "ns2.kleacore.com"],
-      },
-    });
-
-    await db.orderActivity.create({
-      data: {
-        orderId: transactionResult.orderId,
-        action: "DOMAIN_TRANSFER_INITIATED",
-        description: "Registrar üzerinden domain transferi başlatıldı",
-        performedBy: customer.id,
-        metadata: {
-          domain: normalizedDomain,
-          registrar: registrarResult.provider,
-          reference: registrarResult.reference,
-        },
-      },
-    });
-
-    revalidatePath("/musteri/panel/domainler");
-    revalidatePath("/musteri/panel/faturalar");
-    revalidatePath("/yonetim/siparisler");
-    revalidatePath("/yonetim/faturalar");
-
-    return {
-      success: true as const,
-      message:
-        `Domain transferiniz başlatıldı. Sipariş numaranız: ${transactionResult.orderNumber}. Ödeme sonrası süreç tamamlanacaktır.`,
-      data: {
-        automated: true,
-        orderNumber: transactionResult.orderNumber,
-        invoiceId: transactionResult.invoiceId,
-        invoiceNumber: transactionResult.invoiceNumber,
-        totalAmount: transactionResult.totalAmount,
-      },
-    };
-  }
-
-  const ticketNumber = await createTransferSupportTicket(
-    customer,
-    normalizedDomain,
-    input.eppCode,
-    input.email,
-    registrarResult.error ?? "Registrar transfer isteği başarısız oldu"
-  );
-
-  await db.orderActivity.create({
-    data: {
-      orderId: transactionResult.orderId,
-      action: "DOMAIN_TRANSFER_REGISTRAR_FAILED",
-      description: "Registrar transferi başarısız oldu, destek talebi oluşturuldu",
-      performedBy: customer.id,
-      metadata: {
-        domain: normalizedDomain,
-        ticketNumber,
-        registrarError: registrarResult.error,
-      },
-    },
-  });
-
+  // The registrar transfer is started by fulfilment once this invoice is paid
+  // (provisionCompletedOrder -> submitDomainToRegistrar), like every other
+  // provisioning step, so an unpaid order never costs a transfer fee.
   revalidatePath("/musteri/panel/faturalar");
   revalidatePath("/yonetim/siparisler");
   revalidatePath("/yonetim/faturalar");
 
   return {
     success: true as const,
-    partialSuccess: true as const,
     message:
-      `Transfer siparişiniz (${transactionResult.orderNumber}) oluşturuldu ancak otomatik transfer başlatılamadı. Destek ekibimiz süreci manuel olarak takip edecek.`,
+      `Transfer siparişiniz (${transactionResult.orderNumber}) oluşturuldu. Fatura ödendiğinde transfer otomatik olarak başlatılacaktır.`,
     data: {
       automated: true,
       orderNumber: transactionResult.orderNumber,
       invoiceId: transactionResult.invoiceId,
       invoiceNumber: transactionResult.invoiceNumber,
       totalAmount: transactionResult.totalAmount,
-      ticketNumber,
     },
   };
 }

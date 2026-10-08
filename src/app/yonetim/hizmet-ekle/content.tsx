@@ -37,6 +37,7 @@ import {
   appButton,
 } from "@/components/app";
 import { formatTRY } from "@/lib/format/price";
+import { productPeriodPricing } from "@/lib/billing/period-price";
 import { cn } from "@/lib/utils";
 import { createService } from "@/lib/actions/admin/services";
 import { toast } from "@/lib/toast";
@@ -115,14 +116,21 @@ function addMonthsToDate(date: string, months: number) {
   return target;
 }
 
-function getPriceForPeriod(product: ProductOption, period: BillingPeriod) {
-  const exact = product.pricingTiers.find((tier) => tier.period === period);
-  if (exact) return exact.price;
+function getPeriodPricing(product: ProductOption, period: BillingPeriod) {
+  return productPeriodPricing(
+    {
+      basePrice: product.basePrice,
+      categorySlug: product.category.slug,
+      pricingTiers: product.pricingTiers,
+    },
+    period
+  );
+}
 
-  const defaultTier = product.pricingTiers.find((tier) => tier.isDefault);
-  if (defaultTier) return defaultTier.price;
-
-  return product.basePrice;
+function discountPercentOf(pricing: { base: number; discount: number }) {
+  return pricing.base > 0 && pricing.discount > 0
+    ? Math.round((pricing.discount / pricing.base) * 100)
+    : 0;
 }
 
 export function AddServiceContent({
@@ -190,7 +198,6 @@ export function AddServiceContent({
       serverName: selectedServer
         ? `${selectedServer.name} (${selectedServer.ip})`
         : undefined,
-      amount: pricing.total,
       nextDueDate: addMonthsToDate(formData.startDate, selectedPeriod.months).toISOString(),
       expiresAt: addMonthsToDate(formData.startDate, selectedPeriod.months).toISOString(),
     });
@@ -218,19 +225,11 @@ export function AddServiceContent({
   const selectedServer = servers.find((server) => server.id === formData.serverId);
 
   // Fiyat hesaplama
-  const calculatePrice = () => {
-    if (!selectedPackage || !selectedPeriod) return { base: 0, discount: 0, total: 0 };
-
-    const monthlyPrice = getPriceForPeriod(selectedPackage, "monthly");
-    const periodPrice = getPriceForPeriod(selectedPackage, selectedPeriod.id);
-    const base = monthlyPrice * selectedPeriod.months;
-    const discount = Math.max(0, base - periodPrice);
-    const total = periodPrice;
-
-    return { base, discount, total };
-  };
-
-  const pricing = calculatePrice();
+  // Same rule the server action uses to store Service.amount (period total).
+  const pricing =
+    selectedPackage && selectedPeriod
+      ? getPeriodPricing(selectedPackage, selectedPeriod.id)
+      : { base: 0, discount: 0, total: 0 };
 
   // Müşteri filtreleme
   const filteredCustomers = customers.filter(
@@ -358,13 +357,10 @@ export function AddServiceContent({
                   {selectedPackages.map((pkg) => {
                     const selected = formData.packageId === pkg.id;
                     const currentPeriod = selectedPeriod?.id ?? "monthly";
-                    const packagePrice = getPriceForPeriod(pkg, currentPeriod);
-                    const monthlyPrice = getPriceForPeriod(pkg, "monthly");
+                    const packagePricing = getPeriodPricing(pkg, currentPeriod);
+                    const packagePrice = packagePricing.total;
                     const featureList = pkg.features.length > 0 ? pkg.features : [pkg.shortDescription];
-                    const discountPercent =
-                      selectedPeriod && selectedPeriod.months > 1 && packagePrice < monthlyPrice * selectedPeriod.months
-                        ? Math.round((1 - packagePrice / (monthlyPrice * selectedPeriod.months)) * 100)
-                        : 0;
+                    const discountPercent = discountPercentOf(packagePricing);
                     return (
                       <button
                         key={pkg.id}
@@ -451,12 +447,9 @@ export function AddServiceContent({
           <SectionCard title="Faturalama dönemi">
             <div role="radiogroup" aria-label="Faturalama dönemi" className="grid grid-cols-2 gap-2 lg:grid-cols-1">
               {billingPeriods.map((period) => {
-                const basePrice = selectedPackage ? getPriceForPeriod(selectedPackage, "monthly") * period.months : 0;
-                const periodPrice = selectedPackage ? getPriceForPeriod(selectedPackage, period.id) : 0;
-                const discountPercent =
-                  selectedPackage && basePrice > 0 && periodPrice < basePrice
-                    ? Math.round((1 - periodPrice / basePrice) * 100)
-                    : 0;
+                const discountPercent = selectedPackage
+                  ? discountPercentOf(getPeriodPricing(selectedPackage, period.id))
+                  : 0;
                 const selected = formData.billingPeriod === period.id;
                 return (
                   <button

@@ -12,6 +12,13 @@ function readFormValue(formData: FormData, key: string) {
   return typeof value === "string" ? value : "";
 }
 
+/** PayTR posts amounts in kuruş as integer strings ("3456" = 34,56 TL). */
+function parseKurus(value: string) {
+  if (!value) return undefined;
+  if (!/^\d+$/.test(value)) return Number.NaN;
+  return Number(value) / 100;
+}
+
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const merchantOid = readFormValue(formData, "merchant_oid");
@@ -43,7 +50,13 @@ export async function POST(request: NextRequest) {
   }
 
   if (status === "success") {
-    await fulfillGatewayReference(merchantOid, "PayTR iframe ödemesi");
+    // PayTR always expects "OK"; a mismatch is logged and left unpaid for
+    // admin review instead of making PayTR retry the notification.
+    await fulfillGatewayReference(merchantOid, "PayTR iframe ödemesi", {
+      paidAmount: parseKurus(totalAmount),
+      requestedAmount: parseKurus(readFormValue(formData, "payment_amount")),
+      currency: readFormValue(formData, "currency") || undefined,
+    });
   }
 
   return new NextResponse("OK");

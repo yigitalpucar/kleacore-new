@@ -12,6 +12,7 @@ import {
   sendInvoicePaymentReminderEmail,
 } from "@/lib/notifications/email";
 import { fulfillInvoicePayment, notifyInvoicePaymentReceived } from "@/lib/payments/fulfillment";
+import { runUnsuspendJobsForInvoices } from "@/lib/payments/service-lifecycle";
 import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import { createLogger } from "@/lib/logger";
@@ -54,7 +55,7 @@ export async function createInvoice(data: InvoiceInput) {
       return { success: false, error: "Müşteri bulunamadı" };
     }
 
-    const invoiceNumber = generateInvoiceNumber();
+    const invoiceNumber = await generateInvoiceNumber();
 
     const invoice = await db.invoice.create({
       data: {
@@ -144,6 +145,8 @@ async function fulfillInvoiceAsAdmin(
       notes,
     },
   });
+
+  await runUnsuspendJobsForInvoices([id]);
 
   dispatchNotification(() => notifyInvoicePaymentReceived(id));
 

@@ -6,6 +6,13 @@ import { fulfillGatewayReference } from "@/lib/payments/gateway-fulfillment";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** iyzico reports amounts as decimal numbers/strings in TRY ("120.5"). */
+function parseGatewayAmount(value: number | string | undefined) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
 function readToken(request: NextRequest, formData: FormData) {
   const queryToken = request.nextUrl.searchParams.get("token");
   if (queryToken) return queryToken;
@@ -33,7 +40,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.redirect(new URL("/musteri/panel/faturalar?payment=cancelled", request.url));
   }
 
-  await fulfillGatewayReference(token, "iyzico Checkout ödemesi");
+  const fulfillment = await fulfillGatewayReference(token, "iyzico Checkout ödemesi", {
+    paidAmount: parseGatewayAmount(result.paidPrice),
+    requestedAmount: parseGatewayAmount(result.price),
+    currency: result.currency,
+  });
+
+  if (fulfillment.amountMismatch) {
+    return NextResponse.redirect(new URL("/musteri/panel/faturalar?payment=review", request.url));
+  }
 
   return NextResponse.redirect(new URL("/musteri/panel/faturalar?payment=success", request.url));
 }

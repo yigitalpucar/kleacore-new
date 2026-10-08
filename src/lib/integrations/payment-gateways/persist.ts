@@ -12,6 +12,18 @@ interface PersistGatewayCheckoutInput {
   notesPrefix: string;
 }
 
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Binds a gateway session to exactly one PENDING card payment per invoice.
+ *
+ * A customer can open several checkouts for the same invoice (closed tab,
+ * retried, switched gateway). Each session gets its own Payment row, so the
+ * callback of whichever session is actually paid still finds its payment —
+ * earlier sessions are never overwritten.
+ */
 export async function persistGatewayCheckout(input: PersistGatewayCheckoutInput) {
   const meta: GatewayMeta = {
     invoiceIds: input.invoiceIds,
@@ -22,14 +34,56 @@ export async function persistGatewayCheckout(input: PersistGatewayCheckoutInput)
 
   const notes = buildGatewayNotes(input.notesPrefix, meta);
 
-  await db.payment.updateMany({
-    where: {
-      invoiceId: { in: input.invoiceIds },
-      status: "PENDING",
-    },
-    data: {
-      transactionId: input.gatewaySessionId,
-      notes,
-    },
+  await db.$transaction(async (tx) => {
+    for (const invoiceId of input.invoiceIds) {
+      const unassigned = await tx.payment.findFirst({
+        where: {
+          invoiceId,
+          status: "PENDING",
+          method: "CREDIT_CARD",
+          transactionId: null,
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+
+      if (unassigned) {
+        await tx.payment.update({
+          where: { id: unassigned.id },
+          data: { transactionId: input.gatewaySessionId, notes },
+        });
+        continue;
+      }
+
+      const invoice = await tx.invoice.findUnique({
+        where: { id: invoiceId },
+        select: { customerId: true, totalAmount: true, paidAmount: true },
+      });
+
+      if (!invoice) {
+        throw new Error("INVOICE_NOT_FOUND");
+      }
+
+      await tx.payment.upsert({
+        where: {
+          invoiceId_transactionId: {
+            invoiceId,
+            transactionId: input.gatewaySessionId,
+          },
+        },
+        update: { notes },
+        create: {
+          invoiceId,
+          customerId: invoice.customerId,
+          amount: roundMoney(
+            Math.max(0, Number(invoice.totalAmount) - Number(invoice.paidAmount))
+          ),
+          method: "CREDIT_CARD",
+          status: "PENDING",
+          transactionId: input.gatewaySessionId,
+          notes,
+        },
+      });
+    }
   });
 }

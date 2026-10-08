@@ -1,7 +1,9 @@
-import type { BillingPeriod, Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { createRemoteService } from "@/lib/integrations/provisioning-provider";
-import { registerDomainWithRegistrar } from "@/lib/integrations/registrar";
+import {
+  createRemoteService,
+  unsuspendRemoteService,
+} from "@/lib/integrations/provisioning-provider";
 import {
   mapProductSubTypeToSslType,
   provisionSslCertificate,
@@ -15,15 +17,6 @@ const RETRY_DELAYS_MS = [
   4 * 60 * 60 * 1000,
   24 * 60 * 60 * 1000,
 ] as const;
-
-const billingMonths: Record<BillingPeriod, number> = {
-  monthly: 1,
-  quarterly: 3,
-  semiannual: 6,
-  yearly: 12,
-  biennial: 24,
-  triennial: 36,
-};
 
 type DbClient = Prisma.TransactionClient | typeof db;
 
@@ -110,25 +103,15 @@ async function retryDomainProvisioning(
     return { ok: false as const, error: "DOMAIN_REQUIRED" };
   }
 
-  const registrarResult = await registerDomainWithRegistrar({
-    domain: configuredDomain,
-    years: Math.max(1, Math.round((billingMonths[order.billingPeriod] ?? 12) / 12)),
-    nameservers: ["ns1.kleacore.com", "ns2.kleacore.com"],
-    customer: order.customer,
-  });
+  const { submitDomainToRegistrar } = await import("@/lib/provisioning/internal");
+  const registrarResult = await submitDomainToRegistrar(db, order, configuredDomain);
 
   if (registrarResult.ok && !registrarResult.skipped) {
-    await db.domain.update({
-      where: { name: configuredDomain },
-      data: { registrar: registrarResult.provider ?? "Gri" },
-    });
     return { ok: true as const };
   }
 
-  if (registrarResult.skipped) {
-    return { ok: true as const };
-  }
-
+  // A disabled registrar (skipped) registered nothing: keep the job open so
+  // the domain stays visible as an admin task instead of silently completing.
   return { ok: false as const, error: registrarResult.error ?? "REGISTRAR_PROVISIONING_FAILED" };
 }
 
@@ -242,6 +225,38 @@ async function retryServiceProvisioning(
   return { ok: false as const, error: provisioning.error ?? "REMOTE_PROVISIONING_FAILED" };
 }
 
+async function retryServiceUnsuspend(serviceId: string | null) {
+  if (!serviceId) {
+    return { ok: false as const, error: "SERVICE_NOT_FOUND" };
+  }
+
+  const service = await db.service.findUnique({
+    where: { id: serviceId },
+    include: {
+      product: { include: { category: true } },
+      customer: true,
+    },
+  });
+
+  if (!service) {
+    return { ok: false as const, error: "SERVICE_NOT_FOUND" };
+  }
+
+  // Suspended again (or cancelled) since the payment: unsuspending the remote
+  // account now would contradict the current state.
+  if (service.status !== "ACTIVE") {
+    return { ok: true as const };
+  }
+
+  const result = await unsuspendRemoteService(service);
+
+  if (result.ok || result.skipped) {
+    return { ok: true as const };
+  }
+
+  return { ok: false as const, error: result.error ?? "REMOTE_UNSUSPEND_FAILED" };
+}
+
 type ProvisioningJobWithOrder = Prisma.ProvisioningJobGetPayload<{
   include: {
     order: {
@@ -256,6 +271,10 @@ type ProvisioningJobWithOrder = Prisma.ProvisioningJobGetPayload<{
 
 async function retryProvisioningJob(job: ProvisioningJobWithOrder) {
   const { order } = job;
+
+  if (job.kind === "UNSUSPEND") {
+    return retryServiceUnsuspend(job.serviceId ?? order.serviceId);
+  }
 
   if (order.product.category.slug === "domain") {
     return retryDomainProvisioning(order);
@@ -477,4 +496,62 @@ export async function processProvisioningRetries(limit = 10): Promise<CronJobRes
     skipped,
     ids: processedIds,
   };
+}
+
+/**
+ * Executes the UNSUSPEND jobs written by these invoice payments right after
+ * their transaction committed. Each job is claimed with a conditional
+ * PENDING -> PROCESSING update so the retry cron never runs it concurrently;
+ * a failure is kept on the job (backoff) for the cron to retry.
+ */
+export async function runPendingUnsuspendJobs(invoiceIds: string[]) {
+  const jobs = await db.provisioningJob.findMany({
+    where: {
+      kind: "UNSUSPEND",
+      status: "PENDING",
+      order: { invoice: { id: { in: invoiceIds } } },
+    },
+    include: {
+      order: {
+        include: {
+          product: { include: { category: true } },
+          customer: true,
+          items: true,
+        },
+      },
+    },
+  });
+
+  const results: Array<{ jobId: string; ok: boolean; error?: string }> = [];
+
+  for (const job of jobs) {
+    const claimed = await db.provisioningJob.updateMany({
+      where: { id: job.id, status: "PENDING" },
+      data: { status: "PROCESSING" },
+    });
+
+    if (claimed.count === 0) {
+      continue;
+    }
+
+    let result: { ok: boolean; error?: string };
+    try {
+      result = await retryProvisioningJob(job);
+    } catch (error) {
+      result = {
+        ok: false,
+        error: error instanceof Error ? error.message : "REMOTE_UNSUSPEND_FAILED",
+      };
+    }
+
+    const finalized = await finalizeProvisioningRetryAttempt(job, result);
+    if (!finalized.ok) {
+      console.error(
+        `[Provisioning] Hizmet ${job.serviceId} uzak sunucuda askıdan çıkarılamadı, tekrar denenecek: ${finalized.error}`
+      );
+    }
+    results.push({ jobId: job.id, ok: finalized.ok, error: finalized.ok ? undefined : finalized.error });
+  }
+
+  return results;
 }

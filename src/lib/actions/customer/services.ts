@@ -117,7 +117,7 @@ export async function renewService(input: RenewServiceInput) {
     const transactionResult = await db.$transaction(async (tx) => {
       const order = await tx.order.create({
         data: {
-          orderNumber: generateOrderNumber(),
+          orderNumber: await generateOrderNumber(),
           customerId: session.user.id,
           productId: service.productId,
           serviceId: service.id,
@@ -155,7 +155,7 @@ export async function renewService(input: RenewServiceInput) {
 
       const invoice = await tx.invoice.create({
         data: {
-          invoiceNumber: generateInvoiceNumber(),
+          invoiceNumber: await generateInvoiceNumber(),
           customerId: session.user.id,
           orderId: order.id,
           subtotal: preTaxTotal,
