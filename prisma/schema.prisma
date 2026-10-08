@@ -194,6 +194,22 @@ enum TicketDepartment {
   SALES
 }
 
+/// Where a ticket was opened.
+enum TicketSource {
+  WEB
+  EMAIL
+  API
+}
+
+enum InboundEmailStatus {
+  /// Turned into a new ticket or a reply.
+  PROCESSED
+  /// Deliberately skipped (auto-reply, bounce, our own mail, rate limit).
+  IGNORED
+  /// Processing threw; the message stays unread in the mailbox for the next poll.
+  FAILED
+}
+
 enum DnsRecordType {
   A
   AAAA
@@ -1277,8 +1293,13 @@ model StripeWebhookEvent {
 model SupportTicket {
   id               String           @id @default(cuid())
   ticketNumber     String           @unique
-  customerId       String
-  customer         User             @relation(fields: [customerId], references: [id])
+  /// Null for a ticket opened by e-mail from an address that matches no
+  /// verified customer (guestEmail is set; the admin list flags it).
+  customerId       String?
+  customer         User?            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  guestEmail       String?
+  guestName        String?
+  source           TicketSource     @default(WEB)
   subject          String
   department       TicketDepartment @default(GENERAL)
   priority         TicketPriority   @default(MEDIUM)
@@ -1286,28 +1307,129 @@ model SupportTicket {
   assignedTo       String?
   relatedServiceId String?
 
+  /// Set while the ball is in the customer's court (ADMIN_REPLY / WAITING);
+  /// the auto-close cron counts from here. Cleared on a customer reply.
+  waitingSince      DateTime?
+  /// Auto-close warning sent for the current waitingSince period.
+  autoCloseWarnedAt DateTime?
+
   // Relations
-  messages TicketMessage[]
+  messages      TicketMessage[]
+  attachments   TicketAttachment[]
+  inboundEmails InboundEmail[]
 
   closedAt  DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  @@index([status, waitingSince])
+  @@index([guestEmail])
   @@map("support_tickets")
 }
 
 model TicketMessage {
-  id          String        @id @default(cuid())
+  id          String             @id @default(cuid())
   ticketId    String
-  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticket      SupportTicket      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   senderId    String
   senderName  String
-  senderRole  UserRole      @default(CUSTOMER)
+  senderRole  UserRole           @default(CUSTOMER)
   message     String
-  attachments Json          @default("[]")
-  createdAt   DateTime      @default(now())
+  /// Legacy: file NAMES only ({ name, size, type }[]); contents were never
+  /// uploaded. New files live in TicketAttachment.
+  attachments Json               @default("[]")
+  source      TicketSource       @default(WEB)
+  files       TicketAttachment[]
+  createdAt   DateTime           @default(now())
 
   @@map("ticket_messages")
+}
+
+/// A file uploaded to a ticket message. The bytes live in the storage driver
+/// (src/lib/storage) under a random key; fileName is display-only.
+model TicketAttachment {
+  id            String        @id @default(cuid())
+  ticketId      String
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  messageId     String
+  message       TicketMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileName      String
+  /// MIME type detected from the file's magic bytes (not the client's claim).
+  mimeType      String
+  sizeBytes     Int
+  storageDriver String
+  storageKey    String        @unique
+  sha256        String
+  createdAt     DateTime      @default(now())
+
+  @@index([ticketId])
+  @@index([messageId])
+  @@map("ticket_attachments")
+}
+
+/// Staff reply templates; body may use {{customer.name}} style variables.
+model CannedReply {
+  id          String            @id @default(cuid())
+  title       String
+  body        String
+  department  TicketDepartment?
+  usageCount  Int               @default(0)
+  createdById String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("canned_replies")
+}
+
+/// IMAP mailbox polled into tickets (src/lib/support/inbound).
+model SupportMailbox {
+  id              String            @id @default(cuid())
+  name            String
+  /// The address customers write to (loop protection: mail from it is ignored).
+  address         String
+  host            String
+  port            Int               @default(993)
+  secure          Boolean           @default(true)
+  username        String
+  /// Encrypted (enc:v1:… via src/lib/secrets/crypto).
+  password        String
+  folder          String            @default("INBOX")
+  /// Processed mail is moved here when set; otherwise it is only flagged \Seen.
+  processedFolder String?
+  department      TicketDepartment?
+  isActive        Boolean           @default(true)
+  lastPolledAt    DateTime?
+  lastError       String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  inboundEmails InboundEmail[]
+
+  @@map("support_mailboxes")
+}
+
+/// One received e-mail (dedupe by Message-ID) and what became of it.
+model InboundEmail {
+  id              String             @id @default(cuid())
+  messageId       String             @unique
+  mailboxId       String?
+  mailbox         SupportMailbox?    @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
+  fromAddress     String
+  fromName        String?
+  subject         String
+  status          InboundEmailStatus
+  reason          String?
+  /// Processing attempts (FAILED is retried on the next polls up to a limit).
+  attempts        Int                @default(1)
+  ticketId        String?
+  ticket          SupportTicket?     @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  ticketMessageId String?
+  receivedAt      DateTime
+  createdAt       DateTime           @default(now())
+
+  @@index([fromAddress, createdAt])
+  @@index([mailboxId, createdAt])
+  @@map("inbound_emails")
 }
 
 // =====================

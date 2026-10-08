@@ -105,7 +105,7 @@ ${content.note ? `<p style="margin:20px 0 0;padding-top:16px;border-top:1px dash
  * (DB) templates, so both look the same.
  */
 export function renderEmailShell(
-  input: { subject: string; preheader: string; bodyHtml: string },
+  input: { subject: string; preheader: string; bodyHtml: string; replyMarker?: string },
   brand: NotificationBrand,
   options: { logoSrc: string }
 ) {
@@ -124,6 +124,7 @@ export function renderEmailShell(
 </head>
 <body style="margin:0;padding:0;background:${COLORS.page};font-family:${FONT};color:${COLORS.text}">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(input.preheader)}</div>
+${input.replyMarker ? `<p style="margin:0;padding:12px 16px 0;font-size:12px;color:${COLORS.muted};text-align:center">${escapeHtml(input.replyMarker)}</p>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.page}">
 <tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
@@ -156,7 +157,11 @@ export function renderEmailLayout(
 ): RenderedEmail {
   const greeting = greetingLine(content);
   const preheader = content.preheader ?? content.intro[0] ?? content.heading;
-  const html = renderEmailShell({ subject: content.subject, preheader, bodyHtml: renderEmailBody(content) }, brand, options);
+  const html = renderEmailShell(
+    { subject: content.subject, preheader, bodyHtml: renderEmailBody(content), replyMarker: content.replyMarker },
+    brand,
+    options
+  );
   const text = renderText(content, brand, greeting);
   return { subject: content.subject, preheader, html, text };
 }
@@ -182,6 +187,12 @@ export function renderTextBody(content: EmailContent, greeting: string | null = 
 }
 
 function renderText(content: EmailContent, brand: NotificationBrand, greeting: string | null) {
-  const lines = [...renderTextBody(content, greeting), "", "—", ...footerLines(brand)];
+  const lines = [
+    ...(content.replyMarker ? [content.replyMarker, ""] : []),
+    ...renderTextBody(content, greeting),
+    "",
+    "—",
+    ...footerLines(brand),
+  ];
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }

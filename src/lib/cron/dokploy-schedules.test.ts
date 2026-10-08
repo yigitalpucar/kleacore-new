@@ -37,6 +37,8 @@ describe("Dokploy cron schedules", () => {
       "retry-provisioning",
       "run-backups",
       "ssl-expiry",
+      "support-autoclose",
+      "support-mail",
       "suspend-services",
       "usage-sync",
     ]);

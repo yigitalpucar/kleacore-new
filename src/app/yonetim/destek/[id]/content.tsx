@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Lock, Paperclip, RotateCcw, Send, UserCheck } from "lucide-react";
+import { CheckCircle, Clock, Link2, Lock, Mail, RotateCcw, Send, UserCheck } from "lucide-react";
 import {
   AppBreadcrumbLabel,
   DetailList,
@@ -11,13 +11,22 @@ import {
   SectionCard,
   StatusBadge,
   ToneDot,
-  UnavailableAction,
   appButton,
   enumLabel,
   getStatusMeta,
 } from "@/components/app";
 import { Textarea } from "@/components/ui/textarea";
-import { assignTicket, closeTicket, reopenTicket, replyToTicket } from "@/lib/actions/admin/tickets";
+import {
+  assignTicket,
+  closeTicket,
+  linkTicketToCustomer,
+  reopenTicket,
+  setTicketStatus,
+} from "@/lib/actions/admin/tickets";
+import { markCannedReplyUsed } from "@/lib/actions/admin/support-canned";
+import { renderCannedReply } from "@/lib/support/canned";
+import type { ThreadMessage } from "@/lib/support/serialize";
+import { AttachmentPicker, MessageAttachments, SelectedFiles, postTicketForm } from "@/components/support/attachments";
 import { formatDateTime } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -29,35 +38,90 @@ export interface AdminTicketDetail {
   department: string;
   priority: string;
   status: string;
+  source: string;
   assignedTo: string | null;
   relatedServiceId: string | null;
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
-  customer: { id: string; name: string; surname: string; email: string; phone: string | null };
-  messages: { id: string; senderName: string; senderRole: string; message: string; createdAt: string }[];
+  waitingSince: string | null;
+  customer: { id: string; name: string; surname: string; email: string; phone: string | null } | null;
+  /** E-mail ticket from an address without a verified customer account. */
+  guest: { email: string; name: string | null } | null;
+  messages: ThreadMessage[];
+}
+
+interface CannedReplyOption {
+  id: string;
+  title: string;
+  body: string;
 }
 
 interface TicketDetailContentProps {
   ticket: AdminTicketDetail;
   adminUsers: { id: string; name: string; surname: string; email: string }[];
+  cannedReplies: CannedReplyOption[];
+  staffName: string;
 }
 
-const quickReplies = [
-  "Talebiniz için teşekkürler. İnceliyorum.",
-  "DNS propagasyonu 24-48 saat sürebilir.",
-  "Lütfen tarayıcı önbelleğinizi temizleyin.",
-  "Sorununuz çözüldü mü?",
-];
+const REPLY_STATUS_OPTIONS = [
+  { value: "ADMIN_REPLY", label: "Yanıtlandı" },
+  { value: "WAITING", label: "Müşteri yanıtı bekleniyor" },
+  { value: "CLOSED", label: "Yanıtla ve kapat" },
+] as const;
 
-export function TicketDetailContent({ ticket, adminUsers }: TicketDetailContentProps) {
+const selectClass =
+  "h-11 w-full rounded-md border bg-background px-2.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9";
+
+export function TicketDetailContent({ ticket, adminUsers, cannedReplies, staffName }: TicketDetailContentProps) {
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
+  const [replyStatus, setReplyStatus] = useState<string>("ADMIN_REPLY");
+  const [files, setFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [assignedAdminId, setAssignedAdminId] = useState(ticket.assignedTo ?? "");
+  const [linkEmail, setLinkEmail] = useState(ticket.guest?.email ?? "");
 
-  const customerFullName = `${ticket.customer.name} ${ticket.customer.surname}`.trim();
+  const customerFullName = ticket.customer
+    ? `${ticket.customer.name} ${ticket.customer.surname}`.trim()
+    : ticket.guest?.name || ticket.guest?.email || "Bilinmeyen gönderen";
+  const customerEmail = ticket.customer?.email ?? ticket.guest?.email ?? "";
+
+  const insertCannedReply = (id: string) => {
+    const reply = cannedReplies.find((r) => r.id === id);
+    if (!reply) return;
+    const text = renderCannedReply(reply.body, {
+      "customer.name": customerFullName,
+      "customer.firstName": ticket.customer?.name ?? ticket.guest?.name?.split(" ")[0] ?? "",
+      "customer.email": customerEmail,
+      "ticket.number": ticket.ticketNumber,
+      "ticket.subject": ticket.subject,
+      "staff.name": staffName,
+    });
+    setReplyText((current) => (current.trim() ? `${current.trimEnd()}\n\n${text}` : text));
+    void markCannedReplyUsed(id);
+  };
+
+  const handleWaiting = async () => {
+    const result = await setTicketStatus(ticket.id, "WAITING");
+    if (!result.success) {
+      toast.error(result.error ?? "Durum değiştirilemedi");
+      return;
+    }
+    toast.success("Talep müşteri yanıtı bekleniyor olarak işaretlendi");
+    router.refresh();
+  };
+
+  const handleLink = async () => {
+    const result = await linkTicketToCustomer(ticket.id, linkEmail);
+    if (!result.success) {
+      toast.error(result.error ?? "Talep bağlanamadı");
+      return;
+    }
+    toast.success("Talep müşteri hesabına bağlandı");
+    router.refresh();
+  };
   const isClosed = ticket.status === "CLOSED";
   const priority = getStatusMeta("ticketPriority", ticket.priority);
   const assignee = adminUsers.find((a) => a.id === ticket.assignedTo);
@@ -65,9 +129,15 @@ export function TicketDetailContent({ ticket, adminUsers }: TicketDetailContentP
   const handleReply = async () => {
     if (!replyText.trim() || isSubmitting) return;
     setIsSubmitting(true);
-    const result = await replyToTicket(ticket.id, replyText);
+    const form = new FormData();
+    form.set("message", replyText);
+    form.set("status", replyStatus);
+    for (const file of files) form.append("files", file);
+    const result = await postTicketForm(`/api/admin/support/tickets/${ticket.id}/messages`, form);
     if (result.success) {
       setReplyText("");
+      setFiles([]);
+      setReplyStatus("ADMIN_REPLY");
       toast.success("Yanıt gönderildi");
       router.refresh();
     } else {
@@ -143,10 +213,18 @@ export function TicketDetailContent({ ticket, adminUsers }: TicketDetailContentP
               Yeniden aç
             </button>
           ) : (
-            <button type="button" className={appButton({ variant: "outline" })} onClick={() => void handleClose()}>
-              <CheckCircle aria-hidden />
-              Talebi kapat
-            </button>
+            <>
+              {ticket.status !== "WAITING" ? (
+                <button type="button" className={appButton({ variant: "outline" })} onClick={() => void handleWaiting()}>
+                  <Clock aria-hidden />
+                  Müşteri yanıtı bekleniyor
+                </button>
+              ) : null}
+              <button type="button" className={appButton({ variant: "outline" })} onClick={() => void handleClose()}>
+                <CheckCircle aria-hidden />
+                Talebi kapat
+              </button>
+            </>
           )
         }
       />
@@ -180,12 +258,19 @@ export function TicketDetailContent({ ticket, adminUsers }: TicketDetailContentP
                             <span className="ml-2 rounded border px-1.5 py-0.5 font-mono text-[10px] font-normal uppercase tracking-wider text-muted-foreground">
                               {isStaff ? "Personel" : "Müşteri"}
                             </span>
+                            {message.source === "EMAIL" ? (
+                              <span className="ml-2 inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                                <Mail aria-hidden className="size-3" />
+                                e-posta
+                              </span>
+                            ) : null}
                           </p>
                           <time dateTime={message.createdAt} className="font-mono text-[11px] text-muted-foreground">
                             {formatDateTime(message.createdAt)}
                           </time>
                         </div>
                         <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.message}</div>
+                        <MessageAttachments files={message.files} legacy={message.legacyAttachments} />
                       </div>
                     </li>
                   );
@@ -200,7 +285,24 @@ export function TicketDetailContent({ ticket, adminUsers }: TicketDetailContentP
               description="Yanıt müşteriye e-posta ile de bildirilir."
               footer={
                 <>
-                  <UnavailableAction label="Dosya ekle" size="sm" icon={<Paperclip aria-hidden />} className="mr-auto" />
+                  <div className="mr-auto flex flex-wrap items-center gap-2">
+                    <AttachmentPicker compact files={files} onChange={setFiles} id="reply-files" disabled={isSubmitting} />
+                    <label htmlFor="reply-status" className="sr-only">
+                      Yanıttan sonraki durum
+                    </label>
+                    <select
+                      id="reply-status"
+                      value={replyStatus}
+                      onChange={(e) => setReplyStatus(e.target.value)}
+                      className={selectClass + " w-auto"}
+                    >
+                      {REPLY_STATUS_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <button
                     type="button"
                     className={appButton()}
@@ -213,17 +315,27 @@ export function TicketDetailContent({ ticket, adminUsers }: TicketDetailContentP
                 </>
               }
             >
-              <div className="mb-3 flex flex-wrap gap-2" aria-label="Hazır yanıtlar" role="group">
-                {quickReplies.map((reply) => (
-                  <button
-                    key={reply}
-                    type="button"
-                    onClick={() => setReplyText(reply)}
-                    className="min-h-9 rounded-md border border-dashed px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:border-solid hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {reply}
-                  </button>
-                ))}
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <label htmlFor="canned-reply" className="sr-only">
+                  Hazır yanıt ekle
+                </label>
+                <select
+                  id="canned-reply"
+                  value=""
+                  onChange={(e) => insertCannedReply(e.target.value)}
+                  className={selectClass + " sm:w-72"}
+                  disabled={cannedReplies.length === 0}
+                >
+                  <option value="">{cannedReplies.length ? "Hazır yanıt ekle…" : "Hazır yanıt yok"}</option>
+                  {cannedReplies.map((reply) => (
+                    <option key={reply.id} value={reply.id}>
+                      {reply.title}
+                    </option>
+                  ))}
+                </select>
+                <Link href="/yonetim/destek/hazir-yanitlar" className={appButton({ variant: "ghost", size: "sm" })}>
+                  Yönet
+                </Link>
               </div>
               <label htmlFor="reply" className="sr-only">
                 Yanıtınız
@@ -236,6 +348,7 @@ export function TicketDetailContent({ ticket, adminUsers }: TicketDetailContentP
                 rows={6}
                 className="resize-y"
               />
+              <SelectedFiles files={files} onChange={setFiles} />
             </SectionCard>
           ) : (
             <div className="flex flex-col gap-3 rounded-lg border border-dashed p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -263,6 +376,11 @@ export function TicketDetailContent({ ticket, adminUsers }: TicketDetailContentP
                 { label: "Öncelik", value: priority.label },
                 { label: "Durum", value: <StatusBadge kind="ticket" audience="admin" status={ticket.status} /> },
                 { label: "Atanan", value: assignee ? `${assignee.name} ${assignee.surname}`.trim() : "Atanmadı" },
+                { label: "Kaynak", value: ticket.source === "EMAIL" ? "E-posta" : ticket.source === "API" ? "API" : "Panel" },
+                {
+                  label: "Müşteri yanıtı bekleniyor",
+                  value: ticket.waitingSince ? `${formatDateTime(ticket.waitingSince)} itibarıyla` : null,
+                },
                 { label: "Açılış", value: formatDateTime(ticket.createdAt) },
                 { label: "Son güncelleme", value: formatDateTime(ticket.updatedAt) },
                 { label: "Kapanış", value: ticket.closedAt ? formatDateTime(ticket.closedAt) : null },
@@ -301,7 +419,7 @@ export function TicketDetailContent({ ticket, adminUsers }: TicketDetailContentP
               id="assignee"
               value={assignedAdminId}
               onChange={(e) => setAssignedAdminId(e.target.value)}
-              className="h-11 w-full rounded-md border bg-background px-2.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9"
+              className={selectClass}
             >
               <option value="">Personel seçin</option>
               {adminUsers.map((admin) => (
@@ -312,22 +430,57 @@ export function TicketDetailContent({ ticket, adminUsers }: TicketDetailContentP
             </select>
           </SectionCard>
 
-          <SectionCard
-            title="Müşteri"
-            footer={
-              <Link href={`/yonetim/musteriler/${ticket.customer.id}`} className={appButton({ variant: "outline", size: "sm" })}>
-                Müşteri kartını aç
-              </Link>
-            }
-          >
-            <DetailList
-              items={[
-                { label: "Ad soyad", value: customerFullName },
-                { label: "E-posta", value: ticket.customer.email, copy: ticket.customer.email },
-                { label: "Telefon", value: ticket.customer.phone },
-              ]}
-            />
-          </SectionCard>
+          {ticket.customer ? (
+            <SectionCard
+              title="Müşteri"
+              footer={
+                <Link href={`/yonetim/musteriler/${ticket.customer.id}`} className={appButton({ variant: "outline", size: "sm" })}>
+                  Müşteri kartını aç
+                </Link>
+              }
+            >
+              <DetailList
+                items={[
+                  { label: "Ad soyad", value: customerFullName },
+                  { label: "E-posta", value: ticket.customer.email, copy: ticket.customer.email },
+                  { label: "Telefon", value: ticket.customer.phone },
+                ]}
+              />
+            </SectionCard>
+          ) : (
+            <SectionCard
+              title="Gönderen (kayıtsız)"
+              description="E-posta adresi doğrulanmış bir müşteri hesabıyla eşleşmedi. Yanıtlar bu adrese e-posta ile gider."
+              footer={
+                <button
+                  type="button"
+                  className={appButton({ variant: "outline", size: "sm" })}
+                  onClick={() => void handleLink()}
+                  disabled={!linkEmail.trim()}
+                >
+                  <Link2 aria-hidden />
+                  Müşteriye bağla
+                </button>
+              }
+            >
+              <DetailList
+                items={[
+                  { label: "Ad", value: ticket.guest?.name ?? null },
+                  { label: "E-posta", value: ticket.guest?.email ?? "", copy: ticket.guest?.email ?? undefined },
+                ]}
+              />
+              <label htmlFor="link-email" className="mb-1.5 mt-4 block text-sm font-medium">
+                Müşteri hesabının e-postası
+              </label>
+              <input
+                id="link-email"
+                type="email"
+                value={linkEmail}
+                onChange={(e) => setLinkEmail(e.target.value)}
+                className={selectClass}
+              />
+            </SectionCard>
+          )}
         </div>
       </div>
     </>

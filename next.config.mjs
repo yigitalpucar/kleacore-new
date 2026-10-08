@@ -11,6 +11,15 @@ const nextConfig = {
         source: "/:path*",
         headers: securityHeaders({ dev: process.env.NODE_ENV !== "production" }),
       },
+      // Ticket attachment downloads: user content, never rendered as a page
+      // (the route sets the same; listed here so the site CSP above can't win).
+      {
+        source: "/api/support/attachments/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: "default-src 'none'; sandbox" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
     ];
   },
   async redirects() {

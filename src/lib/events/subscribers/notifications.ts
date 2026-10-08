@@ -1,4 +1,4 @@
-import type { NotificationChannel } from "@prisma/client";
+import type { NotificationChannel, TicketDepartment } from "@prisma/client";
 import type { EventPayload, EventType } from "../catalog";
 import type { DispatchedEvent, EventSubscriber, SubscriberOutcome } from "./types";
 
@@ -255,11 +255,14 @@ export const notificationPlanners: PlannerMap = {
       if (!to) return [];
       return [{ template: "admin.ticket-customer-reply", data, to, channel: "EMAIL", dedupeKey: `ticket.replied:${event.id}` }];
     }
+    // Reply-To = the polled support mailbox, so the customer can answer by e-mail.
+    const { supportReplyAddress } = await import("@/lib/support/tickets");
+    const replyTo = await supportReplyAddress(payload.department as TicketDepartment | undefined).catch(() => undefined);
     return [
       {
         template: "support.ticket-replied",
         userId: payload.customerId ?? null,
-        data: { ...data, recipientName: payload.recipientName },
+        data: { ...data, recipientName: payload.recipientName, ...(replyTo ? { replyTo } : {}) },
         to: payload.customerId ? undefined : payload.recipientEmail,
         channel: "EMAIL",
         dedupeKey: `ticket.replied:${event.id}`,

@@ -70,8 +70,13 @@ export function renderOverrideEmail(
     ? renderTemplate(override.bodyText, view, { escape: false }).trim()
     : htmlToText(bodyHtml);
   const preheader = textBody.split("\n").find((line) => line.trim() && line.trim() !== subject)?.trim() ?? subject;
-  const html = renderEmailShell({ subject, preheader, bodyHtml }, ctx.brand, options);
-  const text = `${textBody}\n\n${textFooter(ctx.brand)}`.replace(/\n{3,}/g, "\n\n").trim();
+  // Structural parts the admin text cannot carry (e.g. the ticket reply
+  // marker the inbound mail parser cuts at) come from the typed template.
+  const replyMarker = template.render(data, ctx).replyMarker;
+  const html = renderEmailShell({ subject, preheader, bodyHtml, replyMarker }, ctx.brand, options);
+  const text = `${replyMarker ? `${replyMarker}\n\n` : ""}${textBody}\n\n${textFooter(ctx.brand)}`
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   return { subject, preheader, html, text };
 }
 

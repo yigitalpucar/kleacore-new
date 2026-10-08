@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Eye, Headphones, RotateCcw, User, X } from "lucide-react";
+import { CheckCircle, Eye, Headphones, Mail, MessageSquareText, RotateCcw, Settings, User, X } from "lucide-react";
 import {
   DataTable,
   EmptyState,
@@ -35,7 +35,9 @@ export interface AdminTicketRow {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
-  customer: { id: string; name: string; email: string };
+  source: string;
+  /** id null = e-mail from an address that matches no verified customer. */
+  customer: { id: string | null; name: string; email: string };
 }
 
 interface DestekContentProps {
@@ -75,6 +77,12 @@ const columns: ColumnDef<AdminTicketRow>[] = [
           <p className="truncate text-xs text-muted-foreground">
             <span className="font-mono">#{t.ticketNumber}</span> · {enumLabel("ticketDepartment", t.department)} ·{" "}
             {t.messageCount} mesaj
+            {t.source === "EMAIL" ? (
+              <>
+                {" · "}
+                <Mail aria-label="E-posta ile açıldı" className="inline size-3 align-[-2px]" />
+              </>
+            ) : null}
           </p>
         </div>
       );
@@ -88,9 +96,18 @@ const columns: ColumnDef<AdminTicketRow>[] = [
       const c = row.original.customer;
       return (
         <div className="min-w-0 max-w-[220px]">
-          <Link href={`/yonetim/musteriler/${c.id}`} className="font-medium hover:underline">
-            {c.name}
-          </Link>
+          {c.id ? (
+            <Link href={`/yonetim/musteriler/${c.id}`} className="font-medium hover:underline">
+              {c.name}
+            </Link>
+          ) : (
+            <span className="font-medium">
+              {c.name}
+              <span className="ml-1.5 rounded border border-dashed px-1 py-0.5 font-mono text-[10px] font-normal uppercase tracking-wider text-muted-foreground">
+                Kayıtsız
+              </span>
+            </span>
+          )}
           <p className="truncate text-xs text-muted-foreground">{c.email}</p>
         </div>
       );
@@ -155,7 +172,9 @@ export function DestekContent({ data, total, page, totalPages, serverFilters }: 
 
   const rowActions = (t: AdminTicketRow): RowAction[] => [
     { label: "Talebi aç", href: detailHref(t.id), icon: <Eye aria-hidden /> },
-    { label: "Müşteriyi gör", href: `/yonetim/musteriler/${t.customer.id}`, icon: <User aria-hidden /> },
+    t.customer.id
+      ? { label: "Müşteriyi gör", href: `/yonetim/musteriler/${t.customer.id}`, icon: <User aria-hidden /> }
+      : { label: "Müşteriyi gör", icon: <User aria-hidden />, disabledReason: "Kayıtlı müşteri değil" },
     t.status === "CLOSED"
       ? { label: "Yeniden aç", icon: <RotateCcw aria-hidden />, onSelect: () => void handleReopenTicket(t.id), separator: true }
       : { label: "Talebi kapat", icon: <CheckCircle aria-hidden />, onSelect: () => void handleCloseTicket(t.id), separator: true },
@@ -166,6 +185,18 @@ export function DestekContent({ data, total, page, totalPages, serverFilters }: 
       <PageHeader
         title="Destek talepleri"
         description="Müşteri taleplerini yanıtlayın, personele atayın ve kapatın."
+        actions={
+          <>
+            <Link href="/yonetim/destek/hazir-yanitlar" className={appButton({ variant: "outline" })}>
+              <MessageSquareText aria-hidden />
+              Hazır yanıtlar
+            </Link>
+            <Link href="/yonetim/destek/ayarlar" className={appButton({ variant: "outline" })}>
+              <Settings aria-hidden />
+              Ayarlar
+            </Link>
+          </>
+        }
       />
 
       <StatGrid columns={4}>

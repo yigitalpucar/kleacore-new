@@ -258,6 +258,7 @@ export const ADMIN_SEGMENT_LABELS: Record<string, string> = {
   "tum-siparisler": "Tüm siparişler",
   "tum-hizmetler": "Tüm hizmetler",
   kota: "Kota aşımı",
+  "hazir-yanitlar": "Hazır yanıtlar",
   "tum-faturalar": "Tüm faturalar",
   bireysel: "Bireysel",
   kurumsal: "Kurumsal",

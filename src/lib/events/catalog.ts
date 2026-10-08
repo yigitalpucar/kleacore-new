@@ -461,6 +461,8 @@ const ticketReplied = defineEvent({
     customerId: id.nullable().optional(),
     /** STAFF → customer is notified; CUSTOMER → support staff is notified. */
     authorRole: z.enum(["STAFF", "CUSTOMER"]),
+    /** Ticket department: picks the support mailbox used as Reply-To. */
+    department: z.string().optional(),
     senderName: z.string(),
     messagePreview: z.string(),
     /** Recipient address override (customer without account / staff address). */

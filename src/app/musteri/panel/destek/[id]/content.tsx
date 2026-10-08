@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Textarea } from "@/components/ui/textarea";
-import { FileText, Image as ImageIcon, Lock, MessageSquare, Paperclip, Send, Star, XCircle } from "lucide-react";
+import { Lock, Mail, MessageSquare, Send, Star, XCircle } from "lucide-react";
 import {
   AppBreadcrumbLabel,
   DetailList,
@@ -20,28 +20,10 @@ import {
 } from "@/components/app";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/format/date";
-import {
-  closeTicket,
-  reopenTicket,
-  replyToTicket,
-} from "@/lib/actions/customer/tickets";
+import { closeTicket, reopenTicket } from "@/lib/actions/customer/tickets";
+import type { ThreadMessage } from "@/lib/support/serialize";
 import { toast } from "@/lib/toast";
-
-interface TicketAttachment {
-  name: string;
-  size: string;
-  type: "image" | "document";
-}
-
-interface TicketMessage {
-  id: string;
-  senderId: string;
-  senderName: string;
-  senderRole: string;
-  message: string;
-  attachments: TicketAttachment[];
-  createdAt: string;
-}
+import { AttachmentPicker, MessageAttachments, SelectedFiles, postTicketForm } from "@/components/support/attachments";
 
 interface TicketDetail {
   id: string;
@@ -54,14 +36,7 @@ interface TicketDetail {
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
-  customer: {
-    id: string;
-    name: string;
-    surname: string;
-    email: string;
-    phone: string | null;
-  };
-  messages: TicketMessage[];
+  messages: ThreadMessage[];
 }
 
 interface DestekDetayContentProps {
@@ -72,16 +47,21 @@ export function DestekDetayContent({ ticket }: DestekDetayContentProps) {
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
 
   const handleSubmit = async () => {
     if (!replyText.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
-    const result = await replyToTicket(ticket.id, replyText.trim());
+    const form = new FormData();
+    form.set("message", replyText.trim());
+    for (const file of files) form.append("files", file);
+    const result = await postTicketForm(`/api/support/tickets/${ticket.id}/messages`, form);
     setIsSubmitting(false);
 
     if (result.success) {
       setReplyText("");
+      setFiles([]);
       toast.success("Yanıtınız gönderildi");
       router.refresh();
     } else {
@@ -179,33 +159,19 @@ export function DestekDetayContent({ ticket }: DestekDetayContentProps) {
                               Destek ekibi
                             </span>
                           ) : null}
+                          {message.source === "EMAIL" ? (
+                            <span className="ml-2 inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                              <Mail aria-hidden className="size-3" />
+                              e-posta
+                            </span>
+                          ) : null}
                         </p>
                         <time dateTime={message.createdAt} className="font-mono text-[11px] text-muted-foreground">
                           {formatDateTime(message.createdAt)}
                         </time>
                       </div>
                       <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.message}</div>
-                      {message.attachments && message.attachments.length > 0 ? (
-                        <div className="mt-3 border-t border-dashed pt-3">
-                          <p className="mb-2 text-xs text-muted-foreground">Ekler (yalnızca dosya adları)</p>
-                          <ul className="flex flex-wrap gap-2">
-                            {message.attachments.map((attachment, index) => (
-                              <li
-                                key={index}
-                                className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-1.5"
-                              >
-                                {attachment.type === "image" ? (
-                                  <ImageIcon aria-hidden className="size-4 text-muted-foreground" />
-                                ) : (
-                                  <FileText aria-hidden className="size-4 text-muted-foreground" />
-                                )}
-                                <span className="text-[13px] font-medium">{attachment.name}</span>
-                                <span className="text-xs text-muted-foreground">{attachment.size}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
+                      <MessageAttachments files={message.files} legacy={message.legacyAttachments} />
                     </div>
                   </li>
                 );
@@ -218,7 +184,9 @@ export function DestekDetayContent({ ticket }: DestekDetayContentProps) {
               title="Yanıt yaz"
               footer={
                 <>
-                  <UnavailableAction label="Dosya ekle" size="sm" icon={<Paperclip aria-hidden />} className="mr-auto" />
+                  <div className="mr-auto">
+                    <AttachmentPicker compact files={files} onChange={setFiles} id="reply-files" disabled={isSubmitting} />
+                  </div>
                   <button
                     type="button"
                     className={appButton()}
@@ -242,6 +210,7 @@ export function DestekDetayContent({ ticket }: DestekDetayContentProps) {
                 rows={5}
                 className="resize-y"
               />
+              <SelectedFiles files={files} onChange={setFiles} />
             </SectionCard>
           ) : (
             <div className="flex flex-col gap-3 rounded-lg border border-dashed p-4 sm:flex-row sm:items-center sm:justify-between">

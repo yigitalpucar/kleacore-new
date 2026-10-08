@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getTicketWithMessages } from "@/lib/dal/tickets";
+import { serializeThreadMessage } from "@/lib/support/serialize";
 import { DestekDetayContent } from "./content";
 
 export const dynamic = "force-dynamic";
@@ -33,20 +34,7 @@ export default async function DestekDetayPage(props: DestekDetayPageProps) {
     createdAt: ticket.createdAt.toISOString(),
     updatedAt: ticket.updatedAt.toISOString(),
     closedAt: ticket.closedAt?.toISOString() ?? null,
-    customer: ticket.customer,
-    messages: ticket.messages.map((msg) => ({
-      id: msg.id,
-      senderId: msg.senderId,
-      senderName: msg.senderName,
-      senderRole: msg.senderRole,
-      message: msg.message,
-      attachments: msg.attachments as Array<{
-        name: string;
-        size: string;
-        type: "image" | "document";
-      }>,
-      createdAt: msg.createdAt.toISOString(),
-    })),
+    messages: ticket.messages.map(serializeThreadMessage),
   };
 
   return <DestekDetayContent ticket={serializedTicket} />;
