@@ -3,11 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, Lock, Mail, ArrowRight, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/lib/toast";
 import { loginAction, registerAction } from "@/lib/actions/auth";
+import { buttonClasses } from "@/components/site";
+import { cn } from "@/lib/utils";
+import { AuthAlert, authIconClass, authInputClass } from "./auth-shell";
+import { PasswordRequirements, passwordMeetsRules } from "./password-requirements";
 
 export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
   const router = useRouter();
@@ -31,9 +34,10 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError("Şifre en az 6 karakter olmalı");
-      toast.error("Şifre en az 6 karakter olmalı");
+    // Same rules as passwordSchema (server validates again).
+    if (!passwordMeetsRules(formData.password)) {
+      setError("Şifre en az 8 karakter olmalı; büyük harf, küçük harf ve rakam içermeli");
+      toast.error("Şifre gereksinimleri karşılanmıyor");
       return;
     }
 
@@ -71,23 +75,23 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
     }
   };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {error && (
-        <div className="p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-800">
-          {error}
-        </div>
-      )}
+  const confirmMismatch =
+    formData.confirmPassword.length > 0 && formData.confirmPassword !== formData.password;
 
-      <div className="grid grid-cols-2 gap-4">
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {error ? <AuthAlert>{error}</AuthAlert> : null}
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="name">Ad</Label>
           <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <User className={authIconClass} aria-hidden />
             <Input
               id="name"
+              autoComplete="given-name"
               placeholder="Adınız"
-              className="pl-10"
+              className={cn(authInputClass, "pl-10")}
               value={formData.name}
               onChange={(e) =>
                 setFormData({ ...formData, name: e.target.value })
@@ -101,7 +105,9 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
           <Label htmlFor="surname">Soyad</Label>
           <Input
             id="surname"
+            autoComplete="family-name"
             placeholder="Soyadınız"
+            className={authInputClass}
             value={formData.surname}
             onChange={(e) =>
               setFormData({ ...formData, surname: e.target.value })
@@ -115,12 +121,13 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
       <div className="space-y-2">
         <Label htmlFor="reg-email">E-posta</Label>
         <div className="relative">
-          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Mail className={authIconClass} aria-hidden />
           <Input
             id="reg-email"
             type="email"
+            autoComplete="email"
             placeholder="ornek@email.com"
-            className="pl-10"
+            className={cn(authInputClass, "pl-10")}
             value={formData.email}
             onChange={(e) =>
               setFormData({ ...formData, email: e.target.value })
@@ -134,12 +141,14 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
       <div className="space-y-2">
         <Label htmlFor="reg-password">Şifre</Label>
         <div className="relative">
-          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Lock className={authIconClass} aria-hidden />
           <Input
             id="reg-password"
             type="password"
-            placeholder="En az 6 karakter"
-            className="pl-10"
+            autoComplete="new-password"
+            placeholder="En az 8 karakter"
+            aria-describedby="reg-password-rules"
+            className={cn(authInputClass, "pl-10")}
             value={formData.password}
             onChange={(e) =>
               setFormData({ ...formData, password: e.target.value })
@@ -148,17 +157,21 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
             disabled={loading}
           />
         </div>
+        <PasswordRequirements id="reg-password-rules" value={formData.password} />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="confirmPassword">Şifre Tekrar</Label>
+        <Label htmlFor="confirmPassword">Şifre tekrar</Label>
         <div className="relative">
-          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Lock className={authIconClass} aria-hidden />
           <Input
             id="confirmPassword"
             type="password"
-            placeholder="********"
-            className="pl-10"
+            autoComplete="new-password"
+            placeholder="Şifrenizi tekrar girin"
+            aria-invalid={confirmMismatch || undefined}
+            aria-describedby={confirmMismatch ? "confirm-hint" : undefined}
+            className={cn(authInputClass, "pl-10")}
             value={formData.confirmPassword}
             onChange={(e) =>
               setFormData({
@@ -170,31 +183,34 @@ export function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
             disabled={loading}
           />
         </div>
+        {confirmMismatch ? (
+          <p id="confirm-hint" className="text-xs text-destructive dark:text-red-300">
+            Şifreler eşleşmiyor.
+          </p>
+        ) : null}
       </div>
 
-      <Button type="submit" className="w-full" disabled={loading}>
+      <button type="submit" className={buttonClasses({ className: "w-full" })} disabled={loading}>
         {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="size-4 animate-spin" aria-label="Hesap oluşturuluyor" />
         ) : (
           <>
-            Hesap Oluştur
-            <ArrowRight className="ml-2 h-4 w-4" />
+            Hesap oluştur
+            <ArrowRight className="size-4" aria-hidden />
           </>
         )}
-      </Button>
+      </button>
 
-      <div className="text-center text-sm">
-        <p className="text-muted-foreground">
-          Zaten hesabınız var mı?{" "}
-          <button
-            type="button"
-            onClick={onSwitch}
-            className="text-primary hover:underline font-medium"
-          >
-            Giriş Yapın
-          </button>
-        </p>
-      </div>
+      <p className="text-center text-sm text-muted-foreground">
+        Zaten hesabınız var mı?{" "}
+        <button
+          type="button"
+          onClick={onSwitch}
+          className="rounded-sm font-medium text-foreground underline underline-offset-4 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Giriş yapın
+        </button>
+      </p>
     </form>
   );
 }

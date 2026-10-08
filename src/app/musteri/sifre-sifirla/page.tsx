@@ -1,7 +1,11 @@
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
+import type { Metadata } from "next";
 import { SifreSifirlaContent } from "./content";
+
+export const metadata: Metadata = {
+  title: "Yeni Şifre Belirle",
+  description: "KLEACORE hesabınız için yeni bir şifre belirleyin.",
+  robots: { index: false, follow: false },
+};
 
 export default async function SifreSifirlaPage({
   searchParams,
@@ -10,15 +14,5 @@ export default async function SifreSifirlaPage({
 }) {
   const { token } = await searchParams;
 
-  return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-      <main className="flex-1">
-        <SifreSifirlaContent token={token} />
-      </main>
-      <Footer />
-    </div>
-  );
+  return <SifreSifirlaContent token={token} />;
 }
-

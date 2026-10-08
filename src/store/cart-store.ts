@@ -2,6 +2,11 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import {
+  addonPeriodTotal,
+  periodTotal,
+  priceBasisForItemType,
+} from "@/lib/billing/period-price";
 
 export type CartItemType = "domain" | "hosting" | "server" | "ssl" | "datacenter";
 
@@ -16,6 +21,11 @@ export interface CartItem {
   id: string;
   type: CartItemType;
   title: string;
+  /**
+   * Pre-tax charge for ONE billing period (a yearly hosting/server item holds
+   * the 12-month total, not the monthly equivalent). Mirrors the server-side
+   * calculation in src/lib/actions/customer/checkout.ts.
+   */
   unitPrice: number;
   quantity: number;
   createdAt: string;
@@ -44,6 +54,11 @@ interface AddDomainPayload {
   renewPrice: number;
 }
 
+/*
+ * `price` on every payload is the catalogue tier price as shown on the site:
+ * for yearly hosting/server plans that is the MONTHLY EQUIVALENT. The store
+ * converts it to the period total with src/lib/billing/period-price.ts.
+ */
 interface AddHostingPayload {
   sku: string;
   title: string;
@@ -73,6 +88,7 @@ interface AddHostingBundlePayload {
   };
   addons: CartAddon[];
   configuration?: Record<string, string | number>;
+  /** Configurable options total for the whole period (already a period total). */
   configOptionTotal?: number;
 }
 
@@ -102,6 +118,10 @@ interface CartState {
 
 function normalizeDomain(domain: string) {
   return domain.trim().toLowerCase();
+}
+
+function chargeFor(type: CartItemType, price: number, billingPeriod: "monthly" | "yearly") {
+  return periodTotal(price, billingPeriod, priceBasisForItemType(type));
 }
 
 export const useCartStore = create<CartState>()(
@@ -158,7 +178,7 @@ export const useCartStore = create<CartState>()(
             id,
             type: "hosting",
             title,
-            unitPrice: price,
+            unitPrice: chargeFor("hosting", price, billingPeriod),
             quantity: 1,
             createdAt: new Date().toISOString(),
             metadata: { planCode: sku, billingPeriod },
@@ -193,7 +213,7 @@ export const useCartStore = create<CartState>()(
           wasAdded = true;
 
           const addonTotal = addons.reduce(
-            (sum, a) => sum + (billingPeriod === "yearly" ? a.yearlyPrice : a.monthlyPrice),
+            (sum, a) => sum + addonPeriodTotal(a, billingPeriod),
             0
           );
           const domainPrice = domainChoice.type === "new" ? (domainChoice.price ?? 0) : 0;
@@ -203,7 +223,10 @@ export const useCartStore = create<CartState>()(
               id,
               type: "hosting",
               title,
-              unitPrice: price + addonTotal + configOptionTotal,
+              unitPrice:
+                Math.round(
+                  (chargeFor("hosting", price, billingPeriod) + addonTotal + configOptionTotal) * 100
+                ) / 100,
               quantity: 1,
               createdAt: new Date().toISOString(),
               metadata: {
@@ -257,7 +280,7 @@ export const useCartStore = create<CartState>()(
             id,
             type: "server",
             title,
-            unitPrice: price,
+            unitPrice: chargeFor("server", price, billingPeriod),
             quantity: 1,
             createdAt: new Date().toISOString(),
             metadata: {
@@ -290,7 +313,7 @@ export const useCartStore = create<CartState>()(
             id,
             type,
             title,
-            unitPrice: price,
+            unitPrice: chargeFor(type, price, billingPeriod),
             quantity: 1,
             createdAt: new Date().toISOString(),
             metadata: { planCode: sku, billingPeriod, subType },
@@ -320,6 +343,21 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: "kleacore-cart",
+      // v1: yearly hosting/server items store the 12-month total instead of
+      // the monthly equivalent. Older carts are migrated below.
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as { items?: CartItem[] };
+        if (version < 1 && Array.isArray(state.items)) {
+          state.items = state.items.map((item) =>
+            item.metadata?.billingPeriod === "yearly" &&
+            priceBasisForItemType(item.type) === "monthly-equivalent"
+              ? { ...item, unitPrice: chargeFor(item.type, item.unitPrice, "yearly") }
+              : item
+          );
+        }
+        return state as CartState;
+      },
       storage:
         typeof window !== "undefined"
           ? createJSONStorage(() => localStorage)

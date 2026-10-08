@@ -1,17 +1,13 @@
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
+import type { Metadata } from "next";
 import { SifremiUnuttumContent } from "./content";
 
+export const metadata: Metadata = {
+  title: "Şifremi Unuttum",
+  description: "KLEACORE hesabınızın şifresini sıfırlamak için bağlantı isteyin.",
+  alternates: { canonical: "/musteri/sifremi-unuttum" },
+  robots: { index: false, follow: false },
+};
+
 export default function SifremiUnuttumPage() {
-  return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-      <main className="flex-1">
-        <SifremiUnuttumContent />
-      </main>
-      <Footer />
-    </div>
-  );
+  return <SifremiUnuttumContent />;
 }

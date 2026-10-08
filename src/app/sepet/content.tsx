@@ -26,12 +26,33 @@ import {
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { redirectToCheckoutUrl } from "@/lib/utils/safe-redirect";
+import { addonPeriodTotal, priceBasisForItemType } from "@/lib/billing/period-price";
+import { PeriodBadge, PeriodNote } from "@/components/checkout/period-note";
+import type { CartItem } from "@/store/cart-store";
 
 function formatPrice(value: number) {
   return formatTRY(value, { keepDecimals: true });
 }
 
-export function SepetContent() {
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+const typeLabels: Record<CartItem["type"], string> = {
+  domain: "Alan adı",
+  hosting: "Hosting",
+  server: "Sunucu",
+  ssl: "SSL sertifikası",
+  datacenter: "Veri merkezi",
+};
+
+function itemPeriod(item: CartItem): "monthly" | "yearly" {
+  // Domain registrations are always one year.
+  if (item.type === "domain") return "yearly";
+  return item.metadata?.billingPeriod === "yearly" ? "yearly" : "monthly";
+}
+
+export function SepetContent({ taxRate }: { taxRate: number }) {
   const router = useRouter();
   const items = useCartStore((state) => state.items);
   const hasHydrated = useCartStore((state) => state.hasHydrated);
@@ -39,6 +60,11 @@ export function SepetContent() {
   const clearCart = useCartStore((state) => state.clearCart);
   const subtotal = useCartStore((state) => state.getSubtotal());
   const totalItems = useCartStore((state) => state.getTotalItems());
+  const taxAmount = roundMoney(roundMoney(subtotal) * (taxRate / 100));
+  const grandTotal = roundMoney(roundMoney(subtotal) + taxAmount);
+  const hasYearly = items.some(
+    (item) => itemPeriod(item) === "yearly" && priceBasisForItemType(item.type) === "monthly-equivalent"
+  );
   const [paymentMethod, setPaymentMethod] = useState<"BANK_TRANSFER" | "CREDIT_CARD">("CREDIT_CARD");
   const [promoCode, setPromoCode] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -69,7 +95,7 @@ export function SepetContent() {
       if (!result.success) {
         if (result.code === "LOGIN_REQUIRED") {
           toast.info("Ödeme için giriş yapmalısınız.");
-          router.push("/musteri/giris");
+          router.push("/musteri/giris?callbackUrl=%2Fsepet");
           return;
         }
 
@@ -169,76 +195,97 @@ export function SepetContent() {
                   Sepeti temizle
                 </button>
               </div>
-              <ul className="space-y-3">
-                {items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-start gap-4 rounded-2xl border bg-background p-4 sm:p-5"
-                  >
-                    <span className="hidden size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40 sm:flex">
-                      {item.type === "domain" ? (
-                        <Globe aria-hidden className="size-4 text-foreground/80" />
-                      ) : (
-                        <Server aria-hidden className="size-4 text-foreground/80" />
-                      )}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="break-words font-medium">{item.title}</h3>
-                      {item.metadata?.billingPeriod && (
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {item.metadata.billingPeriod === "yearly" ? "Yıllık" : "Aylık"} faturalandırma
-                        </p>
-                      )}
-                      {item.type === "domain" && item.metadata?.renewPrice ? (
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Yenileme: {formatPrice(item.metadata.renewPrice)}/yıl
-                        </p>
-                      ) : null}
-                      {item.type === "hosting" && item.metadata?.domainChoice && (
-                        <div className="mt-2 space-y-1">
-                          {item.metadata.domainChoice.type === "new" && item.metadata.domainChoice.domain && (
-                            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                              <Globe aria-hidden className="size-3.5" />
-                              Yeni alan adı: {item.metadata.domainChoice.domain}
+              <ul className="divide-y divide-dashed overflow-hidden rounded-2xl border bg-background">
+                {items.map((item) => {
+                  const period = itemPeriod(item);
+                  const basis = priceBasisForItemType(item.type);
+                  const lineTotal = item.unitPrice * item.quantity;
+                  return (
+                    <li key={item.id} className="flex gap-4 p-4 sm:p-5">
+                      <span className="hidden size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40 sm:flex">
+                        {item.type === "domain" ? (
+                          <Globe aria-hidden className="size-4 text-foreground/80" />
+                        ) : (
+                          <Server aria-hidden className="size-4 text-foreground/80" />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                              {typeLabels[item.type]}
                             </p>
-                          )}
-                          {item.metadata.domainChoice.type === "existing" && item.metadata.domainChoice.domain && (
-                            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                              <Globe aria-hidden className="size-3.5" />
-                              Mevcut alan adı: {item.metadata.domainChoice.domain}
-                            </p>
-                          )}
+                            <h3 className="mt-0.5 break-words font-medium">{item.title}</h3>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemove(item.id, item.title)}
+                            aria-label={`${item.title} ürününü sepetten kaldır`}
+                            className="-mr-2 -mt-2 inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <Trash2 aria-hidden className="size-4" />
+                          </button>
                         </div>
-                      )}
-                      {item.type === "hosting" && item.metadata?.addons && item.metadata.addons.length > 0 && (
-                        <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Ek hizmetler">
-                          {item.metadata.addons.map((addon) => (
-                            <li
-                              key={addon.sku}
-                              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
-                            >
-                              <Package aria-hidden className="size-3" />
-                              {addon.name}
+
+                        {item.type === "hosting" && item.metadata?.domainChoice?.domain ? (
+                          <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <Globe aria-hidden className="size-3.5 shrink-0" />
+                            <span className="min-w-0 break-all">
+                              {item.metadata.domainChoice.type === "new" ? "Yeni alan adı" : "Mevcut alan adı"}:{" "}
+                              {item.metadata.domainChoice.domain}
+                            </span>
+                          </p>
+                        ) : null}
+
+                        {item.type === "hosting" && item.metadata?.addons && item.metadata.addons.length > 0 ? (
+                          <ul className="mt-3 space-y-1 text-sm" aria-label="Paket ve ek hizmetler">
+                            <li className="flex items-center justify-between gap-3 text-muted-foreground">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <Server aria-hidden className="size-3.5 shrink-0" />
+                                <span className="truncate">Paket ve seçenekler</span>
+                              </span>
+                              <span className="shrink-0 tabular-nums">
+                                {formatPrice(
+                                  item.unitPrice -
+                                    item.metadata.addons.reduce(
+                                      (sum, addon) => sum + addonPeriodTotal(addon, period),
+                                      0
+                                    )
+                                )}
+                              </span>
                             </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <p className="font-semibold tabular-nums">
-                        {formatPrice(item.unitPrice * item.quantity)}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => handleRemove(item.id, item.title)}
-                        aria-label={`${item.title} ürününü sepetten kaldır`}
-                        className="-mr-2 inline-flex size-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <Trash2 aria-hidden className="size-4" />
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                            {item.metadata.addons.map((addon) => (
+                              <li key={addon.sku} className="flex items-center justify-between gap-3 text-muted-foreground">
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                  <Package aria-hidden className="size-3.5 shrink-0" />
+                                  <span className="truncate">{addon.name}</span>
+                                </span>
+                                <span className="shrink-0 tabular-nums">
+                                  {formatPrice(addonPeriodTotal(addon, period))}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+
+                        <div className="mt-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+                          <div className="space-y-1">
+                            <PeriodBadge period={period} />
+                            {item.type === "domain" && item.metadata?.renewPrice ? (
+                              <p className="text-xs text-muted-foreground">
+                                Yenileme: {formatPrice(item.metadata.renewPrice)}/yıl +KDV
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold tabular-nums">{formatPrice(lineTotal)}</p>
+                            <PeriodNote total={lineTotal} period={period} basis={basis} />
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
 
@@ -254,18 +301,28 @@ export function SepetContent() {
                       <dd className="tabular-nums">{totalItems}</dd>
                     </div>
                     <div className="flex items-center justify-between gap-4">
-                      <dt className="text-muted-foreground">Ara toplam</dt>
+                      <dt className="text-muted-foreground">Ara toplam (KDV hariç)</dt>
                       <dd className="tabular-nums">{formatPrice(subtotal)}</dd>
                     </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">KDV (%{taxRate})</dt>
+                      <dd className="tabular-nums">{formatPrice(taxAmount)}</dd>
+                    </div>
                     <div className="flex items-baseline justify-between gap-4 border-t border-dashed pt-3">
-                      <dt className="font-medium">Toplam</dt>
+                      <dt className="font-medium">
+                        Toplam
+                        <span className="block text-xs font-normal text-muted-foreground">KDV dahil</span>
+                      </dt>
                       <dd className="text-2xl font-semibold tabular-nums tracking-tight">
-                        {formatPrice(subtotal)}
+                        {formatPrice(grandTotal)}
                       </dd>
                     </div>
                   </dl>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    KDV hariç. %20 KDV ve kupon indirimi ödeme adımında hesaplanır.
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                    {hasYearly
+                      ? "Yıllık ödemeli ürünlerde 12 aylık tutar tek seferde faturalanır. "
+                      : null}
+                    Kupon ve bayi indirimleri ödeme adımında doğrulanıp düşülür.
                   </p>
                 </div>
 

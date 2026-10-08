@@ -185,7 +185,10 @@ export async function provisionCompletedOrder(
       domain: configuredDomain,
       username: makeServiceUsername(order.orderNumber),
       billingPeriod: order.billingPeriod,
-      amount: order.totalAmount,
+      // Recurring amount = pre-tax list price for one billing period. KDV is
+      // added again by every renewal (cron + renewService), so storing the
+      // tax-inclusive total here would charge KDV twice on renewal.
+      amount: order.basePrice,
       nextDueDate: expiresAt,
       expiresAt,
       status: "ACTIVE",

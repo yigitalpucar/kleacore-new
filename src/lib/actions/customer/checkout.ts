@@ -26,6 +26,11 @@ import {
 } from "@/lib/payments/methods";
 import { calculateTax, getTaxRate } from "@/lib/billing/tax";
 import {
+  addonPeriodTotal,
+  periodTotal,
+  priceBasisForCategory,
+} from "@/lib/billing/period-price";
+import {
   calculateConfigurationPrice,
   validateConfigurationSelections,
 } from "@/lib/products/configurator";
@@ -136,7 +141,14 @@ async function getCatalogProduct(item: CheckoutItemInput, tx: Prisma.Transaction
 
   const billingPeriod = normalizeBillingPeriod(item.metadata?.billingPeriod);
   const tier = product.pricingTiers.find((pricing) => pricing.period === billingPeriod && pricing.isActive);
-  const basePrice = Number(tier?.discountedPrice ?? tier?.price ?? product.basePrice);
+  // Yearly tiers of hosting/server products store the monthly equivalent, so
+  // the yearly charge is 12 × that price; domain/SSL/e-mail tiers are already
+  // period totals (see src/lib/billing/period-price.ts).
+  const basePrice = periodTotal(
+    Number(tier?.discountedPrice ?? tier?.price ?? product.basePrice),
+    billingPeriod,
+    priceBasisForCategory(product.category.slug)
+  );
 
   const addonSkus = Array.from(
     new Set((item.metadata?.addons ?? []).map((addon) => addon.sku.trim()).filter(Boolean))
@@ -156,8 +168,7 @@ async function getCatalogProduct(item: CheckoutItemInput, tx: Prisma.Transaction
   }
 
   const addonTotal = addons.reduce(
-    (total, addon) =>
-      total + Number(billingPeriod === "yearly" ? addon.yearlyPrice : addon.monthlyPrice),
+    (total, addon) => total + addonPeriodTotal(addon, billingPeriod),
     0
   );
 
@@ -379,10 +390,7 @@ export async function checkoutCart(input: CheckoutInput) {
             addons: catalogProduct.addons.map((addon) => ({
               sku: addon.sku,
               name: addon.name,
-              price:
-                catalogProduct.billingPeriod === "yearly"
-                  ? Number(addon.yearlyPrice)
-                  : Number(addon.monthlyPrice),
+              price: addonPeriodTotal(addon, catalogProduct.billingPeriod),
             })),
             configOptions: catalogProduct.configOptions,
             configSelections: catalogProduct.configSelections,

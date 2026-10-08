@@ -1,21 +1,54 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, CheckCircle, KeyRound, Lock } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowLeft, ArrowRight, CircleCheck, Loader2, Lock, TriangleAlert } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { BlurFade } from "@/components/magicui/blur-fade";
 import { resetPasswordAction } from "@/lib/actions/auth";
 import { toast } from "@/lib/toast";
+import { buttonClasses } from "@/components/site";
+import { AuthAlert, AuthShell, authIconClass, authInputClass } from "@/components/auth/auth-shell";
+import { PasswordRequirements } from "@/components/auth/password-requirements";
+import { cn } from "@/lib/utils";
 
 interface SifreSifirlaContentProps {
   token?: string;
 }
 
+const aside = {
+  label: "Hesap kurtarma",
+  heading: "Güçlü bir şifre seçin.",
+  text: "Yeni şifreniz kaydedildikten sonra sıfırlama bağlantısı geçersiz olur.",
+  points: [
+    "En az 8 karakter",
+    "Büyük harf, küçük harf ve rakam",
+    "Başka sitelerde kullanmadığınız bir şifre",
+  ],
+};
+
+function StatusBlock({
+  icon: Icon,
+  children,
+}: {
+  icon: typeof CircleCheck;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border bg-muted/40 p-4 text-sm">
+      <span
+        aria-hidden
+        className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border bg-background"
+      >
+        <Icon className="size-5" />
+      </span>
+      <p className="pt-2 text-muted-foreground">{children}</p>
+    </div>
+  );
+}
+
 export function SifreSifirlaContent({ token }: SifreSifirlaContentProps) {
+  const [password, setPassword] = useState("");
   const [state, formAction, isPending] = useActionState(
     async (_prev: { success: boolean; error?: string } | null, formData: FormData) => {
       const result = await resetPasswordAction(formData);
@@ -31,107 +64,110 @@ export function SifreSifirlaContent({ token }: SifreSifirlaContentProps) {
 
   const isSuccess = !!state?.success;
 
-  return (
-    <section className="py-16 md:py-24 bg-gradient-to-b from-primary/5 to-background">
-      <div className="container">
-        <div className="max-w-md mx-auto">
-          <BlurFade delay={0.1} inView>
-            <Card>
-              <CardHeader className="text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 mb-4">
-                  {isSuccess ? (
-                    <CheckCircle className="h-7 w-7 text-green-500" />
-                  ) : (
-                    <KeyRound className="h-7 w-7 text-primary" />
-                  )}
-                </div>
-                <CardTitle className="text-2xl">
-                  {isSuccess ? "Şifre Güncellendi" : "Yeni Şifre Belirleyin"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!token ? (
-                  <div className="space-y-4">
-                    <p className="text-sm text-red-500 text-center">
-                      Şifre sıfırlama bağlantısı geçersiz.
-                    </p>
-                    <Button asChild className="w-full">
-                      <Link href="/musteri/sifremi-unuttum">
-                        <ArrowLeft className="mr-2 h-4 w-4" />
-                        Şifremi Unuttum Sayfasına Dön
-                      </Link>
-                    </Button>
-                  </div>
-                ) : isSuccess ? (
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground text-center">
-                      Şifreniz başarıyla güncellendi. Yeni şifrenizle giriş yapabilirsiniz.
-                    </p>
-                    <Button asChild className="w-full">
-                      <Link href="/musteri/giris">
-                        Giriş Yap
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </div>
-                ) : (
-                  <form action={formAction} className="space-y-4">
-                    <input type="hidden" name="token" value={token} />
-
-                    <div className="space-y-2">
-                      <Label htmlFor="password">Yeni Şifre</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="password"
-                          name="password"
-                          type="password"
-                          className="pl-10"
-                          placeholder="En az 6 karakter"
-                          required
-                          disabled={isPending}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Yeni Şifre (Tekrar)</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="confirmPassword"
-                          name="confirmPassword"
-                          type="password"
-                          className="pl-10"
-                          placeholder="Yeni şifrenizi tekrar girin"
-                          required
-                          disabled={isPending}
-                        />
-                      </div>
-                    </div>
-
-                    {state && !state.success && state.error ? (
-                      <p className="text-sm text-red-500">{state.error}</p>
-                    ) : null}
-
-                    <Button type="submit" className="w-full" disabled={isPending}>
-                      {isPending ? "Güncelleniyor..." : "Şifreyi Güncelle"}
-                    </Button>
-
-                    <Button variant="outline" asChild className="w-full">
-                      <Link href="/musteri/giris">
-                        <ArrowLeft className="mr-2 h-4 w-4" />
-                        Giriş Sayfasına Dön
-                      </Link>
-                    </Button>
-                  </form>
-                )}
-              </CardContent>
-            </Card>
-          </BlurFade>
+  if (!token) {
+    return (
+      <AuthShell
+        eyebrow="Bağlantı geçersiz"
+        title="Bu bağlantı kullanılamıyor"
+        description="Şifre sıfırlama bağlantısı eksik veya hatalı. Yeni bir bağlantı isteyebilirsiniz."
+        aside={aside}
+      >
+        <div className="space-y-6">
+          <StatusBlock icon={TriangleAlert}>Şifre sıfırlama bağlantısı geçersiz.</StatusBlock>
+          <Link href="/musteri/sifremi-unuttum" className={buttonClasses({ className: "w-full" })}>
+            <ArrowLeft className="size-4" aria-hidden />
+            Yeni bağlantı iste
+          </Link>
         </div>
-      </div>
-    </section>
+      </AuthShell>
+    );
+  }
+
+  if (isSuccess) {
+    return (
+      <AuthShell
+        eyebrow="Şifre güncellendi"
+        title="Şifreniz değiştirildi"
+        description="Yeni şifrenizle giriş yapabilirsiniz."
+        aside={aside}
+      >
+        <div className="space-y-6">
+          <StatusBlock icon={CircleCheck}>Şifreniz başarıyla güncellendi.</StatusBlock>
+          <Link href="/musteri/giris" className={buttonClasses({ className: "w-full" })}>
+            Giriş yap
+            <ArrowRight className="size-4" aria-hidden />
+          </Link>
+        </div>
+      </AuthShell>
+    );
+  }
+
+  return (
+    <AuthShell
+      eyebrow="Şifre sıfırlama"
+      title="Yeni şifre belirleyin"
+      description="Hesabınız için yeni bir şifre girin."
+      aside={aside}
+    >
+      <form action={formAction} className="space-y-5">
+        <input type="hidden" name="token" value={token} />
+
+        <div className="space-y-2">
+          <Label htmlFor="password">Yeni şifre</Label>
+          <div className="relative">
+            <Lock className={authIconClass} aria-hidden />
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              className={cn(authInputClass, "pl-10")}
+              placeholder="En az 8 karakter"
+              aria-describedby="new-password-rules"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={isPending}
+            />
+          </div>
+          <PasswordRequirements id="new-password-rules" value={password} />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="confirmPassword">Yeni şifre (tekrar)</Label>
+          <div className="relative">
+            <Lock className={authIconClass} aria-hidden />
+            <Input
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              className={cn(authInputClass, "pl-10")}
+              placeholder="Yeni şifrenizi tekrar girin"
+              required
+              disabled={isPending}
+            />
+          </div>
+        </div>
+
+        {state && !state.success && state.error ? <AuthAlert>{state.error}</AuthAlert> : null}
+
+        <button type="submit" className={buttonClasses({ className: "w-full" })} disabled={isPending}>
+          {isPending ? (
+            <>
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+              Güncelleniyor…
+            </>
+          ) : (
+            "Şifreyi güncelle"
+          )}
+        </button>
+
+        <Link href="/musteri/giris" className={buttonClasses({ variant: "ghost", className: "w-full" })}>
+          <ArrowLeft className="size-4" aria-hidden />
+          Giriş sayfasına dön
+        </Link>
+      </form>
+    </AuthShell>
   );
 }
-

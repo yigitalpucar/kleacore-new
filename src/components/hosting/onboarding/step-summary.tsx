@@ -10,6 +10,12 @@ import { StepHeading, StepNav } from "./step-shell";
 import { BillingToggle } from "@/components/hosting/billing-toggle";
 import { useCartStore } from "@/store/cart-store";
 import { toast } from "@/lib/toast";
+import {
+  addonPeriodTotal,
+  periodTotal,
+  priceBasisForCategory,
+} from "@/lib/billing/period-price";
+import { PeriodBadge, periodNoteText } from "@/components/checkout/period-note";
 import { calculateConfigurationPrice } from "@/lib/products/configurator-pricing";
 import type {
   ConfigurationSelections,
@@ -32,7 +38,12 @@ interface StepSummaryProps {
   onBack: () => void;
 }
 
-const TAX_RATE = 0.20;
+/** Display only; the checkout action applies the configured rate (billing.tax_rate). */
+const TAX_RATE = 0.2;
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
 
 export const StepSummary = ({
   product,
@@ -45,34 +56,37 @@ export const StepSummary = ({
   const [isYearly, setIsYearly] = useState(false);
   const addHostingBundle = useCartStore((s) => s.addHostingBundle);
   const router = useRouter();
+  const period = isYearly ? "yearly" : "monthly";
+  const basis = priceBasisForCategory(product.category.slug);
 
   const monthlyTier = product.pricingTiers.find((t) => t.period === "monthly");
   const yearlyTier = product.pricingTiers.find((t) => t.period === "yearly");
 
-  const hostingPrice = isYearly
-    ? (yearlyTier?.discountedPrice ?? yearlyTier?.price ?? product.basePrice)
-    : (monthlyTier?.price ?? product.basePrice);
-
-  const addonTotal = selectedAddons.reduce(
-    (sum, a) => sum + (isYearly ? a.yearlyPrice : a.monthlyPrice),
-    0
+  // Tier price as stored: for the yearly tier this is the monthly equivalent.
+  const hostingPrice = Number(
+    isYearly
+      ? (yearlyTier?.discountedPrice ?? yearlyTier?.price ?? product.basePrice)
+      : (monthlyTier?.price ?? product.basePrice)
   );
+  // What is actually charged for the chosen period (12 × for yearly hosting).
+  const hostingCharge = periodTotal(hostingPrice, period, basis);
+
+  const addonLines = selectedAddons.map((addon) => ({
+    addon,
+    total: addonPeriodTotal(addon, period),
+  }));
+  const addonTotal = addonLines.reduce((sum, line) => sum + line.total, 0);
 
   const configPricing = useMemo(
-    () =>
-      calculateConfigurationPrice(
-        configOptions,
-        configSelections,
-        isYearly ? "yearly" : "monthly"
-      ),
-    [configOptions, configSelections, isYearly]
+    () => calculateConfigurationPrice(configOptions, configSelections, period),
+    [configOptions, configSelections, period]
   );
 
   const domainPrice = domainChoice.type === "new" ? (domainChoice.price ?? 0) : 0;
 
-  const subtotal = hostingPrice + addonTotal + configPricing.total + domainPrice;
-  const tax = subtotal * TAX_RATE;
-  const total = subtotal + tax;
+  const subtotal = roundMoney(hostingCharge + addonTotal + configPricing.total + domainPrice);
+  const tax = roundMoney(subtotal * TAX_RATE);
+  const total = roundMoney(subtotal + tax);
 
   const handleAddToCart = () => {
     const added = addHostingBundle({
@@ -95,10 +109,10 @@ export const StepSummary = ({
   };
 
   const savings = yearlySavingsPercent(
-    monthlyTier?.price ?? product.basePrice,
-    yearlyTier?.discountedPrice ?? yearlyTier?.price
+    Number(monthlyTier?.price ?? product.basePrice),
+    yearlyTier ? Number(yearlyTier.discountedPrice ?? yearlyTier.price) : null
   );
-  const periodNote = isYearly ? "/ay · yıllık ödemede aylık karşılığı" : "/ay";
+  const money = (value: number) => formatTRY(value, { keepDecimals: true });
 
   return (
     <div className="space-y-8">
@@ -121,19 +135,25 @@ export const StepSummary = ({
         aria-labelledby="siparis-detay"
         className="overflow-hidden rounded-2xl border bg-background"
       >
-        <div className="border-b px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
           <h3 id="siparis-detay" className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             Sipariş detayları
           </h3>
+          <PeriodBadge period={period} />
         </div>
         <dl className="divide-y divide-dashed px-5 text-sm">
-          <Row label={product.name} value={formatTRY(hostingPrice, { keepDecimals: true })} note={periodNote} strong />
+          <Row
+            label={product.name}
+            value={money(hostingCharge)}
+            note={periodNoteText(hostingCharge, period, basis)}
+            strong
+          />
 
           {domainChoice.type === "new" && domainChoice.domain && (
             <Row
               label={`Alan adı: ${domainChoice.domain}`}
-              value={formatTRY(domainPrice, { keepDecimals: true })}
-              note="/yıl"
+              value={money(domainPrice)}
+              note={periodNoteText(domainPrice, "yearly", "period-total")}
             />
           )}
           {domainChoice.type === "existing" && domainChoice.domain && (
@@ -147,34 +167,38 @@ export const StepSummary = ({
             <Row
               key={line.slug}
               label={`${line.name}: ${line.label}`}
-              value={formatTRY(line.price, { keepDecimals: true })}
+              value={money(line.price)}
+              note={isYearly ? "yıllık toplam +KDV" : "aylık +KDV"}
             />
           ))}
 
-          {selectedAddons.map((addon) => (
+          {addonLines.map(({ addon, total: addonCharge }) => (
             <Row
               key={addon.sku}
               label={addon.name}
-              value={formatTRY(isYearly ? addon.yearlyPrice : addon.monthlyPrice, { keepDecimals: true })}
-              note="/ay"
+              value={money(addonCharge)}
+              note={periodNoteText(addonCharge, period, "monthly-equivalent")}
             />
           ))}
         </dl>
 
         <dl className="space-y-2 border-t bg-muted/30 px-5 py-4 text-sm">
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground">Ara toplam</dt>
-            <dd className="tabular-nums">{formatTRY(subtotal, { keepDecimals: true })}</dd>
+            <dt className="text-muted-foreground">Ara toplam (KDV hariç)</dt>
+            <dd className="tabular-nums">{money(subtotal)}</dd>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground">KDV (%{TAX_RATE * 100})</dt>
-            <dd className="tabular-nums">{formatTRY(tax, { keepDecimals: true })}</dd>
+            <dt className="text-muted-foreground">KDV (%{Math.round(TAX_RATE * 100)})</dt>
+            <dd className="tabular-nums">{money(tax)}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-4 border-t border-dashed pt-3">
-            <dt className="font-medium">Toplam</dt>
-            <dd className="text-2xl font-semibold tabular-nums tracking-tight">
-              {formatTRY(total, { keepDecimals: true })}
-            </dd>
+            <dt className="font-medium">
+              Toplam
+              <span className="block text-xs font-normal text-muted-foreground">
+                {isYearly ? "12 aylık ödeme, KDV dahil" : "İlk ay, KDV dahil"}
+              </span>
+            </dt>
+            <dd className="text-2xl font-semibold tabular-nums tracking-tight">{money(total)}</dd>
           </div>
         </dl>
 
@@ -188,7 +212,7 @@ export const StepSummary = ({
             Sepete ekle
           </button>
           <p className="mt-3 text-center text-xs text-muted-foreground">
-            Ödenecek tutar sepet ve ödeme adımında kesinleşir.
+            Kupon ve bayi indirimleri ödeme adımında uygulanır; tutar orada kesinleşir.
           </p>
         </div>
       </section>

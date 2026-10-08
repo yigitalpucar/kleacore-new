@@ -73,7 +73,9 @@ export async function applyServiceRenewalFromOrder(
     data: {
       status: "ACTIVE",
       billingPeriod: order.billingPeriod,
-      amount: order.totalAmount,
+      // Pre-tax, pre-discount amount for the renewed period (see
+      // provisioning/internal.ts) so the next renewal adds KDV exactly once.
+      amount: order.basePrice,
       nextDueDate: newExpiryDate,
       expiresAt: newExpiryDate,
       suspendedAt: null,

@@ -251,7 +251,7 @@ export function Header() {
                 <Link href="/musteri/giris" className={buttonClasses({ variant: "ghost", size: "sm" })}>
                   Giriş Yap
                 </Link>
-                <Link href="/musteri/giris" className={buttonClasses({ variant: "primary", size: "sm" })}>
+                <Link href="/musteri/giris?mod=kayit" className={buttonClasses({ variant: "primary", size: "sm" })}>
                   Kayıt Ol
                 </Link>
               </>
@@ -332,7 +332,7 @@ export function Header() {
                         Giriş Yap
                       </Link>
                       <Link
-                        href="/musteri/giris"
+                        href="/musteri/giris?mod=kayit"
                         onClick={() => setMobileOpen(false)}
                         className={buttonClasses({ variant: "primary" })}
                       >
