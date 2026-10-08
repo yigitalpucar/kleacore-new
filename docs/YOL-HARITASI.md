@@ -780,3 +780,14 @@ Güvenlik (2FA bypass, rate limit, oturum yenileme), ödeme bütünlüğü (çif
 8. **Affiliate/bayilik kodu:** dondurulsun mu (gizle) yoksa silinsin mi? Öneri: menüden gizle, kod kalsın.
 9. **Mevcut müşterilerin taşınması:** WHM/Gri/Proxmox içe aktarma (Faz 2.7) mi, yoksa yalnız yeni müşteriler KLEACORE'dan mı?
 10. **KYC zorunluluğu:** VDS siparişlerinde kimlik/vergi levhası istenecek mi (kötüye kullanım ve 5651 sayılı kanun loglama yükümlülüğü açısından)?
+
+## 8. Sahip kararları (08.10.2026)
+
+| # | Karar |
+|---|---|
+| 1 | **VDS Faz 1'de satılır.** Faz 1'de manuel kurulum akışı (sipariş → yönetici kurulum görevi → teslim e-postası); Proxmox otomasyonu Faz 2'nin ilk işi. |
+| 2 | **Birincil sanal POS: Kuveyt Türk.** Kuveyt Türk VPOS (3D Secure) sağlayıcısı Faz 1'e eklenir ve varsayılan kart ödeme yöntemi olur; PayTR/iyzico ikincil kalır. |
+| 3 | **Resmi fatura: kendi modülümüz.** (Kapsamı netleştirilecek — bkz. açık soru.) |
+| 4 | **Süreler:** vade + 3 gün askı, vade + 30 gün fesih adayı; domainlerde registrar grace süresi. |
+| 5 | **Kuyruk:** pg-boss. |
+| 6–10 | Bekliyor: DNS sahipliği, off-site yedek (sonra), affiliate/bayilik, mevcut müşteri aktarımı, VDS KYC. |
