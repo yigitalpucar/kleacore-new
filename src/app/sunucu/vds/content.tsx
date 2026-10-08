@@ -1,301 +1,153 @@
-"use client";
-
-import { useState } from "react";
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { PageHero } from "@/components/sections/page-hero";
-import { TrustStrip } from "@/components/sections/trust-strip";
-import { ServerFeatures } from "@/components/sunucu/server-features";
-import { ServerFaq } from "@/components/sunucu/server-faq";
+import { CalendarClock, Cpu, HardDrive, MapPin, Terminal, Wrench } from "lucide-react";
+import type { FeatureItem } from "@/components/site/feature-grid";
+import { Section } from "@/components/site/section";
+import { SectionHeading } from "@/components/site/section-heading";
+import { serverFaqs } from "@/components/sunucu/server-faq";
+import type { ProductWithPricing } from "@/lib/products/map-product";
+import { RootTerminal, type TerminalStep } from "@/components/site/sunucu/root-terminal";
 import {
-  Cpu,
-  HardDrive,
-  Globe,
-  Shield,
-  Zap,
-  Check,
-  ChevronDown,
-  Headphones,
-  MapPin,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
-import { useCartStore } from "@/store/cart-store";
-import { toast } from "@/lib/toast";
-import type { Product, PricingTier, ProductCategory } from "@prisma/client";
+  productToCartRow,
+  sharedIncluded,
+  type FamilySummary,
+} from "@/components/site/sunucu/server-catalog";
+import { ServerLanding, familyTrustItems } from "@/components/site/sunucu/server-landing";
 
-type ProductWithPricing = Product & {
-  category: ProductCategory;
-  pricingTiers: PricingTier[];
-};
+const columns = [
+  { key: "cpu", label: "İşlemci" },
+  { key: "ram", label: "Bellek" },
+  { key: "disk", label: "Disk" },
+  { key: "port", label: "Port" },
+  { key: "traffic", label: "Trafik" },
+];
 
-interface ContentProps {
+/** Terminal steps; the resource output mirrors the popular plan's DB specs. */
+function terminalSteps(product: ProductWithPricing | undefined): TerminalStep[] {
+  const r = (product?.resourceLimits as Record<string, string> | undefined) ?? {};
+  const cpu = r.cpu?.match(/\d+/)?.[0];
+  const ram = r.ram?.match(/\d+/)?.[0];
+  const disk = r.disk?.match(/\d+/)?.[0];
+  return [
+    {
+      id: "ssh",
+      icon: "ssh",
+      title: "SSH ile bağlanın",
+      description:
+        "Sunucunuz teslim edildiğinde size iletilen IP adresi ve root bilgileriyle herhangi bir terminalden bağlanırsınız.",
+      command: "ssh root@203.0.113.10",
+      output: ["root@203.0.113.10's password: ********", "Oturum açıldı. Tam yönetici yetkisine sahipsiniz."],
+    },
+    {
+      id: "install",
+      icon: "install",
+      title: "İstediğiniz yazılımı kurun",
+      description:
+        "Root yetkisiyle web sunucu, veritabanı ya da kendi uygulamanızı kurar ve yapılandırırsınız. Örnekte bir web sunucu kuruluyor.",
+      command: "apt update && apt install -y nginx",
+      output: ["Paket listeleri okunuyor... Tamam", "nginx kuruluyor...", "Kurulum tamamlandı."],
+    },
+    {
+      id: "monitor",
+      icon: "monitor",
+      title: "Kaynaklarınızı görün",
+      description: product
+        ? `Paketinize ayrılan işlemci, bellek ve diski kendiniz izlersiniz. Örnek çıktı ${product.name} paketinin değerlerini gösterir.`
+        : "Paketinize ayrılan işlemci, bellek ve diski kendiniz izlersiniz.",
+      command: "nproc && free -h && df -h /",
+      output: [
+        cpu ?? "—",
+        `Mem:  toplam ${ram ? `${ram}G` : "—"}`,
+        `/dev/vda1  boyut ${disk ? `${disk}G` : "—"}  bağlama /`,
+      ],
+    },
+    {
+      id: "firewall",
+      icon: "firewall",
+      title: "Güvenliği siz yönetin",
+      description:
+        "Güvenlik duvarı kurallarını, SSH anahtarlarını ve kullanıcıları ihtiyacınıza göre siz belirlersiniz.",
+      command: "ufw allow 22/tcp && ufw enable",
+      output: ["Kural eklendi", "Güvenlik duvarı etkin ve sistem açılışında başlatılacak"],
+    },
+  ];
+}
+
+export function Content({
+  products,
+  summaries,
+}: {
   products: ProductWithPricing[];
-}
+  summaries: FamilySummary[];
+}) {
+  const summary = summaries.find((s) => s.key === "vds");
+  const popular = products.find((p) => p.isPopular) ?? products[0];
 
-interface ServerPlan {
-  sku: string;
-  name: string;
-  cpu: string;
-  ram: string;
-  disk: string;
-  traffic: string;
-  port: string;
-  monthlyPrice: number;
-  discountedMonthly: number;
-  yearlyPrice: number;
-}
-
-const mapProductToServerPlan = (product: ProductWithPricing): ServerPlan => {
-  const res = product.resourceLimits as unknown as Record<string, string>;
-  const monthly = product.pricingTiers.find((t) => t.period === "monthly");
-  const yearly = product.pricingTiers.find((t) => t.period === "yearly");
-  return {
-    sku: product.sku,
-    name: product.name,
-    cpu: res?.cpu ?? "",
-    ram: res?.ram ?? "",
-    disk: res?.disk ?? "",
-    traffic: res?.traffic ?? "",
-    port: res?.port ?? "",
-    monthlyPrice: monthly?.renewalPrice ?? monthly?.price ?? product.basePrice,
-    discountedMonthly: monthly?.discountedPrice ?? monthly?.price ?? product.basePrice,
-    yearlyPrice: (yearly?.price ?? monthly?.price ?? product.basePrice) * 12,
-  };
-};
-
-const planFeatures = [
-  { icon: Zap, text: "Anında Aktivasyon" },
-  { icon: HardDrive, text: "NVMe Storage" },
-  { icon: Globe, text: "Limitsiz Trafik" },
-  { icon: MapPin, text: "İstanbul Lokasyon" },
-  { icon: Cpu, text: "Platinum 8160" },
-  { icon: Shield, text: "%99.9 Uptime" },
-  { icon: Check, text: "Ücretsiz Kurulum" },
-  { icon: Headphones, text: "7/24 Destek" },
-];
-
-const locations = [
-  { id: "tr", name: "Türkiye", city: "İstanbul", code: "tr" },
-  { id: "de", name: "Almanya", city: "Frankfurt", code: "de" },
-  { id: "us", name: "Amerika", city: "New York", code: "us" },
-  { id: "nl", name: "Hollanda", city: "Amsterdam", code: "nl" },
-];
-
-interface PlanRowProps {
-  plan: ServerPlan;
-  billingPeriod: "monthly" | "yearly";
-  isExpanded: boolean;
-  onToggle: () => void;
-  onAddToCart: (plan: ServerPlan, displayPrice: number) => void;
-}
-
-const PlanRow = ({ plan, billingPeriod, isExpanded, onToggle, onAddToCart }: PlanRowProps) => {
-  const price = billingPeriod === "monthly" ? plan.discountedMonthly : (plan.yearlyPrice / 12);
-  const originalPrice = billingPeriod === "monthly" ? plan.monthlyPrice : (plan.yearlyPrice / 12 * 1.16);
+  const features: FeatureItem[] = [
+    {
+      icon: Terminal,
+      title: "Tam root erişimi",
+      description: "İşletim sistemi düzeyinde tam yetki: yazılım kurulumu, servis ve güvenlik ayarları sizde.",
+    },
+    {
+      icon: HardDrive,
+      title: summary?.diskType === "NVMe" ? "NVMe SSD disk" : "SSD disk",
+      description: "Tüm VDS paketlerinde disk alanı NVMe SSD üzerinde sunulur.",
+    },
+    {
+      icon: Cpu,
+      title: summary?.cpuModel || "Ayrılmış işlemci",
+      description: `İşlemci ve bellek kaynakları paketinize ayrılmış olarak tanımlanır${summary?.cpu ? ` (${summary.cpu})` : ""}.`,
+    },
+    {
+      icon: MapPin,
+      title: "İstanbul lokasyon",
+      description: `Sunucular İstanbul'da barındırılır${summary?.port ? `; tüm paketlerde ${summary.port} port` : ""}.`,
+    },
+    {
+      icon: Wrench,
+      title: "Ücretsiz kurulum",
+      description: "VDS paketlerinde kurulum için ayrıca ücret alınmaz.",
+    },
+    {
+      icon: CalendarClock,
+      title: "Aylık veya yıllık ödeme",
+      description: "Dilediğiniz dönemi seçin; yıllık ödemede aylık karşılık daha düşüktür.",
+    },
+  ];
 
   return (
-    <div className="border-b last:border-b-0">
-      <div className="grid grid-cols-7 items-center gap-4 p-4 hover:bg-muted/30 transition-colors">
-        <div>
-          <p className="font-bold">{plan.name}</p>
-          <button
-            onClick={onToggle}
-            className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
-          >
-            Tüm Özellikleri Gör
-            <ChevronDown className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-180")} />
-          </button>
-        </div>
-        <div className="text-center">
-          <p className="font-semibold">{plan.cpu}</p>
-          <p className="text-xs text-muted-foreground">İşlemci</p>
-        </div>
-        <div className="text-center">
-          <p className="font-semibold">{plan.ram}</p>
-          <p className="text-xs text-muted-foreground">DDR4</p>
-        </div>
-        <div className="text-center">
-          <p className="font-semibold">{plan.disk}</p>
-          <p className="text-xs text-muted-foreground">NVMe</p>
-        </div>
-        <div className="text-center">
-          <p className="font-semibold text-sm">{plan.traffic}</p>
-          <p className="text-xs text-muted-foreground">{plan.port}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-muted-foreground line-through">
-            {originalPrice.toFixed(2)}₺/ay
-          </p>
-          <p className="font-bold text-lg">
-            {price.toFixed(2)}₺<span className="text-sm font-normal text-muted-foreground">/ay</span>
-          </p>
-        </div>
-        <div className="text-right">
-          <Button size="sm" className="px-6" onClick={() => onAddToCart(plan, price)}>Satın Al</Button>
-        </div>
-      </div>
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-4 pt-2 bg-muted/20">
-              <div className="grid grid-cols-4 gap-4">
-                {planFeatures.map((feature) => (
-                  <div key={feature.text} className="flex items-center gap-2 text-sm">
-                    <feature.icon className="h-4 w-4 text-primary" />
-                    <span>{feature.text}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-export const Content = ({ products }: ContentProps) => {
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
-  const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState("tr");
-  const addServerPlan = useCartStore((s) => s.addServerPlan);
-  const router = useRouter();
-
-  const plans = products.map(mapProductToServerPlan);
-
-  const handleAddToCart = (plan: ServerPlan, displayPrice: number) => {
-    const added = addServerPlan({
-      category: "vds",
-      planCode: plan.sku,
-      title: plan.name,
-      price: displayPrice,
-      billingPeriod,
-      location: selectedLocation,
-    });
-    if (added) {
-      toast.success(`${plan.name} sepete eklendi.`);
-      router.push("/sepet");
-    } else {
-      toast.info("Bu ürün zaten sepetinizde.");
-    }
-  };
-
-  return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-      <main className="flex-1">
-        <PageHero
-          badge="NVMe VDS"
-          badgeIcon={Cpu}
-          title="VDS Sunucu"
-          titleHighlight="Paketleri"
-          description="Yeni nesil donanımlara sahip sunucular ile güçlü ve ekonomik VDS sunucu hizmetine KLEACORE ile sahip olun."
-          accent="emerald"
+    <ServerLanding
+      family="vds"
+      eyebrow="NVMe SSD · İstanbul"
+      title="VDS Sunucu"
+      description="Kaynakları size ayrılmış, NVMe SSD diskli sanal sunucular. Tam root erişimiyle uygulamanızı istediğiniz gibi kurun ve yönetin."
+      breadcrumb="VDS Sunucu"
+      plansTitle="VDS sunucu paketleri"
+      plansDescription="Tüm paketlerde NVMe SSD disk ve İstanbul lokasyon. Fiyatlar seçili ödeme dönemine göre aylık karşılık olarak gösterilir."
+      rows={products.map(productToCartRow)}
+      columns={columns}
+      included={sharedIncluded(products)}
+      summaries={summaries}
+      trustItems={familyTrustItems(summary)}
+      featuresTitle="VDS paketlerinde neler var?"
+      featuresDescription="Kaynak miktarı pakete göre değişir; aşağıdakiler tüm VDS paketlerinde ortaktır."
+      features={features}
+      faqs={serverFaqs}
+      cta={{
+        title: "Hangi VDS paketinin size uygun olduğundan emin değil misiniz?",
+        description:
+          "Projenizi anlatın, kaynak ihtiyacına göre doğru paketi birlikte seçelim. Daha sonra paket değişikliği de talep edebilirsiniz.",
+      }}
+    >
+      <Section divider aria-labelledby="root-heading">
+        <SectionHeading
+          id="root-heading"
+          eyebrow="Root erişimi"
+          title="Sunucunuz, kurallarınız"
+          description="VDS sunucunuza SSH ile bağlanır, yönetici yetkisiyle her şeyi kendiniz yapılandırırsınız. Aşağıdaki adımlar tipik bir ilk kurulumu temsil eder."
+          className="mb-12"
         />
-
-        <TrustStrip />
-
-        <section className="py-12 md:py-16">
-          <div className="container">
-            <BlurFade delay={0.15} inView>
-              <div className="flex justify-center mb-6">
-                <div className="inline-flex items-center gap-2 p-1 rounded-xl border bg-muted/50">
-                  {locations.map((location) => (
-                    <button
-                      key={location.id}
-                      onClick={() => setSelectedLocation(location.id)}
-                      className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                        selectedLocation === location.id
-                          ? "bg-background shadow-sm"
-                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                      )}
-                    >
-                      <span className={`fi fi-${location.code} text-lg`} />
-                      <span className="hidden sm:inline">{location.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </BlurFade>
-
-            <BlurFade delay={0.2} inView>
-              <div className="flex justify-center mb-8">
-                <div className="inline-flex items-center rounded-full border p-1 bg-muted/50">
-                  <button
-                    onClick={() => setBillingPeriod("monthly")}
-                    className={cn(
-                      "px-6 py-2 rounded-full text-sm font-medium transition-all",
-                      billingPeriod === "monthly"
-                        ? "bg-background shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    Aylık
-                  </button>
-                  <button
-                    onClick={() => setBillingPeriod("yearly")}
-                    className={cn(
-                      "px-6 py-2 rounded-full text-sm font-medium transition-all relative",
-                      billingPeriod === "yearly"
-                        ? "bg-background shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    Yıllık
-                    <span className="absolute -top-3 -right-2 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">
-                      %16 İndirim
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </BlurFade>
-
-            <BlurFade delay={0.2} inView>
-              <Card className="max-w-6xl mx-auto overflow-hidden">
-                <div className="grid grid-cols-7 gap-4 p-4 bg-muted/50 border-b text-sm font-medium text-muted-foreground">
-                  <div>Paket</div>
-                  <div className="text-center">Core</div>
-                  <div className="text-center">Bellek</div>
-                  <div className="text-center">Disk</div>
-                  <div className="text-center">Trafik</div>
-                  <div className="text-right">Fiyat</div>
-                  <div></div>
-                </div>
-                <CardContent className="p-0">
-                  {plans.map((plan) => (
-                    <PlanRow
-                      key={plan.name}
-                      plan={plan}
-                      billingPeriod={billingPeriod}
-                      isExpanded={expandedPlan === plan.name}
-                      onToggle={() => setExpandedPlan(expandedPlan === plan.name ? null : plan.name)}
-                      onAddToCart={handleAddToCart}
-                    />
-                  ))}
-                </CardContent>
-              </Card>
-            </BlurFade>
-          </div>
-        </section>
-
-        <ServerFeatures />
-        <ServerFaq />
-      </main>
-      <Footer />
-    </div>
+        <RootTerminal steps={terminalSteps(popular)} host={popular?.slug ?? "vds"} />
+      </Section>
+    </ServerLanding>
   );
-};
+}
