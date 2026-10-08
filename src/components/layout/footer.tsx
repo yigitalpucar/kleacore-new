@@ -1,285 +1,118 @@
-"use client";
-
-import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Facebook, Instagram, Linkedin, Youtube, Mail, ChevronDown } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Mail, MapPin } from "lucide-react";
+import { Container } from "@/components/site/container";
+import { GridLineHorizontal } from "@/components/site/grid-lines";
+import { companyLinks, legalLinks, navGroups } from "./nav-data";
 
-const languages = [
-  { code: "tr", name: "Türkçe", flag: "tr" },
-  { code: "en", name: "English", flag: "gb" },
-  { code: "de", name: "Deutsch", flag: "de" },
-];
+const linkClass =
+  "inline-flex min-h-8 items-center rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-const currencies = [
-  { code: "TRY", symbol: "₺", name: "Türk Lirası", flag: "tr" },
-  { code: "USD", symbol: "$", name: "US Dollar", flag: "us" },
-  { code: "EUR", symbol: "€", name: "Euro", flag: "eu" },
-];
-
-const footerLinks = {
-  alanAdi: {
-    title: "Alan Adı",
-    links: [
-      { name: "Domain Kaydı", href: "/domain/kayit" },
-      { name: "Domain Transferi", href: "/domain/transfer" },
-      { name: "Belgesiz .TR Domain", href: "/domain/belgesiz-tr" },
-      { name: "Whois Sorgulama", href: "/domain/whois" },
-    ],
-  },
-  hosting: {
-    title: "Hosting",
-    links: [
-      { name: "Linux Hosting", href: "/hosting/linux" },
-      { name: "WordPress Hosting", href: "/hosting/wordpress" },
-      { name: "Kurumsal Hosting", href: "/hosting/kurumsal" },
-      { name: "Reseller Hosting", href: "/hosting/reseller" },
-    ],
-  },
-  sunucu: {
-    title: "Sunucu",
-    links: [
-      { name: "VDS Sunucu", href: "/sunucu/vds" },
-      { name: "VPS Sunucu", href: "/sunucu/vps" },
-      { name: "Bulut Sunucu", href: "/sunucu/bulut" },
-      { name: "Fiziksel Sunucu", href: "/sunucu/fiziksel" },
-    ],
-  },
-  ssl: {
-    title: "SSL Sertifikası",
-    links: [
-      { name: "Standart SSL", href: "/ssl/standart" },
-      { name: "Wildcard SSL", href: "/ssl/wildcard" },
-      { name: "EV (Greenbar) SSL", href: "/ssl/ev" },
-      { name: "Kurumsal SSL", href: "/ssl/kurumsal" },
-    ],
-  },
-  kurumsal: {
-    title: "Kurumsal",
-    links: [
-      { name: "Hakkımızda", href: "/hakkimizda" },
-      { name: "İletişim", href: "/iletisim" },
-      { name: "Blog", href: "/blog" },
-      { name: "Bilgi Bankası", href: "/bilgi-bankasi" },
-      { name: "Kariyer", href: "/kurumsal/kariyer" },
-      { name: "Sistem Durumu", href: "/musteri/durum" },
-    ],
-  },
-};
-
-const legalLinks = [
-  { name: "Kullanıcı Sözleşmesi", href: "/yasal/kullanim-kosullari" },
-  { name: "Gizlilik Sözleşmesi", href: "/yasal/gizlilik" },
-  { name: "İade Koşulları", href: "/yasal/iade-kosullari" },
-  { name: "Çerez Politikası", href: "/yasal/cerez" },
-  { name: "KVKK Aydınlatma Metni", href: "/yasal/kvkk" },
-];
-
+/**
+ * Site footer — always dark (the `dark` class scopes the theme tokens).
+ * Social links are intentionally omitted until real profile URLs exist.
+ */
 export function Footer() {
-  const [selectedLanguage, setSelectedLanguage] = useState(languages[0]);
-  const [selectedCurrency, setSelectedCurrency] = useState(currencies[0]);
+  const year = new Date().getFullYear();
 
   return (
-    <footer className="relative bg-zinc-900 text-zinc-300 overflow-hidden">
-      {/* Background Effects */}
-      <div className="absolute inset-0 pointer-events-none">
-        {/* Gradient Glow */}
-        <div className="absolute -top-40 left-1/4 w-96 h-96 bg-zinc-600/30 rounded-full blur-[120px]" />
-        <div className="absolute -top-20 right-1/4 w-72 h-72 bg-zinc-500/20 rounded-full blur-[100px]" />
+    <footer className="dark relative overflow-hidden border-t border-white/10 bg-neutral-950 text-foreground">
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid mask-radial-top opacity-60" />
 
-        {/* Dot Pattern */}
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `radial-gradient(circle, #fff 1px, transparent 1px)`,
-            backgroundSize: '24px 24px'
-          }}
-        />
+      <Container className="relative pt-14 md:pt-20">
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,3fr)] lg:gap-16">
+          <div>
+            <Link
+              href="/"
+              aria-label="KLEACORE ana sayfa"
+              className="inline-flex rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Image src="/logo.svg" alt="" width={140} height={30} className="h-7 w-auto" />
+            </Link>
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
+              Alan adı, hosting, sunucu ve SSL hizmetleri. Fiyatlara KDV dahil
+              değildir; %20 KDV ödeme adımında eklenir.
+            </p>
 
-        {/* Top Gradient Fade */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-zinc-500/40 to-transparent" />
-      </div>
-
-      <div className="container relative py-12 md:py-16">
-        {/* Main Footer */}
-        <div className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-7">
-          {/* Brand Card */}
-          <div className="lg:col-span-2">
-            <div className="rounded-xl bg-zinc-800/50 p-6">
-              <Link href="/" className="inline-block mb-4">
-                <Image
-                  src="/logo.svg"
-                  alt="KLEACORE"
-                  width={140}
-                  height={30}
-                  className="h-7 w-auto"
-                />
-              </Link>
-              <p className="text-xs text-zinc-500 mb-4">EIN: 36-5157418</p>
-
-              {/* Contact Info */}
-              <div className="space-y-3 text-sm">
-                <p className="text-zinc-400 leading-relaxed">
-                  30 N Gould St Ste R<br />
+            <address className="mt-6 space-y-3 text-sm not-italic text-muted-foreground">
+              <p className="font-medium text-foreground">KLEAWORK DIGITAL LLC</p>
+              <p className="flex gap-2">
+                <MapPin aria-hidden className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  30 N Gould St Ste R
+                  <br />
                   Sheridan, WY 82801, USA
-                </p>
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-zinc-500" />
-                  <span>support@kleacore.com</span>
-                </div>
-              </div>
-
-              {/* Social Links */}
-              <div className="mt-6 flex flex-wrap gap-2">
-                <Link
-                  href="#"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-700/50 text-zinc-400 hover:bg-primary hover:text-white transition-colors"
-                  aria-label="Facebook"
-                >
-                  <Facebook className="h-4 w-4" />
-                </Link>
-                <Link
-                  href="#"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-700/50 text-zinc-400 hover:bg-primary hover:text-white transition-colors"
-                  aria-label="X (Twitter)"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                  </svg>
-                </Link>
-                <Link
-                  href="#"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-700/50 text-zinc-400 hover:bg-primary hover:text-white transition-colors"
-                  aria-label="Instagram"
-                >
-                  <Instagram className="h-4 w-4" />
-                </Link>
-                <Link
-                  href="#"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-700/50 text-zinc-400 hover:bg-primary hover:text-white transition-colors"
-                  aria-label="TikTok"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
-                  </svg>
-                </Link>
-                <Link
-                  href="#"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-700/50 text-zinc-400 hover:bg-primary hover:text-white transition-colors"
-                  aria-label="LinkedIn"
-                >
-                  <Linkedin className="h-4 w-4" />
-                </Link>
-                <Link
-                  href="#"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-700/50 text-zinc-400 hover:bg-primary hover:text-white transition-colors"
-                  aria-label="YouTube"
-                >
-                  <Youtube className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
+                </span>
+              </p>
+              <p>
+                <a href="mailto:support@kleacore.com" className={`${linkClass} gap-2`}>
+                  <Mail aria-hidden className="size-4" />
+                  support@kleacore.com
+                </a>
+              </p>
+              <p className="font-mono text-xs">EIN: 36-5157418</p>
+            </address>
           </div>
 
-          {/* Links */}
-          {Object.values(footerLinks).map((section) => (
-            <div key={section.title}>
-              <h3 className="font-semibold text-white mb-4">{section.title}</h3>
-              <ul className="space-y-2.5">
-                {section.links.map((link) => (
+          <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-6">
+            {navGroups.map((group) => (
+              <nav key={group.title} aria-label={group.title}>
+                <h2 className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  {group.title}
+                </h2>
+                <ul className="mt-4 space-y-1.5">
+                  {group.items.map((item) => (
+                    <li key={item.href}>
+                      <Link href={item.href} className={linkClass}>
+                        {item.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            ))}
+            <nav aria-label="Kurumsal">
+              <h2 className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Kurumsal
+              </h2>
+              <ul className="mt-4 space-y-1.5">
+                {companyLinks.map((link) => (
                   <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      className="text-sm text-zinc-400 hover:text-white transition-colors"
-                    >
-                      {link.name}
+                    <Link href={link.href} className={linkClass}>
+                      {link.title}
                     </Link>
                   </li>
                 ))}
               </ul>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Bottom Bar */}
-      <div className="border-t border-zinc-800">
-        <div className="container py-6">
-          <div className="flex flex-col items-center justify-between gap-4 lg:flex-row">
-            {/* Copyright */}
-            <p className="text-sm text-zinc-500">
-              Copyright © {new Date().getFullYear()} KLEACORE. Tüm Hakları Saklıdır.
-            </p>
-
-            {/* Language & Currency Selectors */}
-            <div className="flex items-center gap-3">
-              {/* Language Selector */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 transition-colors text-sm text-zinc-400 hover:text-white">
-                    <span className={`fi fi-${selectedLanguage.flag}`} />
-                    <span className="hidden sm:inline">{selectedLanguage.name}</span>
-                    <ChevronDown className="h-3 w-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="center" className="min-w-[140px]">
-                  {languages.map((lang) => (
-                    <DropdownMenuItem
-                      key={lang.code}
-                      onClick={() => setSelectedLanguage(lang)}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <span className={`fi fi-${lang.flag}`} />
-                      {lang.name}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* Currency Selector */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 transition-colors text-sm text-zinc-400 hover:text-white">
-                    <span className={`fi fi-${selectedCurrency.flag}`} />
-                    <span>{selectedCurrency.symbol} {selectedCurrency.code}</span>
-                    <ChevronDown className="h-3 w-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="center" className="min-w-[160px]">
-                  {currencies.map((currency) => (
-                    <DropdownMenuItem
-                      key={currency.code}
-                      onClick={() => setSelectedCurrency(currency)}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <span className={`fi fi-${currency.flag}`} />
-                      {currency.symbol} {currency.name}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            {/* Legal Links */}
-            <div className="flex flex-wrap justify-center gap-4 text-sm text-zinc-500">
-              {legalLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="hover:text-white transition-colors"
-                >
-                  {link.name}
-                </Link>
-              ))}
-            </div>
+            </nav>
           </div>
         </div>
+
+        <div className="relative mt-14 py-6">
+          <GridLineHorizontal className="top-0" />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <p className="text-sm text-muted-foreground">
+              © {year} KLEACORE · KLEAWORK DIGITAL LLC. Tüm hakları saklıdır.
+            </p>
+            <nav aria-label="Yasal">
+              <ul className="flex flex-wrap gap-x-5 gap-y-1">
+                {legalLinks.map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href} className={linkClass}>
+                      {link.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </div>
+        </div>
+      </Container>
+
+      <div aria-hidden className="relative select-none overflow-hidden">
+        <p className="-mb-[0.22em] bg-gradient-to-b from-white/[0.14] to-transparent bg-clip-text text-center font-semibold leading-none tracking-tighter text-transparent [font-size:clamp(4rem,19vw,17rem)]">
+          KLEACORE
+        </p>
       </div>
     </footer>
   );

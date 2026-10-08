@@ -2,8 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { User, Settings, LayoutDashboard } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronDown, FileText, LayoutDashboard, Package, Settings, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,68 +11,82 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { buttonClasses } from "@/components/site/button-classes";
+import { cn } from "@/lib/utils";
 
-export function UserMenu() {
+const panelLinks = [
+  { href: "/musteri/panel", label: "Müşteri Paneli", icon: User },
+  { href: "/musteri/panel/hizmetlerim", label: "Hizmetlerim", icon: Package },
+  { href: "/musteri/panel/faturalar", label: "Faturalarım", icon: FileText },
+  { href: "/musteri/panel/ayarlar", label: "Ayarlar", icon: Settings },
+];
+
+/** Account menu for signed-in users; "Giriş Yap" link otherwise. */
+export function UserMenu({ className }: { className?: string }) {
   const { data: session, status } = useSession();
 
   if (status === "loading") {
-    return (
-      <Button variant="ghost" size="icon" className="animate-pulse">
-        <User className="h-5 w-5" />
-      </Button>
-    );
+    return <span aria-hidden className={cn("h-9 w-28 animate-pulse rounded-md bg-muted", className)} />;
   }
 
   if (!session?.user) {
     return (
-      <Button variant="ghost" size="icon" asChild>
-        <Link href="/musteri/giris">
-          <User className="h-5 w-5" />
-        </Link>
-      </Button>
+      <Link href="/musteri/giris" className={buttonClasses({ variant: "ghost", size: "sm", className })}>
+        <User aria-hidden className="size-4" />
+        Giriş Yap
+      </Link>
     );
   }
 
   const isAdmin = (session.user as { role?: string }).role === "ADMIN";
+  const initial = session.user.name?.trim().charAt(0).toLocaleUpperCase("tr-TR") || "K";
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-            {session.user.name?.charAt(0).toUpperCase() || "U"}
-          </div>
-        </Button>
+        <button
+          type="button"
+          aria-label="Hesap menüsü"
+          className={cn(
+            "inline-flex h-10 items-center gap-2 rounded-md border bg-background pl-1 pr-2 text-sm font-medium transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            className
+          )}
+        >
+          <span
+            aria-hidden
+            className="flex size-8 items-center justify-center rounded-[5px] bg-foreground text-xs font-semibold text-background"
+          >
+            {initial}
+          </span>
+          <span className="hidden xl:inline">Hesabım</span>
+          <ChevronDown aria-hidden className="size-3.5 text-muted-foreground" />
+        </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" sideOffset={8} className="z-[70] w-60">
         <div className="px-3 py-2">
-          <p className="text-sm font-medium">{session.user.name}</p>
-          <p className="text-xs text-muted-foreground">{session.user.email}</p>
+          <p className="truncate text-sm font-medium">{session.user.name}</p>
+          <p className="truncate text-xs text-muted-foreground">{session.user.email}</p>
         </div>
         <DropdownMenuSeparator />
-        {isAdmin && (
+        {isAdmin ? (
           <DropdownMenuItem asChild className="cursor-pointer">
             <Link href="/yonetim" className="flex items-center gap-2">
-              <LayoutDashboard className="h-4 w-4" />
+              <LayoutDashboard aria-hidden className="size-4" />
               <span>Yönetim Paneli</span>
             </Link>
           </DropdownMenuItem>
-        )}
-        <DropdownMenuItem asChild className="cursor-pointer">
-          <Link href="/musteri/panel" className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            <span>Müşteri Paneli</span>
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild className="cursor-pointer">
-          <Link href="/musteri/panel/ayarlar" className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            <span>Ayarlar</span>
-          </Link>
-        </DropdownMenuItem>
+        ) : null}
+        {panelLinks.map((link) => (
+          <DropdownMenuItem key={link.href} asChild className="cursor-pointer">
+            <Link href={link.href} className="flex items-center gap-2">
+              <link.icon aria-hidden className="size-4" />
+              <span>{link.label}</span>
+            </Link>
+          </DropdownMenuItem>
+        ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="cursor-pointer text-red-500 p-0">
-          <LogoutButton className="flex items-center gap-2 w-full px-2 py-1.5" />
+        <DropdownMenuItem className="cursor-pointer p-0 text-red-600 dark:text-red-400">
+          <LogoutButton className="flex w-full items-center gap-2 px-2 py-1.5" />
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

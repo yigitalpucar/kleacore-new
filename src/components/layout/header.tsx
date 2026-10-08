@@ -3,568 +3,419 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import {
-  Menu,
-  Moon,
-  Sun,
-  ShoppingCart,
-  ChevronDown,
-  Globe,
-  Server,
-  HardDrive,
-  Shield,
-  Database,
-  Cpu,
-  Cloud,
-  ArrowRight,
-  Sparkles,
-  Network,
-  Zap,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useSession } from "next-auth/react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight, ChevronDown, Menu, Moon, ShoppingCart, Sun } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useCartStore } from "@/store/cart-store";
+import { Container } from "@/components/site/container";
+import { buttonClasses } from "@/components/site/button-classes";
+import { UserMenu } from "./user-menu";
+import { companyLinks, navGroups, type NavGroup } from "./nav-data";
 
-const menuItems = [
-  {
-    title: "Alan Adı",
-    description: "Domain kayıt ve yönetim hizmetleri",
-    items: [
-      {
-        title: "Domain Kaydı",
-        href: "/domain/kayit",
-        description: "500+ uzantı ile yeni domain kaydedin",
-        icon: Globe,
-        badge: "Popüler",
-      },
-      {
-        title: "Domain Transferi",
-        href: "/domain/transfer",
-        description: "Mevcut domaininizi bize transfer edin",
-        icon: ArrowRight,
-      },
-      {
-        title: "Belgesiz .TR",
-        href: "/domain/belgesiz-tr",
-        description: "Belge gerektirmeyen .tr uzantıları",
-        icon: Sparkles,
-        badge: "Yeni",
-      },
-      {
-        title: "Whois Sorgulama",
-        href: "/domain/whois",
-        description: "Domain sahiplik bilgisi sorgulayın",
-        icon: Database,
-      },
-    ],
-    featured: {
-      title: ".com Domain",
-      description: "En popüler uzantıyı şimdi kaydedin",
-      price: "₺149/yıl",
-      href: "/domain/kayit",
-    },
-  },
-  {
-    title: "Hosting",
-    description: "Web barındırma çözümleri",
-    items: [
-      {
-        title: "Linux Hosting",
-        href: "/hosting/linux",
-        description: "cPanel ile güçlü Linux hosting",
-        icon: Server,
-        badge: "Popüler",
-      },
-      {
-        title: "WordPress Hosting",
-        href: "/hosting/wordpress",
-        description: "WordPress için optimize edilmiş",
-        icon: Cloud,
-      },
-      {
-        title: "Kurumsal Hosting",
-        href: "/hosting/kurumsal",
-        description: "Yüksek performanslı kurumsal çözümler",
-        icon: Database,
-      },
-      {
-        title: "Reseller Hosting",
-        href: "/hosting/reseller",
-        description: "Kendi hosting işinizi kurun",
-        icon: Network,
-      },
-    ],
-    featured: {
-      title: "Profesyonel Paket",
-      description: "En çok tercih edilen hosting paketi",
-      price: "₺99/ay",
-      href: "/hosting/linux",
-    },
-  },
-  {
-    title: "Sunucu",
-    description: "VDS, VPS ve fiziksel sunucu çözümleri",
-    items: [
-      {
-        title: "VDS Sunucular",
-        href: "/sunucu/vds",
-        description: "Sanal özel sunucu çözümleri",
-        icon: Server,
-        badge: "Popüler",
-      },
-      {
-        title: "VPS Sunucu",
-        href: "/sunucu/vps",
-        description: "Esnek sanal sunucu çözümleri",
-        icon: Server,
-      },
-      {
-        title: "Bulut Sunucu",
-        href: "/sunucu/bulut",
-        description: "Ölçeklenebilir bulut altyapısı",
-        icon: Cloud,
-        badge: "Yeni",
-      },
-      {
-        title: "Fiziksel Sunucular",
-        href: "/sunucu/fiziksel",
-        description: "Dedicated sunucu kiralama",
-        icon: Cpu,
-      },
-    ],
-    featured: {
-      title: "Bulut Sunucu",
-      description: "Esnek ve ölçeklenebilir bulut altyapısı",
-      price: "₺299/ay",
-      href: "/sunucu/bulut",
-    },
-  },
-  {
-    title: "Veri Merkezi",
-    description: "Colocation, güvenlik ve ağ hizmetleri",
-    items: [
-      {
-        title: "Sunucu Barındırma",
-        href: "/veri-merkezi/barindirma",
-        description: "Colocation hizmetleri",
-        icon: HardDrive,
-      },
-      {
-        title: "IPv4 & ASN",
-        href: "/veri-merkezi/ip-asn",
-        description: "IP adresi ve ASN kiralama",
-        icon: Network,
-      },
-      {
-        title: "CDN Hizmeti",
-        href: "/veri-merkezi/cdn",
-        description: "Global içerik dağıtım ağı",
-        icon: Globe,
-        badge: "Yeni",
-      },
-      {
-        title: "DDoS Koruma",
-        href: "/veri-merkezi/ddos-koruma",
-        description: "Gelişmiş DDoS saldırı koruması",
-        icon: Shield,
-      },
-    ],
-    featured: {
-      title: "DDoS Koruma",
-      description: "Layer 3-7 saldırılara karşı tam koruma",
-      price: "₺499/ay",
-      href: "/veri-merkezi/ddos-koruma",
-    },
-  },
-  {
-    title: "SSL Sertifikası",
-    description: "Web sitenizi güvenli hale getirin",
-    items: [
-      {
-        title: "Standart SSL",
-        href: "/ssl/standart",
-        description: "DV ve OV SSL sertifikaları",
-        icon: Shield,
-        badge: "Popüler",
-      },
-      {
-        title: "Wildcard SSL",
-        href: "/ssl/wildcard",
-        description: "Tüm alt domainler için tek sertifika",
-        icon: Globe,
-      },
-      {
-        title: "EV SSL",
-        href: "/ssl/ev",
-        description: "Yeşil adres çubuğu ile maksimum güven",
-        icon: Shield,
-        badge: "Premium",
-      },
-      {
-        title: "Kurumsal SSL",
-        href: "/ssl/kurumsal",
-        description: "Toplu SSL ve özel çözümler",
-        icon: Database,
-      },
-    ],
-    featured: {
-      title: "OV SSL",
-      description: "İşletmeler için önerilen SSL sertifikası",
-      price: "₺299/yıl",
-      href: "/ssl/standart",
-    },
-  },
-];
+const iconButton =
+  "relative inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-export function Header() {
-  const { setTheme, theme } = useTheme();
-  const [isOpen, setIsOpen] = React.useState(false);
-  const [scrolled, setScrolled] = React.useState(false);
-  const [activeMenu, setActiveMenu] = React.useState<string | null>(null);
+function Logo({ className }: { className?: string }) {
+  return (
+    <Link
+      href="/"
+      aria-label="KLEACORE ana sayfa"
+      className={cn(
+        "flex shrink-0 items-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4",
+        className
+      )}
+    >
+      <Image src="/logo.svg" alt="" width={132} height={28} className="hidden h-7 w-auto dark:block" priority />
+      <Image
+        src="/logo-light.svg"
+        alt=""
+        width={132}
+        height={28}
+        className="h-7 w-auto [filter:brightness(0)_saturate(100%)] dark:hidden"
+        priority
+      />
+    </Link>
+  );
+}
+
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  return (
+    <button
+      type="button"
+      className={iconButton}
+      aria-label="Açık/koyu temayı değiştir"
+      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+    >
+      <Sun aria-hidden className="size-[18px] rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
+      <Moon aria-hidden className="absolute size-[18px] rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
+    </button>
+  );
+}
+
+function CartButton({ className }: { className?: string }) {
   const totalItems = useCartStore((state) => state.getTotalItems());
   const hasHydrated = useCartStore((state) => state.hasHydrated);
+  const count = hasHydrated ? totalItems : 0;
+  return (
+    <Link
+      href="/sepet"
+      className={cn(iconButton, className)}
+      aria-label={count > 0 ? `Sepet, ${count} ürün` : "Sepet"}
+    >
+      <ShoppingCart aria-hidden className="size-[18px]" />
+      {count > 0 ? (
+        <span
+          aria-hidden
+          className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-semibold text-background"
+        >
+          {count > 99 ? "99+" : count}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
+function MegaPanel({ group, onNavigate, id }: { group: NavGroup; onNavigate: () => void; id: string }) {
+  return (
+    <motion.div
+      id={id}
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.16, ease: "easeOut" }}
+      className="absolute inset-x-0 top-full border-b bg-background shadow-[0_24px_40px_-24px_rgba(0,0,0,0.25)] backdrop-blur-xl"
+    >
+      <Container className="grid grid-cols-12 gap-8 py-8">
+        <div className="col-span-8">
+          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            {group.description}
+          </p>
+          <ul className="grid grid-cols-2 gap-1">
+            {group.items.map((item) => (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  onClick={onNavigate}
+                  className="group flex items-start gap-3 rounded-lg p-3 transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background transition-colors group-hover:border-foreground/20">
+                    <item.icon aria-hidden className="size-4 text-foreground/80" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{item.title}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{item.description}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="col-span-4">
+          <div className="dark relative flex h-full flex-col justify-between overflow-hidden rounded-xl bg-neutral-950 p-6 text-foreground ring-1 ring-white/10">
+            <div aria-hidden className="absolute inset-0 bg-grid mask-radial-top opacity-80" />
+            <div className="relative">
+              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Öne çıkan</p>
+              <p className="mt-3 text-lg font-semibold tracking-tight">{group.featured.title}</p>
+              <p className="mt-1.5 text-sm text-muted-foreground">{group.featured.description}</p>
+            </div>
+            <Link
+              href={group.featured.href}
+              onClick={onNavigate}
+              className={buttonClasses({ variant: "inverted", className: "relative mt-6 w-full" })}
+            >
+              {group.featured.cta}
+              <ArrowRight aria-hidden className="size-4" />
+            </Link>
+          </div>
+        </div>
+      </Container>
+    </motion.div>
+  );
+}
+
+export function Header() {
+  const pathname = usePathname();
+  const { data: session, status } = useSession();
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [active, setActive] = React.useState<string | null>(null);
+  const [scrolled, setScrolled] = React.useState(false);
+  const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Close menus on navigation.
+  React.useEffect(() => {
+    setActive(null);
+    setMobileOpen(false);
+  }, [pathname]);
+
+  React.useEffect(() => {
+    if (!active) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setActive(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [active]);
+
+  const open = (title: string) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setActive(title);
+  };
+  const scheduleClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setActive(null), 120);
+  };
+
+  const isLoggedIn = status === "authenticated" && Boolean(session?.user);
 
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 w-full transition-all duration-300",
-        scrolled
-          ? "bg-background/80 backdrop-blur-lg border-b shadow-sm"
-          : "bg-background/50 backdrop-blur-sm"
+        "sticky top-0 z-50 w-full border-b transition-colors duration-200",
+        scrolled || active
+          ? "border-border bg-background/85 backdrop-blur-xl"
+          : "border-transparent bg-background/60 backdrop-blur-md"
       )}
-      onMouseLeave={() => setActiveMenu(null)}
+      onMouseLeave={scheduleClose}
     >
-      <div className="container flex h-20 items-center justify-between">
-        {/* Logo */}
-        <Link href="/" className="flex items-center group">
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            transition={{ duration: 0.2 }}
-            className="relative"
-          >
-            <Image
-              src="/logo.svg"
-              alt="KLEACORE"
-              width={140}
-              height={30}
-              className="hidden dark:block h-8 w-auto"
-              priority
-            />
-            <Image
-              src="/logo-light.svg"
-              alt="KLEACORE"
-              width={140}
-              height={30}
-              className="dark:hidden h-8 w-auto [filter:brightness(0)_saturate(100%)]"
-              priority
-            />
-          </motion.div>
-        </Link>
+      <Container className="flex h-16 items-center gap-2">
+        <Logo />
 
-        {/* Desktop Navigation */}
-        <nav className="hidden lg:flex items-center gap-1">
-          {menuItems.map((menu) => (
-            <div
-              key={menu.title}
-              className="relative"
-              onMouseEnter={() => setActiveMenu(menu.title)}
-            >
-              <button
-                className={cn(
-                  "flex items-center gap-1.5 px-5 py-2.5 text-base font-medium rounded-lg transition-colors",
-                  activeMenu === menu.title
-                    ? "text-primary bg-primary/5"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                )}
-              >
-                {menu.title}
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 transition-transform duration-200",
-                    activeMenu === menu.title && "rotate-180"
-                  )}
-                />
-              </button>
-            </div>
-          ))}
-
+        <nav aria-label="Ana menü" className="ml-6 hidden lg:block">
+          <ul className="flex items-center">
+            {navGroups.map((group) => {
+              const isActive = active === group.title;
+              const panelId = `mega-${group.title.toLowerCase().replace(/\s+/g, "-")}`;
+              const current = group.items.some((item) => pathname?.startsWith(item.href));
+              return (
+                <li key={group.title} onMouseEnter={() => open(group.title)}>
+                  <button
+                    type="button"
+                    aria-expanded={isActive}
+                    aria-controls={panelId}
+                    onClick={() => (isActive ? setActive(null) : open(group.title))}
+                    className={cn(
+                      "inline-flex h-10 items-center gap-1 rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      isActive || current
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                      isActive && "bg-muted/70"
+                    )}
+                  >
+                    {group.title}
+                    <ChevronDown
+                      aria-hidden
+                      className={cn("size-3.5 transition-transform duration-200", isActive && "rotate-180")}
+                    />
+                  </button>
+                  <AnimatePresence>
+                    {isActive ? (
+                      <MegaPanel group={group} id={panelId} onNavigate={() => setActive(null)} />
+                    ) : null}
+                  </AnimatePresence>
+                </li>
+              );
+            })}
+          </ul>
         </nav>
 
-        {/* Right Side Actions */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-            className="relative"
-          >
-            <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          </Button>
+        <div className="ml-auto flex items-center gap-0.5">
+          <ThemeToggle />
+          <CartButton />
+          <div className="ml-2 hidden items-center gap-2 lg:flex">
+            {status === "loading" ? (
+              <span aria-hidden className="h-9 w-36 animate-pulse rounded-md bg-muted" />
+            ) : isLoggedIn ? (
+              <UserMenu />
+            ) : (
+              <>
+                <Link href="/musteri/giris" className={buttonClasses({ variant: "ghost", size: "sm" })}>
+                  Giriş Yap
+                </Link>
+                <Link href="/musteri/giris" className={buttonClasses({ variant: "primary", size: "sm" })}>
+                  Kayıt Ol
+                </Link>
+              </>
+            )}
+          </div>
 
-          <Button variant="ghost" size="icon" className="hidden sm:flex relative" asChild>
-            <Link href="/sepet" aria-label="Sepet">
-              <ShoppingCart className="h-5 w-5" />
-              {hasHydrated && totalItems > 0 ? (
-                <span className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold px-1 flex items-center justify-center">
-                  {totalItems > 99 ? "99+" : totalItems}
-                </span>
-              ) : null}
-            </Link>
-          </Button>
-
-          {/* Mobile Menu */}
-          <Sheet open={isOpen} onOpenChange={setIsOpen}>
-            <SheetTrigger asChild className="lg:hidden">
-              <Button variant="ghost" size="icon">
-                <Menu className="h-5 w-5" />
-              </Button>
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger asChild>
+              <button type="button" className={cn(iconButton, "lg:hidden")} aria-label="Menüyü aç">
+                <Menu aria-hidden className="size-5" />
+              </button>
             </SheetTrigger>
-            <SheetContent
-              side="right"
-              className="flex w-[min(100vw-2rem,380px)] flex-col gap-0 overflow-hidden p-0 sm:w-[400px]"
-            >
-              <SheetHeader className="border-b px-6 py-5 text-left">
+            <SheetContent side="right" className="flex w-[min(100vw-1.5rem,400px)] flex-col gap-0 p-0">
+              <SheetHeader className="border-b px-5 py-4 text-left">
                 <SheetTitle className="text-left">
-                  <Image
-                    src="/logo.svg"
-                    alt="KLEACORE"
-                    width={120}
-                    height={26}
-                    className="hidden h-6 w-auto dark:block"
-                  />
+                  <span className="sr-only">KLEACORE menü</span>
+                  <Image src="/logo.svg" alt="" width={112} height={24} className="hidden h-6 w-auto dark:block" />
                   <Image
                     src="/logo-light.svg"
-                    alt="KLEACORE"
-                    width={120}
-                    height={26}
+                    alt=""
+                    width={112}
+                    height={24}
                     className="h-6 w-auto [filter:brightness(0)_saturate(100%)] dark:hidden"
                   />
                 </SheetTitle>
+                <SheetDescription className="sr-only">Site menüsü</SheetDescription>
               </SheetHeader>
 
-              <nav className="flex-1 overflow-y-auto px-4 py-4">
-                <div className="mb-4 grid grid-cols-2 gap-2">
-                  <Button variant="outline" size="sm" className="h-11" asChild>
-                    <Link href="/domain/kayit" onClick={() => setIsOpen(false)}>
-                      Domain Sorgula
-                    </Link>
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-11" asChild>
-                    <Link href="/hosting/linux" onClick={() => setIsOpen(false)}>
-                      Hosting
-                    </Link>
-                  </Button>
-                </div>
-
-                {menuItems.map((menu, index) => (
-                  <MobileNavSection
-                    key={menu.title}
-                    title={menu.title}
-                    items={menu.items}
-                    defaultOpen={index === 0}
-                    onClose={() => setIsOpen(false)}
+              <nav aria-label="Mobil menü" className="flex-1 overflow-y-auto px-3 py-3">
+                {navGroups.map((group, index) => (
+                  <MobileGroup
+                    key={group.title}
+                    group={group}
+                    defaultOpen={index === 1}
+                    onNavigate={() => setMobileOpen(false)}
                   />
                 ))}
+                <div className="mt-3 border-t border-dashed pt-3">
+                  <p className="px-2 pb-1 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                    Kurumsal
+                  </p>
+                  <ul className="grid grid-cols-2">
+                    {companyLinks.slice(0, 4).map((link) => (
+                      <li key={link.href}>
+                        <Link
+                          href={link.href}
+                          onClick={() => setMobileOpen(false)}
+                          className="flex min-h-11 items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                        >
+                          {link.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </nav>
 
-              <div className="mt-auto border-t bg-muted/30 p-4">
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" className="h-11" asChild>
-                    <Link href="/musteri/giris" onClick={() => setIsOpen(false)}>
-                      Giriş Yap
+              <div className="border-t bg-muted/30 p-4">
+                {isLoggedIn ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      href="/musteri/panel"
+                      onClick={() => setMobileOpen(false)}
+                      className={buttonClasses({ variant: "primary" })}
+                    >
+                      Müşteri Paneli
                     </Link>
-                  </Button>
-                  <Button className="h-11" asChild>
-                    <Link href="/sepet" onClick={() => setIsOpen(false)}>
-                      Sepet
-                      {hasHydrated && totalItems > 0 ? ` (${totalItems})` : ""}
-                    </Link>
-                  </Button>
-                </div>
+                    <MobileCartLink onNavigate={() => setMobileOpen(false)} />
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Link
+                        href="/musteri/giris"
+                        onClick={() => setMobileOpen(false)}
+                        className={buttonClasses({ variant: "outline" })}
+                      >
+                        Giriş Yap
+                      </Link>
+                      <Link
+                        href="/musteri/giris"
+                        onClick={() => setMobileOpen(false)}
+                        className={buttonClasses({ variant: "primary" })}
+                      >
+                        Kayıt Ol
+                      </Link>
+                    </div>
+                    <MobileCartLink onNavigate={() => setMobileOpen(false)} />
+                  </div>
+                )}
               </div>
             </SheetContent>
           </Sheet>
         </div>
-      </div>
-
-      {/* Mega Menu Dropdown */}
-      {activeMenu && (
-        <div
-          className="absolute left-0 right-0 top-full border-b bg-background/95 backdrop-blur-lg shadow-lg"
-          onMouseEnter={() => setActiveMenu(activeMenu)}
-          onMouseLeave={() => setActiveMenu(null)}
-        >
-            <div className="container py-6">
-              {menuItems
-                .filter((m) => m.title === activeMenu)
-                .map((menu) => (
-                  <div key={menu.title} className="grid grid-cols-12 gap-8">
-                    {/* Menu Items */}
-                    <div className="col-span-8">
-                      <div className="mb-4">
-                        <h3 className="text-lg font-semibold">{menu.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {menu.description}
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        {menu.items.map((item) => (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            className="group flex items-start gap-4 p-4 rounded-xl hover:bg-accent transition-colors"
-                            onClick={() => setActiveMenu(null)}
-                          >
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                              <item.icon className="h-5 w-5" />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium group-hover:text-primary transition-colors">
-                                  {item.title}
-                                </span>
-                                {item.badge && (
-                                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-primary/10 text-primary">
-                                    {item.badge}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-sm text-muted-foreground mt-0.5">
-                                {item.description}
-                              </p>
-                            </div>
-                            <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Featured Card */}
-                    <div className="col-span-4">
-                      <div className="h-full rounded-2xl bg-gradient-to-br from-muted via-muted/50 to-muted p-6 border border-border">
-                        <div className="flex flex-col h-full">
-                          <span className="text-xs font-medium text-primary uppercase tracking-wider">
-                            Öne Çıkan
-                          </span>
-                          <h4 className="text-xl font-bold mt-2">
-                            {menu.featured.title}
-                          </h4>
-                          <p className="text-sm text-muted-foreground mt-1 flex-1">
-                            {menu.featured.description}
-                          </p>
-                          <div className="mt-4">
-                            <div className="text-2xl font-bold text-primary mb-3">
-                              {menu.featured.price}
-                            </div>
-                            <Button
-                              className="w-full bg-foreground text-background hover:bg-foreground/90"
-                              asChild
-                            >
-                              <Link
-                                href={menu.featured.href}
-                                onClick={() => setActiveMenu(null)}
-                              >
-                                Hemen Başla
-                                <ArrowRight className="ml-2 h-4 w-4" />
-                              </Link>
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
+      </Container>
     </header>
   );
 }
 
-function MobileNavSection({
-  title,
-  items,
-  onClose,
+function MobileCartLink({ onNavigate }: { onNavigate: () => void }) {
+  const totalItems = useCartStore((state) => state.getTotalItems());
+  const hasHydrated = useCartStore((state) => state.hasHydrated);
+  const count = hasHydrated ? totalItems : 0;
+  return (
+    <Link href="/sepet" onClick={onNavigate} className={buttonClasses({ variant: "outline" })}>
+      <ShoppingCart aria-hidden className="size-4" />
+      Sepet{count > 0 ? ` (${count})` : ""}
+    </Link>
+  );
+}
+
+function MobileGroup({
+  group,
+  onNavigate,
   defaultOpen = false,
 }: {
-  title: string;
-  items: {
-    title: string;
-    href: string;
-    description: string;
-    icon: React.ElementType;
-    badge?: string;
-  }[];
-  onClose: () => void;
+  group: NavGroup;
+  onNavigate: () => void;
   defaultOpen?: boolean;
 }) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-  const sectionId = `mobile-nav-${title.toLowerCase().replace(/\s+/g, "-")}`;
+  const [open, setOpen] = React.useState(defaultOpen);
+  const id = `mobile-nav-${group.title.toLowerCase().replace(/\s+/g, "-")}`;
 
   return (
-    <div className="border-b border-border/60 py-1 last:border-b-0">
+    <div className="border-b border-dashed py-1 last:border-b-0">
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-expanded={isOpen}
-        aria-controls={sectionId}
-        className="flex min-h-11 w-full items-center justify-between rounded-lg px-2 text-base font-medium transition-colors hover:bg-accent"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-controls={id}
+        className="flex min-h-12 w-full items-center justify-between rounded-md px-2 text-base font-medium transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {title}
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 transition-transform duration-200",
-            isOpen && "rotate-180"
-          )}
-        />
+        {group.title}
+        <ChevronDown aria-hidden className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
       </button>
       <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            id={sectionId}
+        {open ? (
+          <motion.ul
+            id={id}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="mt-1 flex flex-col gap-1 overflow-hidden pb-2"
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden pb-2"
           >
-            {items.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                onClick={onClose}
-              >
-                <item.icon className="h-4 w-4 shrink-0 text-primary" />
-                <span className="font-medium">{item.title}</span>
-                {item.badge ? (
-                  <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                    {item.badge}
+            {group.items.map((item) => (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  onClick={onNavigate}
+                  className="flex min-h-11 items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted/60"
+                >
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+                    <item.icon aria-hidden className="size-4 text-foreground/80" />
                   </span>
-                ) : null}
-              </Link>
+                  <span className="min-w-0">
+                    <span className="block font-medium">{item.title}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
+                  </span>
+                </Link>
+              </li>
             ))}
-          </motion.div>
-        )}
+          </motion.ul>
+        ) : null}
       </AnimatePresence>
     </div>
   );
