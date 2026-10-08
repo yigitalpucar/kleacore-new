@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getCustomerById } from "@/lib/dal/customers";
 import { CustomerDetailContent, type CustomerDetail } from "./content";
+import { requirePermission } from "@/lib/utils/auth-helpers";
+import { hasPermission } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,8 @@ export const metadata: Metadata = { title: "Müşteri detayı" };
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
 export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await requirePermission("customers.view");
+  const role = session.user.role;
   const { id } = await params;
   const c = await getCustomerById(id);
 
@@ -29,7 +33,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
     address: c.address,
     city: c.city,
     country: c.country,
-    balance: Number(c.balance ?? 0),
+    balance: hasPermission(role, "invoices.view") ? Number(c.balance ?? 0) : 0,
     isReseller: c.isReseller,
     twoFactorEnabled: c.twoFactorEnabled,
     emailVerifiedAt: iso(c.emailVerifiedAt),
@@ -47,7 +51,8 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
       nextDueDate: iso(s.nextDueDate),
       expiresAt: iso(s.expiresAt),
     })),
-    orders: c.orders.map((o) => ({
+    // Billing/order data only for roles that may see it (e.g. not SUPPORT).
+    orders: !hasPermission(role, "orders.view") ? [] : c.orders.map((o) => ({
       id: o.id,
       orderNumber: o.orderNumber,
       productName: o.product?.name ?? "—",
@@ -56,7 +61,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
       totalAmount: Number(o.totalAmount ?? 0),
       createdAt: o.createdAt.toISOString(),
     })),
-    invoices: c.invoices.map((i) => ({
+    invoices: !hasPermission(role, "invoices.view") ? [] : c.invoices.map((i) => ({
       id: i.id,
       invoiceNumber: i.invoiceNumber,
       status: i.status,
@@ -72,7 +77,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
       priority: t.priority,
       createdAt: t.createdAt.toISOString(),
     })),
-    transactions: c.transactions.map((t) => ({
+    transactions: !hasPermission(role, "invoices.view") ? [] : c.transactions.map((t) => ({
       id: t.id,
       type: t.type,
       amount: Number(t.amount ?? 0),
@@ -84,5 +89,5 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
     sslCount: c.sslCertificates.length,
   };
 
-  return <CustomerDetailContent customer={customer} />;
+  return <CustomerDetailContent customer={customer} role={role} />;
 }

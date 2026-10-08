@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import type { StaffRole } from "@/lib/auth/permissions";
 import { findAdminSection, type AdminCounts } from "./admin-nav-config";
 
 /**
@@ -12,9 +13,9 @@ import { findAdminSection, type AdminCounts } from "./admin-nav-config";
  * shell above every page; shows only when the current path is one of the
  * section's tabs, so detail and edit pages stay clean.
  */
-export function AdminSectionTabs({ counts }: { counts: AdminCounts }) {
+export function AdminSectionTabs({ counts, role }: { counts: AdminCounts; role: StaffRole }) {
   const pathname = usePathname() ?? "";
-  const section = findAdminSection(pathname);
+  const section = findAdminSection(pathname, role);
   const listRef = React.useRef<HTMLUListElement>(null);
 
   // Keep the active tab visible when the row scrolls (phones).

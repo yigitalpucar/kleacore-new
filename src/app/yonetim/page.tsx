@@ -14,6 +14,7 @@ import {
   type StatusTone,
 } from "@/components/app";
 import { DashboardRecentOrders } from "@/components/admin/dashboard-recent-orders";
+import { ROLE_LABELS, canAccessRoute, hasPermission, isStaffRole, type Permission } from "@/lib/auth/permissions";
 import { getActivityLogs } from "@/lib/dal/activity-logs";
 import { getAdminDashboardStats } from "@/lib/dal/dashboard";
 import { getInvoiceStats } from "@/lib/dal/invoices";
@@ -24,6 +25,7 @@ import { formatTRY } from "@/lib/format/price";
 import { daysUntil, formatDate, formatDateLong, formatDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 import { add, money as toMoney, sum, toNumber } from "@/lib/money";
+import { requireStaff } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,15 @@ function customerName(c: { name: string; surname: string } | null | undefined) {
 }
 
 export default async function AdminDashboard() {
+  // Any staff role sees the dashboard; each block is shown only with its permission.
+  const session = await requireStaff();
+  const role = session.user.role;
+  const can = (permission: Permission) => hasPermission(role, permission);
+  const canOpen = (href: string) => canAccessRoute(role, href);
+  const showFinance = can("invoices.view");
+  const showOrders = can("orders.view");
+  const showActivity = can("activity.view");
+
   const now = new Date();
   const months = lastMonths(now, 6);
   const chartFrom = new Date(now.getFullYear(), now.getMonth() - 5, 1);
@@ -84,13 +95,14 @@ export default async function AdminDashboard() {
     customer: o.customer ? { id: o.customer.id, name: customerName(o.customer) } : null,
   }));
 
-  const todo: { label: string; value: number; href: string; tone: StatusTone; hint: string }[] = [
+  const todoAll: { label: string; value: number; href: string; tone: StatusTone; hint: string }[] = [
     { label: "Onay bekleyen sipariş", value: orderStats.pending, href: "/yonetim/siparisler/beklemede", tone: "warning", hint: "Beklemede" },
     { label: "İşlemdeki sipariş", value: orderStats.processing, href: "/yonetim/siparisler/tum-siparisler", tone: "info", hint: "Kurulum sürüyor" },
     { label: "Yanıt bekleyen talep", value: data.pendingTickets, href: "/yonetim/destek", tone: "warning", hint: "Açık veya müşteri yanıtladı" },
     { label: "Gecikmiş fatura", value: invoiceStats.overdue, href: "/yonetim/faturalar/gecikmis", tone: "danger", hint: "Vadesi geçti" },
     { label: "Askıdaki hizmet", value: serviceStats.suspended, href: "/yonetim/hizmetler/askida", tone: "warning", hint: "Erişim kapalı" },
   ];
+  const todo = todoAll.filter((t) => canOpen(t.href));
 
   const invoiceMix = [
     { label: "Ödendi", value: invoiceStats.paid, tone: "success" as const, cls: "bg-foreground" },
@@ -106,26 +118,33 @@ export default async function AdminDashboard() {
         description={`${formatDateLong(now)} itibarıyla satış, tahsilat ve destek durumu.`}
         actions={
           <>
-            <Link href="/yonetim/musteri-ekle" className={appButton({ variant: "outline" })}>
-              <UserPlus aria-hidden />
-              Müşteri ekle
-            </Link>
-            <Link href="/yonetim/faturalar/olustur" className={appButton()}>
-              <FilePlus aria-hidden />
-              Fatura oluştur
-            </Link>
+            {can("customers.edit") && (
+              <Link href="/yonetim/musteri-ekle" className={appButton({ variant: "outline" })}>
+                <UserPlus aria-hidden />
+                Müşteri ekle
+              </Link>
+            )}
+            {can("invoices.edit") && (
+              <Link href="/yonetim/faturalar/olustur" className={appButton()}>
+                <FilePlus aria-hidden />
+                Fatura oluştur
+              </Link>
+            )}
           </>
         }
       />
 
       <StatGrid columns={4}>
-        <StatCard
+        {showFinance && (
+          <StatCard
           label="Bu ay tahsilat"
           value={money(Number(data.monthlyRevenue))}
           hint={`Toplam tahsilat ${money(Number(data.totalRevenue))}`}
           href="/yonetim/faturalar/odendi"
-        />
-        <StatCard
+          />
+        )}
+        {showFinance && (
+          <StatCard
           label="Açık alacak"
           value={money(Math.max(0, Number(invoiceStats.unpaidAmount)))}
           hint={
@@ -135,23 +154,29 @@ export default async function AdminDashboard() {
           }
           tone={invoiceStats.overdue ? "danger" : undefined}
           href="/yonetim/faturalar/bekleyen"
-        />
-        <StatCard
+          />
+        )}
+        {canOpen("/yonetim/hizmetler") && (
+          <StatCard
           label="Aktif hizmet"
           value={num(serviceStats.active)}
           hint={`${num(serviceStats.total)} hizmetin ${num(serviceStats.suspended)} tanesi askıda`}
           tone={serviceStats.suspended ? "warning" : undefined}
           href="/yonetim/hizmetler/aktif"
-        />
-        <StatCard
+          />
+        )}
+        {canOpen("/yonetim/musteriler") && (
+          <StatCard
           label="Müşteri"
           value={num(data.totalCustomers)}
           hint={data.newCustomersThisMonth ? `Bu ay ${num(data.newCustomersThisMonth)} yeni kayıt` : "Bu ay yeni kayıt yok"}
           href="/yonetim/musteriler"
-        />
+          />
+        )}
       </StatGrid>
 
-      <div className="grid items-start gap-6 lg:grid-cols-3">
+      <div className={cn("grid items-start gap-6", showFinance && "lg:grid-cols-3")}>
+        {showFinance && (
         <ChartCard
           className="lg:col-span-2"
           title="Aylık tahsilat"
@@ -161,12 +186,15 @@ export default async function AdminDashboard() {
           height={200}
           emptyText="Son 6 ayda ödenmiş fatura yok."
           actions={
-            <Link href="/yonetim/raporlar" className={appButton({ variant: "ghost", size: "sm" })}>
-              Raporlar
-              <ArrowRight aria-hidden />
-            </Link>
+            can("reports.view") ? (
+              <Link href="/yonetim/raporlar" className={appButton({ variant: "ghost", size: "sm" })}>
+                Raporlar
+                <ArrowRight aria-hidden />
+              </Link>
+            ) : undefined
           }
         />
+        )}
 
         <SectionCard title="Bekleyen işler" description="Müdahale gerektiren kayıtlar" flush>
           <ul className="divide-y">
@@ -192,9 +220,11 @@ export default async function AdminDashboard() {
         </SectionCard>
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-3">
+      {(showOrders || showFinance) && (
+      <div className={cn("grid items-start gap-6", showOrders && showFinance && "lg:grid-cols-3")}>
+        {showOrders && (
         <SectionCard
-          className="lg:col-span-2"
+          className={showFinance ? "lg:col-span-2" : undefined}
           title="Son siparişler"
           description={`Toplam ${num(orderStats.total)} sipariş, ${num(orderStats.completed)} tamamlandı`}
           flush
@@ -207,7 +237,9 @@ export default async function AdminDashboard() {
         >
           <DashboardRecentOrders orders={recentOrders} />
         </SectionCard>
+        )}
 
+        {showFinance && (
         <SectionCard title="Fatura durumu" description={`${num(invoiceStats.total)} fatura`}>
           {mixTotal > 0 ? (
             <div className="space-y-4">
@@ -238,9 +270,13 @@ export default async function AdminDashboard() {
             <EmptyState compact title="Henüz fatura yok" />
           )}
         </SectionCard>
+        )}
       </div>
+      )}
 
-      <div className="grid items-start gap-6 lg:grid-cols-2">
+      {(showFinance || showActivity) && (
+      <div className={cn("grid items-start gap-6", showFinance && showActivity && "lg:grid-cols-2")}>
+        {showFinance && (
         <SectionCard
           title="Yaklaşan ödemeler"
           description="30 gün içinde vadesi dolan veya geçmiş faturalar"
@@ -288,7 +324,9 @@ export default async function AdminDashboard() {
             </div>
           )}
         </SectionCard>
+        )}
 
+        {showActivity && (
         <SectionCard
           title="Son aktivite"
           description="Panel ve müşteri işlemleri"
@@ -309,7 +347,7 @@ export default async function AdminDashboard() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm">
                       <span className="font-medium">{log.user ? customerName(log.user) : "Sistem"}</span>
-                      <span className="text-muted-foreground"> · {log.user?.role === "ADMIN" ? "yönetici" : "müşteri"}</span>
+                      <span className="text-muted-foreground"> · {log.user && isStaffRole(log.user.role) ? ROLE_LABELS[log.user.role].toLocaleLowerCase("tr-TR") : "müşteri"}</span>
                     </p>
                     <p className="mt-0.5 truncate font-mono text-[12px] text-muted-foreground">
                       {log.entity} · {log.action}
@@ -327,7 +365,9 @@ export default async function AdminDashboard() {
             </div>
           )}
         </SectionCard>
+        )}
       </div>
+      )}
     </>
   );
 }

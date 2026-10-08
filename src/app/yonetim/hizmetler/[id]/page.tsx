@@ -7,6 +7,8 @@ import { getServiceModuleView } from "@/lib/modules/admin-view";
 import { getProxmoxAdminView } from "@/lib/modules/server-panel";
 import { omitModuleData } from "@/lib/modules/service-state";
 import { getPanelCapabilities } from "@/lib/services/panel-access";
+import { requirePermission } from "@/lib/utils/auth-helpers";
+import { hasPermission } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,8 @@ export default async function ServiceDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const session = await requirePermission("services.view");
+  const canManage = hasPermission(session.user.role, "services.manage");
   const { id } = await params;
   const service = await getServiceById(id);
 
@@ -36,7 +40,9 @@ export default async function ServiceDetailPage({
       service={serializeMoney({ ...rest, hasPanelPassword: Boolean(panelPassword) })}
       moduleView={moduleView}
       proxmoxView={proxmoxView}
-      panelLogin={!proxmoxView && panel.sso && (service.status === "ACTIVE" || service.status === "SUSPENDED")}
+      canManage={canManage}
+      canCreateInvoice={hasPermission(session.user.role, "invoices.edit")}
+      panelLogin={canManage && !proxmoxView && panel.sso && (service.status === "ACTIVE" || service.status === "SUSPENDED")}
     />
   );
 }

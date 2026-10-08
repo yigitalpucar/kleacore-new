@@ -5,6 +5,8 @@ import {
   getActivityLogStats,
   getActivityLogUsers,
 } from "@/lib/dal/activity-logs";
+import { hasPermission } from "@/lib/auth/permissions";
+import { requireAnyPermission } from "@/lib/utils/auth-helpers";
 import { parsePagination } from "@/lib/utils/pagination";
 import { AktiviteContent } from "./content";
 
@@ -25,7 +27,11 @@ export default async function AktivitePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const session = await requireAnyPermission("activity.view", "activity.view_own");
+  // Without activity.view (e.g. SUPPORT) only the staff member's own entries.
+  const ownOnly = !hasPermission(session.user.role, "activity.view");
   const sp = await searchParams;
+  const userIdFilter = ownOnly ? session.user.id : readSearchParam(sp, "userId");
   const parsed = parsePagination(sp);
   // 50 rows per server page unless ?perPage= is given.
   const pagination = { ...parsed, perPage: sp.perPage ? parsed.perPage : 50 };
@@ -33,15 +39,15 @@ export default async function AktivitePage({
   const [result, stats, filterOptions, activityUsers] = await Promise.all([
     getActivityLogs({
       ...pagination,
-      userId: readSearchParam(sp, "userId"),
+      userId: userIdFilter,
       entity: readSearchParam(sp, "entity"),
       action: readSearchParam(sp, "action"),
       dateFrom: readSearchParam(sp, "dateFrom"),
       dateTo: readSearchParam(sp, "dateTo"),
     }),
-    getActivityLogStats(),
+    getActivityLogStats(ownOnly ? session.user.id : undefined),
     getActivityLogFilterOptions(),
-    getActivityLogUsers(),
+    ownOnly ? Promise.resolve([]) : getActivityLogUsers(),
   ]);
 
   return (
@@ -64,7 +70,7 @@ export default async function AktivitePage({
       filterOptions={filterOptions}
       activityUsers={activityUsers}
       filters={{
-        userId: readSearchParam(sp, "userId") ?? "",
+        userId: userIdFilter ?? "",
         entity: readSearchParam(sp, "entity") ?? "",
         action: readSearchParam(sp, "action") ?? "",
         dateFrom: readSearchParam(sp, "dateFrom") ?? "",

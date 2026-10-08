@@ -1,5 +1,6 @@
 "use client";
 
+import { ROLE_LABELS, isStaffRole } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ScrollText, Search, X } from "lucide-react";
@@ -136,8 +137,8 @@ function getEntityLink(entity: string, entityId: string | null) {
 const userName = (u: ActivityLogUser) => `${u.name} ${u.surname}`.trim() || u.email;
 
 function RoleBadge({ role }: { role: string }) {
-  return role === "ADMIN" ? (
-    <StatusBadge tone="neutral" label="Yönetici" />
+  return isStaffRole(role) ? (
+    <StatusBadge tone="neutral" label={ROLE_LABELS[role]} />
   ) : (
     <StatusBadge tone="muted" label="Müşteri" />
   );
@@ -296,7 +297,7 @@ export function AktiviteContent({
               {activityUsers.map((user) => (
                 <option key={user.id} value={user.id}>
                   {`${user.name} ${user.surname}`.trim()}
-                  {user.role === "ADMIN" ? " (Yönetici)" : ""}
+                  {isStaffRole(user.role) ? ` (${ROLE_LABELS[user.role]})` : ""}
                 </option>
               ))}
             </select>
