@@ -38,6 +38,7 @@ import { monthlyEquivalent, periodTotal } from "@/lib/billing/period-price";
 import { formatTRY } from "@/lib/format/price";
 import { billingPeriodLabel, billingPeriodUnit, formatDate, formatDateTime } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
+import { ServiceModuleCard, type ServiceModuleView } from "@/components/admin/modules/service-module-card";
 
 type DateLike = Date | string;
 
@@ -90,6 +91,7 @@ interface ServiceDetailData {
 
 interface ServiceDetailContentProps {
   service: ServiceDetailData;
+  moduleView: ServiceModuleView;
 }
 
 type BackupRow = ServiceDetailData["backups"][number];
@@ -129,7 +131,7 @@ const backupColumns: ColumnDef<BackupRow>[] = [
   },
 ];
 
-export function ServiceDetailContent({ service }: ServiceDetailContentProps) {
+export function ServiceDetailContent({ service, moduleView }: ServiceDetailContentProps) {
   const router = useRouter();
 
   const handleSuspendService = async () => {
@@ -295,6 +297,8 @@ export function ServiceDetailContent({ service }: ServiceDetailContentProps) {
               </div>
             </SectionCard>
           ) : null}
+
+          <ServiceModuleCard serviceId={service.id} view={moduleView} legacyServerName={service.serverName} />
 
           <SectionCard
             title="Yedekler"

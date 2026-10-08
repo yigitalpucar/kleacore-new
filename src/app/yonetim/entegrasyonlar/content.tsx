@@ -1,8 +1,9 @@
 "use client";
 
-import { Activity } from "lucide-react";
+import Link from "next/link";
+import { Activity, Blocks } from "lucide-react";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { PageHeader, StatCard, StatGrid } from "@/components/app";
+import { PageHeader, StatCard, StatGrid, appButton } from "@/components/app";
 import { formatDateTime } from "@/lib/format/date";
 import { ApiSection } from "@/components/admin-b/integrations/api-section";
 import { CpanelSection } from "@/components/admin-b/integrations/cpanel-section";
@@ -103,7 +104,13 @@ export function EntegrasyonlarContent({
 
       <PageHeader
         title="Entegrasyonlar ve modüller"
-        description="Harici servisleri ve sistem modüllerini tek yerden yönetin."
+        description="Harici servisleri ve sistem modüllerini tek yerden yönetin. Birden fazla sunucu (WHM/Proxmox) ve ürün bağlantıları Modüller ekranındadır; buradaki cPanel, registrar ve VPS ayarları oradaki eşlenik örnekleri de günceller."
+        actions={
+          <Link href="/yonetim/moduller" className={appButton({ variant: "outline" })}>
+            <Blocks aria-hidden />
+            Modüller
+          </Link>
+        }
         meta={
           <span className="inline-flex items-center gap-1.5">
             <Activity aria-hidden className="size-4" />

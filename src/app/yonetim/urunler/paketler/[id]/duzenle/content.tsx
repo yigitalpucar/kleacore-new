@@ -10,6 +10,8 @@ import { defaultResourceLimits } from "@/lib/products/constants";
 import type { ProductFormData, BillingPeriod } from "@/types/products";
 import { updateProduct } from "@/lib/actions/admin/products";
 import { ProductConfigOptionsSection } from "@/components/admin/product-config-options-section";
+import { ProductAutomationSection } from "@/components/admin/modules/product-automation-section";
+import type { ProductBindingOption } from "@/lib/modules/admin-view";
 import { toast } from "@/lib/toast";
 import type { ProductConfigOption as ProductConfigOptionRow } from "@prisma/client";
 import type { Serialized } from "@/lib/money";
@@ -60,14 +62,13 @@ interface ProductWithRelations {
 interface EditPackageContentProps {
   product: ProductWithRelations;
   configOptions: ProductConfigOption[];
+  automation: {
+    current: { moduleInstanceId: string | null; moduleOptions: Record<string, unknown> };
+    options: ProductBindingOption[];
+  };
 }
 
-interface EditPackageContentProps {
-  product: ProductWithRelations;
-  configOptions: ProductConfigOption[];
-}
-
-export const EditPackageContent = ({ product, configOptions }: EditPackageContentProps) => {
+export const EditPackageContent = ({ product, configOptions, automation }: EditPackageContentProps) => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -224,7 +225,17 @@ export const EditPackageContent = ({ product, configOptions }: EditPackageConten
         mode="edit"
         formData={formData}
         setFormData={setFormData}
-        configuration={<ProductConfigOptionsSection productId={product.id} initialOptions={configOptions} />}
+        configuration={
+          <div className="space-y-6">
+            <ProductAutomationSection
+              productId={product.id}
+              categoryName={product.category.name}
+              current={automation.current}
+              options={automation.options}
+            />
+            <ProductConfigOptionsSection productId={product.id} initialOptions={configOptions} />
+          </div>
+        }
       />
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-4">

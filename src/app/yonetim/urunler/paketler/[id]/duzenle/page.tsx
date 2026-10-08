@@ -4,6 +4,7 @@ import { getProductById } from "@/lib/dal/products";
 import { getAdminProductConfigOptions } from "@/lib/actions/admin/product-config-options";
 import { EditPackageContent } from "./content";
 import { serializeMoney } from "@/lib/money";
+import { getProductBindingOptions } from "@/lib/modules/admin-view";
 
 export const dynamic = "force-dynamic";
 
@@ -22,5 +23,16 @@ export default async function EditPackagePage({
 
   if (!product) return notFound();
 
-  return <EditPackageContent product={serializeMoney(product)} configOptions={configOptions} />;
+  const moduleOptions =
+    product.moduleOptions && typeof product.moduleOptions === "object" && !Array.isArray(product.moduleOptions)
+      ? (product.moduleOptions as Record<string, unknown>)
+      : {};
+  const automation = {
+    current: { moduleInstanceId: product.moduleInstanceId, moduleOptions },
+    options: await getProductBindingOptions(product.category.slug, product.moduleInstanceId),
+  };
+
+  return (
+    <EditPackageContent product={serializeMoney(product)} configOptions={configOptions} automation={automation} />
+  );
 }

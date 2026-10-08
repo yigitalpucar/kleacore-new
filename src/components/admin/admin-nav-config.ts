@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  Blocks,
   BookOpen,
   Box,
   FileCheck,
@@ -11,6 +12,7 @@ import {
   ListChecks,
   LayoutDashboard,
   Mail,
+  Network,
   Newspaper,
   Package,
   Plug,
@@ -87,6 +89,7 @@ export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
       items: [
         { title: "Ürünler", href: `${ADMIN_ROOT}/urunler`, icon: ShoppingBag },
         { title: "Sunucular", href: `${ADMIN_ROOT}/sunucular`, icon: Server },
+        { title: "IP havuzları", href: `${ADMIN_ROOT}/ip-havuzlari`, icon: Network },
       ],
     },
     {
@@ -106,6 +109,7 @@ export function buildAdminNav(counts: AdminCounts): AppNavGroup[] {
         { title: "Arka plan işleri", href: `${ADMIN_ROOT}/isler`, icon: ListChecks },
         { title: "Bildirimler", href: `${ADMIN_ROOT}/bildirimler`, icon: Mail },
         { title: "Aktivite kayıtları", href: `${ADMIN_ROOT}/aktivite`, icon: ScrollText },
+        { title: "Modüller", href: `${ADMIN_ROOT}/moduller`, icon: Blocks },
         { title: "Entegrasyonlar", href: `${ADMIN_ROOT}/entegrasyonlar`, icon: Plug },
         { title: "Ayarlar", href: `${ADMIN_ROOT}/ayarlar`, icon: Settings },
       ],
