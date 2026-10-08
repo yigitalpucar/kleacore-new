@@ -2,8 +2,10 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { AlertTriangle, RefreshCcw, Home, Headphones } from "lucide-react";
+import { AlertTriangle, Home, LifeBuoy, RefreshCcw } from "lucide-react";
+import { buttonClasses } from "@/components/site/button-classes";
+import { GridBackground } from "@/components/site/grid-lines";
+import { Eyebrow } from "@/components/site/eyebrow";
 
 export default function Error({
   error,
@@ -18,61 +20,52 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="max-w-md w-full text-center">
-        {/* Error Icon */}
-        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-          <AlertTriangle className="h-10 w-10 text-red-500" />
-        </div>
-
-        {/* Message */}
-        <h1 className="text-2xl font-bold mb-2">Bir Hata Oluştu</h1>
-        <p className="text-muted-foreground mb-6">
-          Üzgünüz, beklenmeyen bir hata oluştu. Lütfen tekrar deneyin veya
-          sorun devam ederse destek ekibimizle iletişime geçin.
+    <main
+      id="main"
+      className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-16"
+    >
+      <GridBackground className="-z-10" mask="center" />
+      <div className="w-full max-w-md text-center">
+        <span className="mx-auto flex size-14 items-center justify-center rounded-xl border bg-background shadow-sm">
+          <AlertTriangle aria-hidden className="size-6 text-foreground" />
+        </span>
+        <Eyebrow className="mt-6">Beklenmeyen hata</Eyebrow>
+        <h1 className="mt-3 text-balance text-3xl font-semibold tracking-tight">Bir hata oluştu</h1>
+        <p className="mt-3 text-pretty text-muted-foreground">
+          Üzgünüz, beklenmeyen bir hata oluştu. Lütfen tekrar deneyin veya sorun devam ederse destek
+          ekibimizle iletişime geçin.
         </p>
 
-        {/* Error Details (only in development) */}
         {process.env.NODE_ENV === "development" && (
-          <div className="mb-6 p-4 rounded-lg bg-muted text-left overflow-auto">
-            <p className="text-sm font-mono text-red-500 break-all">
-              {error.message}
-            </p>
-            {error.digest && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Hata Kodu: {error.digest}
-              </p>
-            )}
+          <div className="mt-6 overflow-auto rounded-lg border bg-muted/40 p-4 text-left">
+            <p className="break-all font-mono text-sm text-destructive">{error.message}</p>
           </div>
         )}
+        {error.digest ? (
+          <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+            Hata kodu: {error.digest}
+          </p>
+        ) : null}
 
-        {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button onClick={reset}>
-            <RefreshCcw className="mr-2 h-4 w-4" />
-            Tekrar Dene
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/">
-              <Home className="mr-2 h-4 w-4" />
-              Ana Sayfa
-            </Link>
-          </Button>
+        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <button type="button" onClick={reset} className={buttonClasses()}>
+            <RefreshCcw aria-hidden className="size-4" />
+            Tekrar dene
+          </button>
+          <Link href="/" className={buttonClasses({ variant: "outline" })}>
+            <Home aria-hidden className="size-4" />
+            Ana sayfa
+          </Link>
         </div>
 
-        {/* Support Link */}
-        <div className="mt-8 pt-6 border-t">
-          <p className="text-sm text-muted-foreground mb-3">
-            Sorun devam ediyor mu?
-          </p>
-          <Button variant="link" asChild>
-            <Link href="/iletisim">
-              <Headphones className="mr-2 h-4 w-4" />
-              Destek Ekibine Ulaşın
-            </Link>
-          </Button>
+        <div className="mt-10 border-t pt-6">
+          <p className="text-sm text-muted-foreground">Sorun devam ediyor mu?</p>
+          <Link href="/iletisim" className={buttonClasses({ variant: "ghost", className: "mt-2" })}>
+            <LifeBuoy aria-hidden className="size-4" />
+            Destek ekibine ulaşın
+          </Link>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

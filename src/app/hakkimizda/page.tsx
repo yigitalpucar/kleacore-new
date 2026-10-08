@@ -1,359 +1,309 @@
-import { Topbar } from "@/components/layout/topbar";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { NumberTicker } from "@/components/magicui/number-ticker";
-import { PageHero } from "@/components/sections/page-hero";
-import {
-  Building2,
-  Target,
-  Eye,
-  Lightbulb,
-  Clock,
-  Shield,
-  Zap,
-  HeartHandshake,
-  Globe,
-  Server,
-  Headphones,
-  Rocket,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import type { Metadata } from "next";
 import Link from "next/link";
+import {
+  ArrowUpRight,
+  Building2,
+  CalendarDays,
+  Eye,
+  Globe,
+  Headphones,
+  HeartHandshake,
+  Lightbulb,
+  Lock,
+  MapPin,
+  Server,
+  Shield,
+  Target,
+  Zap,
+} from "lucide-react";
+import { PageHeader } from "@/components/site/page-header";
+import { Section } from "@/components/site/section";
+import { SectionHeading } from "@/components/site/section-heading";
+import { FeatureGrid, type FeatureItem } from "@/components/site/feature-grid";
+import { TrustBar, type TrustBarItem } from "@/components/site/trust-bar";
+import { CtaBand } from "@/components/site/cta-band";
+import { CornerTicks, DashedFrame } from "@/components/site/grid-lines";
+import { Eyebrow } from "@/components/site/eyebrow";
+import { StatusDot } from "@/components/site/status-pill";
+import { SiteShell } from "@/components/site/kurumsal/site-shell";
+import { GridPattern } from "@/components/site/kurumsal/grid-pattern";
 
-const stats = [
-  {
-    value: 99.9,
-    suffix: "%",
-    label: "Uptime Garantisi",
-    icon: Server,
-    decimal: 1,
+export const metadata: Metadata = {
+  title: "Hakkımızda",
+  description:
+    "KLEACORE, KLEAWORK DIGITAL LLC bünyesinde 2026'da kurulan alan adı, hosting, VDS sunucu ve SSL sağlayıcısıdır. Hikayemiz, misyonumuz ve değerlerimiz.",
+  alternates: { canonical: "/hakkimizda" },
+  openGraph: {
+    title: "Hakkımızda | KLEACORE",
+    description:
+      "KLEAWORK DIGITAL LLC bünyesinde 2026'da kurulan KLEACORE'un hikayesi, misyonu ve değerleri.",
+    url: "/hakkimizda",
   },
-  {
-    value: 24,
-    suffix: "/7",
-    label: "Teknik Destek",
-    icon: Headphones,
-  },
-  {
-    value: 100,
-    suffix: "+",
-    label: "Mutlu Müşteri",
-    icon: HeartHandshake,
-  },
-  {
-    value: 2026,
-    suffix: "",
-    label: "Kuruluş Yılı",
-    icon: Clock,
-  },
+};
+
+const facts: TrustBarItem[] = [
+  { icon: CalendarDays, label: "2026", description: "Kuruluş yılı" },
+  { icon: Building2, label: "KLEAWORK DIGITAL LLC", description: "Wyoming, ABD" },
+  { icon: MapPin, label: "İstanbul", description: "Sunucu lokasyonu" },
+  { icon: Headphones, label: "7/24 Destek", description: "Destek talebi ve e-posta" },
+];
+
+const companyRecord = [
+  { label: "Unvan", value: "KLEAWORK DIGITAL LLC" },
+  { label: "Marka", value: "KLEACORE" },
+  { label: "Kuruluş", value: "2026 · Wyoming, ABD" },
+  { label: "EIN", value: "36-5157418" },
+  { label: "Adres", value: "30 N Gould St Ste R, Sheridan, WY 82801, USA" },
+  { label: "Sunucu lokasyonu", value: "İstanbul" },
 ];
 
 const milestones = [
   {
-    year: "2026 Q1",
-    title: "KLEACORE Kuruluşu",
-    description:
-      "KLEAWORK DIGITAL LLC bünyesinde, modern hosting standartlarıyla yola çıktık.",
+    period: "2026 · 1. çeyrek",
+    title: "KLEACORE'un kuruluşu",
+    description: "KLEAWORK DIGITAL LLC bünyesinde, modern hosting standartlarıyla yola çıktık.",
   },
   {
-    year: "2026 Q1",
-    title: "Altyapı Lansmanı",
+    period: "2026 · 1. çeyrek",
+    title: "Altyapı lansmanı",
     description:
-      "NVMe SSD, LiteSpeed ve yedekli ağ altyapısı ile hosting ve sunucu hizmetlerini yayına aldık.",
+      "NVMe SSD ve LiteSpeed altyapısıyla hosting ve sunucu hizmetlerini yayına aldık.",
   },
   {
-    year: "2026 Q2",
-    title: "Müşteri Paneli",
+    period: "2026 · 2. çeyrek",
+    title: "Müşteri paneli",
     description:
-      "Domain, hosting ve sunucu yönetimini tek panelden sunan müşteri altyapısını devreye aldık.",
+      "Alan adı, hosting ve sunucu yönetimini tek panelden sunan müşteri altyapısını devreye aldık.",
   },
   {
-    year: "2026",
-    title: "Büyüme Hedefi",
+    period: "Hedef",
+    title: "Güvenilir teknoloji ortağı",
     description:
       "Türkiye ve global pazarda güvenilir, hızlı ve şeffaf bir teknoloji ortağı olmayı hedefliyoruz.",
   },
 ];
 
-const values = [
+const values: FeatureItem[] = [
   {
     icon: Lightbulb,
-    title: "Yenilikçi Yaklaşım",
+    title: "Yenilikçi yaklaşım",
     description:
-      "2026'nın modern standartlarıyla kurulduğumuz için eski nesil hantallıklardan uzağız.",
+      "2026'da, güncel altyapı ve yazılımlarla kurulduk; eski nesil sistemlerin yükünü taşımıyoruz.",
   },
   {
     icon: Zap,
-    title: "Hız Odaklılık",
+    title: "Hız odaklılık",
     description:
-      "Dijitalde zamanın ne kadar kıymetli olduğunu biliyoruz. Altyapımızı maksimum performans için optimize ediyoruz.",
+      "Dijitalde zamanın ne kadar kıymetli olduğunu biliyoruz. Altyapımızı performans için yapılandırıyoruz.",
   },
   {
     icon: HeartHandshake,
-    title: "Kesintisiz Destek",
+    title: "Anlaşılır destek",
     description:
-      "Karmaşık terimlerle değil, sizin dilinizden konuşan bir destek anlayışıyla her zaman yanınızdayız.",
+      "Karmaşık terimlerle değil, sizin dilinizden konuşan bir destek anlayışıyla yanınızdayız.",
   },
   {
     icon: Shield,
-    title: "Güvenli Altyapı",
+    title: "Güvenli altyapı",
     description:
-      "Verilerinizin güvenliğini, en modern güvenlik protokolleriyle en üst seviyede tutuyoruz.",
+      "Verilerinizin güvenliği için ücretsiz SSL, otomatik yedek ve güncel yazılım sürümleri kullanıyoruz.",
   },
+];
+
+const services = [
+  { icon: Globe, title: "Alan adı", description: "Kayıt, transfer ve WHOIS sorgulama", href: "/domain/kayit" },
+  { icon: Server, title: "Web hosting", description: "cPanel ve LiteSpeed ile Linux hosting", href: "/hosting/linux" },
+  { icon: Server, title: "VDS sunucu", description: "NVMe SSD diskli sanal sunucular", href: "/sunucu/vds" },
+  { icon: Lock, title: "SSL sertifikası", description: "DV, OV, EV ve wildcard sertifikalar", href: "/ssl/standart" },
 ];
 
 export default function HakkimizdaPage() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <Topbar />
-      <Header />
-      <main className="flex-1">
-        <PageHero
-          badge="2026'da Kurulan"
-          title="İşinizi Dijitalde Büyüten"
-          titleHighlight="Teknoloji Ortağınız"
-          description="Dijital dünyanın hızına ve dinamizmine uyum sağlamak amacıyla temellerimizi attık. Yalnızca bir yer sağlayıcı değil, işinizi dijitalde büyüten teknoloji ortağınız olmayı hedefliyoruz."
-          accent="default"
-        />
+    <SiteShell>
+      <PageHeader
+        eyebrow="2026'da kuruldu"
+        title="İşinizi dijitalde büyüten teknoloji ortağınız"
+        description="Dijital dünyanın hızına ve dinamizmine uyum sağlamak amacıyla temellerimizi attık. Yalnızca bir yer sağlayıcı değil, işinizi dijitalde büyüten teknoloji ortağınız olmayı hedefliyoruz."
+        breadcrumbs={[{ label: "Kurumsal" }, { label: "Hakkımızda" }]}
+      />
 
-        <section className="border-b bg-muted/30 py-12">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="grid grid-cols-2 gap-6 md:grid-cols-4 max-w-4xl mx-auto">
-                {stats.map((stat) => (
-                  <Card key={stat.label} className="text-center">
-                    <CardContent className="p-6">
-                      <stat.icon className="h-8 w-8 text-primary mx-auto mb-3" />
-                      <div className="flex justify-center items-baseline gap-0.5">
-                        <NumberTicker
-                          value={stat.value}
-                          className="text-3xl font-bold"
-                          decimalPlaces={stat.decimal || 0}
-                        />
-                        <span className="text-xl font-bold text-primary">
-                          {stat.suffix}
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {stat.label}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </BlurFade>
-          </div>
-        </section>
+      <TrustBar items={facts} bordered={false} />
 
-        {/* Story */}
-        <section className="py-16 md:py-24">
-          <div className="container">
-            <div className="grid gap-12 lg:grid-cols-2 items-center max-w-6xl mx-auto">
-              <BlurFade delay={0.1} inView>
-                <div>
-                  <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-6">
-                    Hikayemiz
-                  </h2>
-                  <div className="space-y-4 text-muted-foreground">
-                    <p>
-                      2026 yılında, dijital dünyanın hızına ve dinamizmine uyum sağlamak
-                      amacıyla temellerimizi attık. KLEACORE olarak, yalnızca bir yer
-                      sağlayıcı değil, işinizi dijitalde büyüten teknoloji ortağınız
-                      olmayı hedefliyoruz.
-                    </p>
-                    <p>
-                      Teknolojinin her saniye değiştiği bir çağda, yerimizde saymıyoruz.
-                      Sektördeki en yeni donanımları ve yazılım çözümlerini yakından takip
-                      ederek, projelerinizi en güncel altyapıda barındırıyoruz.
-                    </p>
-                    <p>
-                      Bizim için teknoloji, karmaşıklık değil; size sunulan bir kolaylık
-                      ve hız demektir. Her adımda müşterilerimizin yanında olarak,
-                      dijital başarılarına ortak olmayı amaçlıyoruz.
-                    </p>
-                  </div>
-                </div>
-              </BlurFade>
-
-              <BlurFade delay={0.2} inView>
-                <div className="relative">
-                  <div className="aspect-video rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                    <Rocket className="h-24 w-24 text-primary/50" />
-                  </div>
-                </div>
-              </BlurFade>
+      {/* Story */}
+      <Section divider aria-labelledby="hikayemiz">
+        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+          <div>
+            <SectionHeading id="hikayemiz" eyebrow="Hikayemiz" title="Kısa ama net bir başlangıç" />
+            <div className="mt-6 space-y-4 text-base leading-relaxed text-muted-foreground">
+              <p>
+                2026 yılında, dijital dünyanın hızına ve dinamizmine uyum sağlamak amacıyla
+                temellerimizi attık. KLEACORE olarak, yalnızca bir yer sağlayıcı değil, işinizi
+                dijitalde büyüten teknoloji ortağınız olmayı hedefliyoruz.
+              </p>
+              <p>
+                Teknolojinin her saniye değiştiği bir çağda yerimizde saymıyoruz. Güncel donanım
+                ve yazılım çözümlerini yakından takip ederek projelerinizi güncel bir altyapıda
+                barındırıyoruz.
+              </p>
+              <p>
+                Bizim için teknoloji karmaşıklık değil; size sunulan bir kolaylık ve hız demektir.
+                Her adımda müşterilerimizin yanında olarak dijital başarılarına ortak olmayı
+                amaçlıyoruz.
+              </p>
             </div>
           </div>
-        </section>
 
-        {/* Timeline */}
-        <section className="py-16 md:py-24 bg-muted/30">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                  Yolculuğumuz
-                </h2>
-                <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                  2026&apos;da kurulan KLEACORE&apos;un kısa ama hızlı büyüme hikayesi
+          {/* Company record card */}
+          <DashedFrame className="p-3 sm:p-4">
+            <div className="relative overflow-hidden rounded-xl border bg-background shadow-sm">
+              <GridPattern />
+              <CornerTicks />
+              <div className="relative flex items-center justify-between gap-4 border-b px-5 py-4 sm:px-6">
+                <Eyebrow>Şirket kaydı</Eyebrow>
+                <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  <StatusDot />
+                  Aktif
+                </span>
+              </div>
+              <div className="relative px-5 pb-2 pt-6 sm:px-6">
+                <p className="text-3xl font-semibold tracking-tight sm:text-4xl">KLEACORE</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Alan adı · Hosting · VDS sunucu · SSL
                 </p>
               </div>
-            </BlurFade>
-
-            <BlurFade delay={0.2} inView>
-              <div className="relative max-w-3xl mx-auto">
-                <div className="absolute left-4 top-0 bottom-0 w-px bg-border md:left-1/2 md:-translate-x-px" />
-                <div className="space-y-8">
-                  {milestones.map((item, index) => (
-                    <div
-                      key={item.title}
-                      className={`relative flex flex-col gap-4 md:flex-row md:items-center ${
-                        index % 2 === 0 ? "md:flex-row-reverse" : ""
-                      }`}
-                    >
-                      <div className="hidden md:block md:w-1/2" />
-                      <div className="absolute left-4 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border bg-background md:left-1/2">
-                        <Clock className="h-4 w-4 text-primary" />
-                      </div>
-                      <Card className={`ml-12 md:ml-0 md:w-1/2 ${index % 2 === 0 ? "md:pr-12" : "md:pl-12 md:ml-auto"}`}>
-                        <CardContent className="p-6">
-                          <p className="text-sm font-medium text-primary mb-1">
-                            {item.year}
-                          </p>
-                          <h3 className="font-semibold text-lg mb-2">{item.title}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {item.description}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </BlurFade>
-          </div>
-        </section>
-
-        {/* Mission & Vision */}
-        <section className="py-16 md:py-24">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                  Vizyonumuz ve Değerlerimiz
-                </h2>
-                <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                  Teknolojinin her saniye değiştiği bir çağda, yerimizde saymıyoruz
-                </p>
-              </div>
-            </BlurFade>
-
-            <div className="grid gap-8 md:grid-cols-2 max-w-5xl mx-auto mb-12">
-              <BlurFade delay={0.1} inView>
-                <Card className="h-full hover:border-primary/50 transition-colors">
-                  <CardContent className="p-8">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 mb-6">
-                      <Target className="h-7 w-7 text-primary" />
-                    </div>
-                    <h2 className="text-2xl font-bold mb-4">Misyonumuz</h2>
-                    <p className="text-muted-foreground leading-relaxed">
-                      İşletmelerin dijital dönüşümüne güvenilir, yüksek performanslı
-                      ve modern altyapı çözümleriyle katkıda bulunmak. Karmaşıklığı
-                      basitleştirerek, teknolojinin size sunduğu kolaylık ve hızı
-                      deneyimlemenizi sağlamak.
-                    </p>
-                  </CardContent>
-                </Card>
-              </BlurFade>
-
-              <BlurFade delay={0.2} inView>
-                <Card className="h-full hover:border-primary/50 transition-colors">
-                  <CardContent className="p-8">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 mb-6">
-                      <Eye className="h-7 w-7 text-primary" />
-                    </div>
-                    <h2 className="text-2xl font-bold mb-4">Vizyonumuz</h2>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Sektördeki en yeni donanımları ve yazılım çözümlerini yakından
-                      takip ederek, projelerinizi en güncel altyapıda barındırmak.
-                      Yalnızca bir hizmet sağlayıcı değil, işinizi dijitalde büyüten
-                      gerçek bir teknoloji ortağı olmak.
-                    </p>
-                  </CardContent>
-                </Card>
-              </BlurFade>
-            </div>
-          </div>
-        </section>
-
-        {/* Why KLEACORE */}
-        <section className="py-16 md:py-24">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="text-center mb-12">
-                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                  Neden KLEACORE?
-                </h2>
-                <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                  Bizi tercih etmeniz için dört önemli neden
-                </p>
-              </div>
-            </BlurFade>
-
-            <BlurFade delay={0.2} inView>
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 max-w-5xl mx-auto">
-                {values.map((value) => (
-                  <Card
-                    key={value.title}
-                    className="text-center hover:border-primary/50 transition-colors"
+              <dl className="relative divide-y px-5 pb-3 sm:px-6">
+                {companyRecord.map((row) => (
+                  <div
+                    key={row.label}
+                    className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4"
                   >
-                    <CardContent className="p-6">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mx-auto mb-4">
-                        <value.icon className="h-6 w-6 text-primary" />
-                      </div>
-                      <h3 className="font-semibold text-lg mb-2">
-                        {value.title}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {value.description}
-                      </p>
-                    </CardContent>
-                  </Card>
+                    <dt className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground sm:pt-0.5">
+                      {row.label}
+                    </dt>
+                    <dd className="text-sm font-medium">{row.value}</dd>
+                  </div>
                 ))}
-              </div>
-            </BlurFade>
-          </div>
-        </section>
+              </dl>
+            </div>
+          </DashedFrame>
+        </div>
+      </Section>
 
-        {/* CTA */}
-        <section className="py-16 md:py-24 bg-muted/30">
-          <div className="container">
-            <BlurFade delay={0.1} inView>
-              <div className="max-w-3xl mx-auto text-center">
-                <Globe className="h-12 w-12 text-primary mx-auto mb-6" />
-                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">
-                  Dijital Yolculuğunuza Başlayın
-                </h2>
-                <p className="text-muted-foreground mb-8">
-                  KLEACORE ile tanışın, projelerinizi en güncel teknoloji altyapısında barındırın.
-                  Sorularınız için 7/24 destek ekibimiz yanınızda.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Button size="lg" className="px-8" asChild>
-                    <Link href="/iletisim">Bize Ulaşın</Link>
-                  </Button>
-                  <Button size="lg" variant="outline" className="px-8" asChild>
-                    <Link href="/hosting/linux">Paketleri İncele</Link>
-                  </Button>
-                </div>
+      {/* Timeline */}
+      <Section tone="muted" divider aria-labelledby="yolculugumuz">
+        <SectionHeading
+          id="yolculugumuz"
+          eyebrow="Yolculuğumuz"
+          title="2026'dan bugüne"
+          description="KLEACORE'un kuruluşundan bu yana attığı adımlar."
+          className="mb-12"
+        />
+        <ol className="relative grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-4">
+          {milestones.map((item, index) => (
+            <li key={item.title} className="relative bg-background p-6 md:p-8">
+              <div className="flex items-center gap-3">
+                <span className="flex size-8 items-center justify-center rounded-md border bg-muted/40 font-mono text-xs font-medium">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  {item.period}
+                </span>
               </div>
-            </BlurFade>
-          </div>
-        </section>
-      </main>
-      <Footer />
-    </div>
+              <h3 className="mt-5 text-base font-medium tracking-tight">{item.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                {item.description}
+              </p>
+            </li>
+          ))}
+        </ol>
+      </Section>
+
+      {/* Mission & vision */}
+      <Section divider aria-labelledby="misyon-vizyon">
+        <SectionHeading
+          id="misyon-vizyon"
+          eyebrow="Misyon ve vizyon"
+          title="Neden buradayız?"
+          align="center"
+          className="mb-12"
+        />
+        <div className="grid gap-px overflow-hidden rounded-xl border bg-border md:grid-cols-2">
+          <article className="bg-background p-8 md:p-10">
+            <span className="flex size-10 items-center justify-center rounded-lg border bg-muted/40">
+              <Target aria-hidden className="size-5 text-foreground/80" />
+            </span>
+            <h3 className="mt-6 text-xl font-semibold tracking-tight">Misyonumuz</h3>
+            <p className="mt-3 leading-relaxed text-muted-foreground">
+              İşletmelerin dijital dönüşümüne güvenilir, yüksek performanslı ve modern altyapı
+              çözümleriyle katkıda bulunmak. Karmaşıklığı basitleştirerek teknolojinin sunduğu
+              kolaylık ve hızı deneyimlemenizi sağlamak.
+            </p>
+          </article>
+          <article className="bg-background p-8 md:p-10">
+            <span className="flex size-10 items-center justify-center rounded-lg border bg-muted/40">
+              <Eye aria-hidden className="size-5 text-foreground/80" />
+            </span>
+            <h3 className="mt-6 text-xl font-semibold tracking-tight">Vizyonumuz</h3>
+            <p className="mt-3 leading-relaxed text-muted-foreground">
+              Güncel donanım ve yazılım çözümlerini yakından takip ederek projelerinizi güncel
+              altyapıda barındırmak. Yalnızca bir hizmet sağlayıcı değil, işinizi dijitalde
+              büyüten gerçek bir teknoloji ortağı olmak.
+            </p>
+          </article>
+        </div>
+      </Section>
+
+      {/* Values */}
+      <Section tone="muted" divider aria-labelledby="degerlerimiz">
+        <SectionHeading
+          id="degerlerimiz"
+          eyebrow="Değerlerimiz"
+          title="Çalışma şeklimizi belirleyen ilkeler"
+          className="mb-12"
+        />
+        <FeatureGrid items={values} columns={4} />
+      </Section>
+
+      {/* Services */}
+      <Section divider aria-labelledby="hizmetlerimiz">
+        <SectionHeading
+          id="hizmetlerimiz"
+          eyebrow="Hizmetlerimiz"
+          title="Neler sunuyoruz?"
+          description="Bir web projesinin ihtiyaç duyduğu temel hizmetleri tek panelden yönetin."
+          className="mb-10"
+        />
+        <ul className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-4">
+          {services.map((service) => (
+            <li key={service.href} className="bg-background">
+              <Link
+                href={service.href}
+                className="group flex h-full flex-col p-6 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:p-8"
+              >
+                <span className="flex items-center justify-between">
+                  <span className="flex size-10 items-center justify-center rounded-lg border bg-muted/40">
+                    <service.icon aria-hidden className="size-5 text-foreground/80" />
+                  </span>
+                  <ArrowUpRight
+                    aria-hidden
+                    className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-foreground"
+                  />
+                </span>
+                <span className="mt-5 text-base font-medium tracking-tight">{service.title}</span>
+                <span className="mt-1.5 text-sm text-muted-foreground">{service.description}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <CtaBand
+        eyebrow="Tanışalım"
+        title="Projeniz için doğru altyapıyı birlikte seçelim"
+        description="Sorularınız için bize yazın; paket seçimi ve taşıma konusunda destek ekibimiz yardımcı olur."
+        primary={{ label: "Bize ulaşın", href: "/iletisim" }}
+        secondary={{ label: "Hosting paketleri", href: "/hosting/linux" }}
+      />
+    </SiteShell>
   );
 }
