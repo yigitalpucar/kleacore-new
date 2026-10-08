@@ -533,6 +533,14 @@ model Product {
   metaTitle       String?
   metaDescription String?
 
+  // Automation binding (Faz 2.2): which module instance provisions this
+  // product and its module-specific options (validated by the module's
+  // productOptionsSchema, e.g. WHM package / Proxmox template + resources).
+  // NULL = legacy resolution by category (Settings-backed WHM/VPS or MANUAL).
+  moduleInstanceId String?
+  moduleInstance   ModuleInstance? @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
+  moduleOptions    Json            @default("{}")
+
   // Relations
   orders          Order[]
   services        Service[]
@@ -543,6 +551,7 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([moduleInstanceId])
   @@map("products")
 }
 
@@ -689,7 +698,15 @@ model Service {
   domain     String?
   username   String?
   ipAddress  String?
+  /// Free text kept for history (legacy WHM username / VPS id). New code
+  /// writes moduleInstanceId + remoteId instead.
   serverName String?
+
+  // Module binding (Faz 2.2): the instance the remote account lives on and
+  // its id there (WHM username / Proxmox VMID). NULL = legacy service.
+  moduleInstanceId String?
+  moduleInstance   ModuleInstance? @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
+  remoteId         String?
 
   // Resources
   diskUsed       Float?
@@ -717,10 +734,12 @@ model Service {
   provisioningJobs     ProvisioningJob[]
   planChanges          ServicePlanChange[]
   emailAccounts        EmailAccount[]
+  ipAddresses          IpAddress[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([moduleInstanceId])
   @@map("services")
 }
 
@@ -985,11 +1004,11 @@ model Invoice {
   order         Order?  @relation(fields: [orderId], references: [id])
 
   // Amounts
-  subtotal    Decimal @default(0) @db.Decimal(14, 2)
-  taxRate     Decimal @default(20) @db.Decimal(5, 2)
-  taxAmount   Decimal @default(0) @db.Decimal(14, 2)
-  totalAmount Decimal @default(0) @db.Decimal(14, 2)
-  paidAmount  Decimal @default(0) @db.Decimal(14, 2)
+  subtotal       Decimal @default(0) @db.Decimal(14, 2)
+  taxRate        Decimal @default(20) @db.Decimal(5, 2)
+  taxAmount      Decimal @default(0) @db.Decimal(14, 2)
+  totalAmount    Decimal @default(0) @db.Decimal(14, 2)
+  paidAmount     Decimal @default(0) @db.Decimal(14, 2)
   /// Sum of COMPLETED refunds; paidAmount - refundedAmount is still held.
   refundedAmount Decimal @default(0) @db.Decimal(14, 2)
 
@@ -1304,9 +1323,14 @@ model Server {
   uptime        Float     @default(0)
   lastCheckedAt DateTime?
 
+  /// Module instance this monitored machine belongs to (WHM / Proxmox node).
+  moduleInstanceId String?
+  moduleInstance   ModuleInstance? @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([moduleInstanceId])
   @@map("servers")
 }
 
@@ -1784,4 +1808,121 @@ model ConsentRecord {
   @@index([userId, acceptedAt])
   @@index([documentId])
   @@map("consent_records")
+}
+
+// =====================
+// MODULES (Faz 2.1) — docs/modules.md
+// =====================
+
+enum ModuleKind {
+  payment
+  registrar
+  server
+  dns
+  sms
+  mail
+  einvoice
+  storage
+}
+
+enum ModuleHealthStatus {
+  UNKNOWN
+  OK
+  ERROR
+}
+
+/// A configured copy of a module (e.g. two WHM servers, two Proxmox nodes).
+/// `config` is the manifest's configSchema output; fields listed in the
+/// manifest's secretFields are stored encrypted ("enc:v1:…", src/lib/secrets).
+model ModuleInstance {
+  id           String     @id @default(cuid())
+  kind         ModuleKind
+  moduleId     String // manifest id: "cpanel-whm", "proxmox", "gri", "cloudflare" …
+  label        String
+  config       Json       @default("{}")
+  isActive     Boolean    @default(true)
+  /// Lower value = preferred when several instances qualify.
+  priority     Int        @default(0)
+  /// Instances sharing a groupKey (same moduleId) form a pool; a product bound
+  /// to one member provisions on the least loaded active member.
+  groupKey     String?
+  /// Max services (accounts / VMs) for least-loaded selection; NULL = no limit.
+  capacity     Int?
+  /// Set for instances mirrored from the legacy Setting keys ("cpanel",
+  /// "registrar", "vps_vds"): their config is re-synced from Settings when the
+  /// /yonetim/entegrasyonlar form is saved.
+  legacySource String?    @unique
+
+  lastHealthAt     DateTime?
+  lastHealthStatus ModuleHealthStatus @default(UNKNOWN)
+  lastHealthError  String?
+
+  products Product[]
+  services Service[]
+  servers  Server[]
+  ipPools  IpPool[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind, isActive])
+  @@index([moduleId])
+  @@map("module_instances")
+}
+
+// =====================
+// IPAM (Faz 2.4)
+// =====================
+
+enum IpAddressStatus {
+  FREE
+  ASSIGNED
+  RESERVED
+}
+
+model IpPool {
+  id                     String          @id @default(cuid())
+  name                   String
+  /// IPv4 network, e.g. "188.132.235.0/24".
+  cidr                   String
+  gateway                String
+  prefix                 Int
+  netmask                String
+  dnsServers             String[]        @default([])
+  vlan                   Int?
+  moduleInstanceId       String?
+  moduleInstance         ModuleInstance? @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
+  /// Minutes a released address stays unallocatable (ARP caches, abuse lists).
+  releaseCooldownMinutes Int             @default(0)
+  notes                  String?
+  addresses              IpAddress[]
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  @@index([moduleInstanceId])
+  @@map("ip_pools")
+}
+
+model IpAddress {
+  id            String          @id @default(cuid())
+  poolId        String
+  pool          IpPool          @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  /// Dotted IPv4; unique across all pools so one address can't be sold twice.
+  address       String          @unique
+  /// IPv4 as an integer, for ordered allocation and range queries.
+  sortKey       BigInt
+  status        IpAddressStatus @default(FREE)
+  serviceId     String?
+  service       Service?        @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  assignedAt    DateTime?
+  releasedAt    DateTime?
+  /// A FREE address is not handed out before this moment.
+  cooldownUntil DateTime?
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([poolId, status, sortKey])
+  @@index([serviceId])
+  @@map("ip_addresses")
 }

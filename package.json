@@ -7,6 +7,7 @@
     "build": "prisma generate && next build && node scripts/build-worker.mjs",
     "build:worker": "node scripts/build-worker.mjs",
     "jobs:worker": "tsx --env-file=.env scripts/worker.ts",
+    "modules:sync-legacy": "tsx --env-file=.env scripts/modules-sync-legacy.ts",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:content": "node scripts/seed-content.mjs",
