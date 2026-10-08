@@ -277,8 +277,18 @@ export async function prepareOrderProvisioning(
   // datacenter): the service waits as PENDING ("Kurulum sürüyor") and an
   // admin task (MANUAL job, never queued) is opened instead of remote
   // provisioning. Its billing period starts on activation.
-  const manual = await requiresManualProvisioning(slug);
-  const service = await createServiceForOrder(tx, order, resolved.domain, { manual });
+  // A product bound to a module instance (Faz 2.2) provisions on the
+  // least-loaded active instance of its pool, or becomes a MANUAL task when
+  // none is available; the binding overrides manual_provisioning_categories.
+  // Unbound products keep the legacy category rules.
+  const plan = order.product.moduleInstanceId
+    ? await (await import("@/lib/modules/provisioning")).planProductProvisioning(order.product, tx)
+    : ({ mode: "legacy" } as const);
+  const manual = plan.mode === "legacy" ? await requiresManualProvisioning(slug) : plan.mode === "manual";
+  const service = await createServiceForOrder(tx, order, resolved.domain, {
+    manual,
+    moduleInstanceId: plan.mode === "module" ? plan.instanceId : null,
+  });
 
   if (manual) {
     const task = await openManualProvisioningTask(tx, {
@@ -317,7 +327,7 @@ export async function createServiceForOrder(
     product: { name: string };
   },
   domain: string | null,
-  options: { manual?: boolean } = {}
+  options: { manual?: boolean; moduleInstanceId?: string | null } = {}
 ) {
   const manual = options.manual ?? false;
   const expiresAt = addMonths(new Date(), billingMonths[order.billingPeriod] ?? 1);
@@ -337,6 +347,9 @@ export async function createServiceForOrder(
       nextDueDate: manual ? null : expiresAt,
       expiresAt: manual ? null : expiresAt,
       status: manual ? "PENDING" : "ACTIVE",
+      // The instance the remote account will live on; remoteId is set by
+      // the module after createAccount (provisioning.run job).
+      moduleInstanceId: manual ? null : (options.moduleInstanceId ?? null),
     },
   });
 

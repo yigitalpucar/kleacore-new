@@ -49,9 +49,20 @@ async function createVpsVdsProvider(): Promise<ProvisioningProvider> {
   return createDisabledProvisioningProvider(config.provider);
 }
 
+/**
+ * Provider for a service. A service bound to a module instance
+ * (Service.moduleInstanceId, set when it was provisioned through a bound
+ * product) goes through the module registry; every other service keeps the
+ * legacy category-based resolution below, unchanged.
+ */
 export async function getProvisioningProviderForService(
   service: ServiceWithProduct
 ): Promise<ProvisioningProvider> {
+  if (service.moduleInstanceId) {
+    const { getModuleProvisioningProvider } = await import("@/lib/modules/provisioning");
+    return getModuleProvisioningProvider(service);
+  }
+
   const categorySlug = getProductCategorySlug(service.product);
 
   if (isCpanelCategory(categorySlug)) {

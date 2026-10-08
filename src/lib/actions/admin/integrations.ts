@@ -24,6 +24,7 @@ import { createKuveytTurkPaymentGatewayProvider } from "@/lib/integrations/payme
 import { getStripe } from "@/lib/stripe";
 import { requireAdmin } from "@/lib/utils/auth-helpers";
 import { revalidatePath } from "next/cache";
+import { syncLegacyModuleInstanceQuietly } from "@/lib/modules/legacy";
 
 const INTEGRATIONS_PATH = "/yonetim/entegrasyonlar";
 
@@ -95,6 +96,8 @@ export async function saveRegistrarIntegrationSettings(formData: FormData) {
     },
   ]);
 
+  // Keep the ModuleInstance mirror (/yonetim/moduller) in sync with these settings.
+  if (result.success) await syncLegacyModuleInstanceQuietly("registrar");
   revalidatePath(INTEGRATIONS_PATH);
   redirectWithFeedback(
     "registrar",
@@ -125,6 +128,8 @@ export async function saveCpanelWhmIntegrationSettings(formData: FormData) {
     { key: "backup_enabled", value: getFormValue(formData, "backup_enabled", "true") },
   ]);
 
+  // Keep the ModuleInstance mirror (/yonetim/moduller) in sync with these settings.
+  if (result.success) await syncLegacyModuleInstanceQuietly("cpanel");
   revalidatePath(INTEGRATIONS_PATH);
   redirectWithFeedback(
     "cpanel",
@@ -156,6 +161,8 @@ export async function saveVpsVdsIntegrationSettings(formData: FormData) {
     },
   ]);
 
+  // Keep the ModuleInstance mirror (/yonetim/moduller) in sync with these settings.
+  if (result.success) await syncLegacyModuleInstanceQuietly("vps_vds");
   revalidatePath(INTEGRATIONS_PATH);
   redirectWithFeedback(
     "vps-vds",

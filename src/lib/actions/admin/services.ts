@@ -78,8 +78,15 @@ export async function createService(data: ServiceInput) {
         billingPeriod
       ).total;
 
+    // Bound product (Faz 2.2): the new account goes to the instance the
+    // product resolves to; unbound products keep the legacy provider.
+    const plan = product.moduleInstanceId
+      ? await (await import("@/lib/modules/provisioning")).planProductProvisioning(product)
+      : null;
+
     const service = await db.service.create({
       data: {
+        moduleInstanceId: plan?.mode === "module" ? plan.instanceId : null,
         customerId: data.customerId,
         productId: data.productId,
         label: data.label ?? "",
@@ -97,11 +104,14 @@ export async function createService(data: ServiceInput) {
       },
     });
 
-    const integration = await createRemoteService({
-      ...service,
-      product,
-      customer,
-    });
+    const integration =
+      plan?.mode === "manual"
+        ? { ok: false, provider: "module", error: plan.reason, reference: undefined }
+        : await createRemoteService({
+            ...service,
+            product,
+            customer,
+          });
 
     if (integration.ok && integration.reference) {
       await db.service.update({

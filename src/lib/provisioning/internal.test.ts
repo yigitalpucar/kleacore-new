@@ -8,7 +8,10 @@ const mocks = vi.hoisted(() => ({
   provisionSslCertificate: vi.fn(),
   requiresManualProvisioning: vi.fn(),
   openManualProvisioningTask: vi.fn(),
+  planProductProvisioning: vi.fn(),
 }));
+
+vi.mock("@/lib/modules/provisioning", () => ({ planProductProvisioning: mocks.planProductProvisioning }));
 
 vi.mock("@/lib/integrations/registrar", () => ({
   registerDomainWithRegistrar: mocks.registerDomainWithRegistrar,
@@ -152,6 +155,49 @@ describe("prepareOrderProvisioning (inside the payment transaction)", () => {
     expect(tx.provisioningJob.upsert).not.toHaveBeenCalled();
     expect(mocks.queueProvisioningAttempt).not.toHaveBeenCalled();
     expect(mocks.createRemoteService).not.toHaveBeenCalled();
+  });
+
+  it("keeps unbound products on the legacy rules without touching the module registry", async () => {
+    const tx = createTx(order("hosting", { type: "hosting" }, { domain: "ornek.com" }));
+
+    await prepareOrderProvisioning(asTx(tx), "ord-1");
+
+    expect(mocks.planProductProvisioning).not.toHaveBeenCalled();
+    expect(mocks.requiresManualProvisioning).toHaveBeenCalledWith("hosting");
+    expect(tx.service.create.mock.calls[0][0].data).toMatchObject({ status: "ACTIVE", moduleInstanceId: null });
+  });
+
+  it("provisions a bound product on the resolved instance, even in a forced-manual category", async () => {
+    mocks.requiresManualProvisioning.mockResolvedValue(true);
+    mocks.planProductProvisioning.mockResolvedValue({ mode: "module", instanceId: "mi-pve-1" });
+    const tx = createTx(
+      order("hosting", {}, {
+        product: { name: "VDS Pro", sku: "VDS-1", subType: null, moduleInstanceId: "mi-pve-1", category: { slug: "vds" } },
+      })
+    );
+
+    const result = await prepareOrderProvisioning(asTx(tx), "ord-1");
+
+    expect(result).toMatchObject({ type: "service", status: "QUEUED" });
+    expect(mocks.planProductProvisioning).toHaveBeenCalledWith(expect.objectContaining({ moduleInstanceId: "mi-pve-1" }), tx);
+    expect(mocks.requiresManualProvisioning).not.toHaveBeenCalled();
+    expect(tx.service.create.mock.calls[0][0].data).toMatchObject({ status: "ACTIVE", moduleInstanceId: "mi-pve-1" });
+    expect(mocks.openManualProvisioningTask).not.toHaveBeenCalled();
+  });
+
+  it("opens a MANUAL task when the bound product has no available instance", async () => {
+    mocks.planProductProvisioning.mockResolvedValue({ mode: "manual", reason: "MODULE_INSTANCE_UNAVAILABLE" });
+    const tx = createTx(
+      order("hosting", {}, {
+        product: { name: "Hosting", sku: "H-1", subType: null, moduleInstanceId: "mi-full", category: { slug: "hosting" } },
+      })
+    );
+
+    const result = await prepareOrderProvisioning(asTx(tx), "ord-1");
+
+    expect(result).toMatchObject({ status: "MANUAL" });
+    expect(tx.service.create.mock.calls[0][0].data).toMatchObject({ status: "PENDING", moduleInstanceId: null });
+    expect(tx.provisioningJob.upsert).not.toHaveBeenCalled();
   });
 
   it("leaves orders of an existing service (renewals) alone", async () => {
