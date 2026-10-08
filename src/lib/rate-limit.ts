@@ -96,3 +96,28 @@ export async function checkRateLimit(
 export function normalizeRateLimitKey(value: string) {
   return value.trim().toLowerCase().slice(0, 160);
 }
+
+/** Current count of a bucket inside its window (0 when absent or expired); does not increment. */
+export async function peekRateLimit(key: string): Promise<number> {
+  const now = Date.now();
+  if (useInMemoryRateLimit) {
+    const bucket = buckets.get(key);
+    return bucket && bucket.resetAt > now ? bucket.count : 0;
+  }
+
+  const existing = await db.rateLimitBucket.findUnique({
+    where: { key },
+    select: { count: true, resetAt: true },
+  });
+  return existing && existing.resetAt.getTime() > now ? existing.count : 0;
+}
+
+/** Drops a bucket (e.g. failed-login counter after a successful login). */
+export async function resetRateLimit(key: string): Promise<void> {
+  if (useInMemoryRateLimit) {
+    buckets.delete(key);
+    return;
+  }
+
+  await db.rateLimitBucket.deleteMany({ where: { key } });
+}

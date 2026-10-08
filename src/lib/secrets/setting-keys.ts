@@ -20,6 +20,7 @@ export const SECRET_SETTING_KEYS = new Set([
   "paytr_merchant_key",
   "paytr_merchant_salt",
   "kuveytturk_password",
+  "turnstile_secret_key",
 ]);
 
 export function isSecretSettingKey(key: string) {

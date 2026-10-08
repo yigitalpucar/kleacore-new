@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { getTurnstileSiteKey } from "@/lib/security/turnstile";
 import { SifremiUnuttumContent } from "./content";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Şifremi Unuttum",
@@ -8,6 +11,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function SifremiUnuttumPage() {
-  return <SifremiUnuttumContent />;
+export default async function SifremiUnuttumPage() {
+  return <SifremiUnuttumContent turnstileSiteKey={await getTurnstileSiteKey()} />;
 }

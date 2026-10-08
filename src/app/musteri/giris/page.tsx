@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getTurnstileSiteKey } from "@/lib/security/turnstile";
 import { GirisContent, type AuthMode } from "./content";
 
 export const metadata: Metadata = {
@@ -20,5 +21,5 @@ export default async function GirisPage({
   searchParams: Promise<{ mod?: string | string[] }>;
 }) {
   const { mod } = await searchParams;
-  return <GirisContent initialMode={parseMode(mod)} />;
+  return <GirisContent initialMode={parseMode(mod)} turnstileSiteKey={await getTurnstileSiteKey()} />;
 }

@@ -1,6 +1,11 @@
 import { compare } from "bcryptjs";
 import { findUserByEmail, normalizeEmail } from "@/lib/auth/email";
 import { consumeLoginToken } from "@/lib/auth/login-token";
+import {
+  checkLoginCaptcha,
+  clearFailedLogins,
+  recordFailedLogin,
+} from "@/lib/auth/login-captcha";
 import { userRequiresTwoFactor } from "@/lib/auth/two-factor-settings";
 import { db } from "@/lib/db";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
@@ -78,6 +83,8 @@ async function completeLogin(user: {
  *
  * Accepts either email + password (only for users without 2FA) or email +
  * a single-use `loginToken` issued after the second factor was verified.
+ * After repeated failures a password attempt also needs `turnstileToken`
+ * (or the `captchaProof` loginAction passes after verifying it).
  */
 export async function authorizeCredentials(
   credentials: Partial<Record<string, unknown>> | undefined,
@@ -86,15 +93,16 @@ export async function authorizeCredentials(
   const email = normalizeEmail(readCredential(credentials?.email));
   if (!email) return null;
 
-  if (await isRateLimited(email, getClientIp(request))) {
+  const ip = getClientIp(request);
+  if (await isRateLimited(email, ip)) {
     return null;
   }
 
-  const user = await findUserByEmail(email);
-  if (!user || user.status !== "ACTIVE") return null;
-
   const loginToken = readCredential(credentials?.loginToken);
   if (loginToken) {
+    // Issued only after password + second factor were verified: no captcha.
+    const user = await findUserByEmail(email);
+    if (!user || user.status !== "ACTIVE") return null;
     if (!(await consumeLoginToken(loginToken, user))) return null;
     return completeLogin(user);
   }
@@ -102,8 +110,26 @@ export async function authorizeCredentials(
   const password = readCredential(credentials?.password);
   if (!password) return null;
 
+  const captchaPassed = await checkLoginCaptcha({
+    email,
+    ip,
+    turnstileToken: readCredential(credentials?.turnstileToken) || null,
+    captchaProof: readCredential(credentials?.captchaProof) || null,
+  });
+  if (!captchaPassed) return null;
+
+  const user = await findUserByEmail(email);
+  if (!user || user.status !== "ACTIVE") {
+    await recordFailedLogin(email, ip);
+    return null;
+  }
+
   const isValid = await compare(password, user.password);
-  if (!isValid) return null;
+  if (!isValid) {
+    await recordFailedLogin(email, ip);
+    return null;
+  }
+  await clearFailedLogins(email);
 
   if (await userRequiresTwoFactor(user)) {
     return null;

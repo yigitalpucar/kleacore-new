@@ -11,6 +11,7 @@ import { toast } from "@/lib/toast";
 import { buttonClasses } from "@/components/site";
 import { AuthAlert, AuthShell, authIconClass, authInputClass } from "@/components/auth/auth-shell";
 import { cn } from "@/lib/utils";
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 
 const aside = {
   label: "Hesap kurtarma",
@@ -23,10 +24,12 @@ const aside = {
   ],
 };
 
-export function SifremiUnuttumContent() {
+export function SifremiUnuttumContent({ turnstileSiteKey }: { turnstileSiteKey: string | null }) {
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
   const [debugResetUrl, setDebugResetUrl] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   const [state, formAction, isPending] = useActionState(
     async (
@@ -34,7 +37,9 @@ export function SifremiUnuttumContent() {
       formData: FormData
     ) => {
       const email = formData.get("email") as string;
+      if (captchaToken) formData.set("cf-turnstile-response", captchaToken);
       const result = await requestPasswordReset(formData);
+      setCaptchaReset((value) => value + 1);
       if (result.success) {
         setSubmittedEmail(email);
         setIsSuccess(true);
@@ -162,9 +167,20 @@ export function SifremiUnuttumContent() {
           </div>
         </div>
 
+        <TurnstileWidget
+          siteKey={turnstileSiteKey}
+          action="password-reset"
+          onToken={setCaptchaToken}
+          resetKey={captchaReset}
+        />
+
         {state && !state.success && state.error ? <AuthAlert>{state.error}</AuthAlert> : null}
 
-        <button type="submit" className={buttonClasses({ className: "w-full" })} disabled={isPending}>
+        <button
+          type="submit"
+          className={buttonClasses({ className: "w-full" })}
+          disabled={isPending || (Boolean(turnstileSiteKey) && !captchaToken)}
+        >
           {isPending ? (
             <>
               <Loader2 className="size-4 animate-spin" aria-hidden />

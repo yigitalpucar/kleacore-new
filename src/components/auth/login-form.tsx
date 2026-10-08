@@ -13,14 +13,18 @@ import { getSafeRedirectPath } from "@/lib/utils/safe-redirect";
 import { buttonClasses } from "@/components/site";
 import { cn } from "@/lib/utils";
 import { AuthAlert, authIconClass, authInputClass } from "./auth-shell";
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 
 export function LoginForm({
   onSwitch,
   onTwoFactorChange,
+  turnstileSiteKey,
 }: {
   onSwitch: () => void;
   /** Called when the 2FA challenge step is entered or left. */
   onTwoFactorChange?: (active: boolean) => void;
+  /** Shown only after repeated failed attempts (server decides). */
+  turnstileSiteKey: string | null;
 }) {
   const searchParams = useSearchParams();
   const callbackUrl = getSafeRedirectPath(
@@ -33,6 +37,9 @@ export function LoginForm({
   const [challengeToken, setChallengeToken] = useState("");
   const [totpCode, setTotpCode] = useState("");
   const [formData, setFormData] = useState({ email: "", password: "" });
+  const [requiresCaptcha, setRequiresCaptcha] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +49,14 @@ export function LoginForm({
     const payload = new FormData();
     payload.set("email", formData.email);
     payload.set("password", formData.password);
+    if (requiresCaptcha && captchaToken) payload.set("cf-turnstile-response", captchaToken);
     const result = await loginAction(payload);
+
+    if (result && "requiresCaptcha" in result && result.requiresCaptcha) {
+      setRequiresCaptcha(true);
+    }
+    // A Turnstile token is single-use: fetch a fresh one for the next attempt.
+    if (requiresCaptcha) setCaptchaReset((value) => value + 1);
 
     if (result?.requires2FA && result.challengeToken) {
       setRequires2FA(true);
@@ -213,7 +227,20 @@ export function LoginForm({
         </div>
       </div>
 
-      <button type="submit" className={buttonClasses({ className: "w-full" })} disabled={loading}>
+      {requiresCaptcha ? (
+        <TurnstileWidget
+          siteKey={turnstileSiteKey}
+          action="login"
+          onToken={setCaptchaToken}
+          resetKey={captchaReset}
+        />
+      ) : null}
+
+      <button
+        type="submit"
+        className={buttonClasses({ className: "w-full" })}
+        disabled={loading || (requiresCaptcha && Boolean(turnstileSiteKey) && !captchaToken)}
+      >
         {loading ? (
           <Loader2 className="size-4 animate-spin" aria-label="Giriş yapılıyor" />
         ) : (

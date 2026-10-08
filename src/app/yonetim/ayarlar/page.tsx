@@ -143,6 +143,9 @@ async function saveSecuritySettings(formData: FormData) {
 
   const result = await updateSettings([
     { key: "two_factor", value: getFormValue(formData, "two_factor", "false") },
+    { key: "turnstile_site_key", value: getFormValue(formData, "turnstile_site_key").trim() },
+    // "********" / empty keeps the stored (encrypted) secret.
+    { key: "turnstile_secret_key", value: getFormValue(formData, "turnstile_secret_key").trim() },
   ]);
 
   const params = new URLSearchParams({
@@ -220,6 +223,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const smsNotifications = getSettingValue(settings, "sms_notifications", "false") === "true";
   const autoInvoice = getSettingValue(settings, "auto_invoice", "true") === "true";
   const twoFactor = getSettingValue(settings, "two_factor", "true") === "true";
+  const turnstileSiteKey = getSettingValue(settings, "turnstile_site_key", "");
+  const turnstileSecretSet = Boolean(getSettingValue(settings, "turnstile_secret_key", ""));
+  const turnstileFromEnv = Boolean(process.env.TURNSTILE_SITE_KEY && process.env.TURNSTILE_SECRET_KEY);
   const paymentProvider = getSettingValue(settings, "payment_gateway_provider", "stripe");
   const paymentProviderLabel =
     ({ stripe: "Stripe", iyzico: "iyzico", paytr: "PayTR", kuveytturk: "Kuveyt Türk" } as Record<string, string>)[paymentProvider] ?? paymentProvider;
@@ -427,6 +433,38 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               }
             >
               <SecuritySwitch twoFactor={twoFactor} />
+              <div className="space-y-3 border-t pt-5">
+                <div>
+                  <p className="text-sm font-medium">Cloudflare Turnstile</p>
+                  <p className="text-xs text-muted-foreground">
+                    Kayıt, şifre sıfırlama, iletişim formu ve art arda hatalı girişlerde bot koruması.
+                    {turnstileFromEnv
+                      ? " Anahtarlar ortam değişkenlerinden (TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY) okunuyor; buradaki değerler kullanılmaz."
+                      : " Canlı ortamda anahtarlar tanımlı değilse bu formlar güvenlik nedeniyle kapalı kalır."}
+                  </p>
+                </div>
+                <FieldGrid>
+                  <FormField label="Site anahtarı" htmlFor="turnstile_site_key">
+                    <Input
+                      id="turnstile_site_key"
+                      name="turnstile_site_key"
+                      defaultValue={turnstileSiteKey}
+                      autoComplete="off"
+                      className={inputClass}
+                    />
+                  </FormField>
+                  <FormField label="Gizli anahtar" htmlFor="turnstile_secret_key">
+                    <Input
+                      id="turnstile_secret_key"
+                      name="turnstile_secret_key"
+                      type="password"
+                      defaultValue={turnstileSecretSet ? "********" : ""}
+                      autoComplete="new-password"
+                      className={inputClass}
+                    />
+                  </FormField>
+                </FieldGrid>
+              </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">Şifre değiştir</p>

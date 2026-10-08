@@ -4,6 +4,12 @@ import { db } from "@/lib/db";
 import { contactSchema } from "@/lib/validations/contact";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
 import { z } from "zod";
+import { getRequestMeta } from "@/lib/request-meta";
+import {
+  TURNSTILE_ERROR_MESSAGE,
+  readTurnstileToken,
+  verifyTurnstileToken,
+} from "@/lib/security/turnstile";
 
 export async function submitContactForm(formData: FormData) {
   const raw = {
@@ -20,6 +26,15 @@ export async function submitContactForm(formData: FormData) {
       success: false,
       error: parsed.error.errors[0]?.message ?? "Gecersiz bilgiler",
     };
+  }
+
+  const { ip } = await getRequestMeta();
+  const captcha = await verifyTurnstileToken(readTurnstileToken(formData), {
+    remoteIp: ip,
+    action: "contact",
+  });
+  if (!captcha.success) {
+    return { success: false, error: TURNSTILE_ERROR_MESSAGE };
   }
 
   const limit = await checkRateLimit({

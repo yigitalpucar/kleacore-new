@@ -9,6 +9,7 @@ import { buttonClasses } from "@/components/site/button-classes";
 import { GridPattern } from "@/components/site/kurumsal/grid-pattern";
 import { submitContactForm } from "@/lib/actions/contact";
 import { toast } from "@/lib/toast";
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 
 const fieldClass =
   "w-full rounded-md border bg-background px-3.5 text-sm text-foreground shadow-sm transition-shadow placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60";
@@ -16,16 +17,21 @@ const fieldClass =
 const labelClass = "mb-2 inline-block text-sm font-medium text-foreground";
 
 /** Contact form (Aceternity "contact form grid" panel). Submits via `submitContactForm`. */
-export function IletisimForm() {
+export function IletisimForm({ turnstileSiteKey }: { turnstileSiteKey: string | null }) {
   const searchParams = useSearchParams();
   const defaultSubject = searchParams.get("konu") ?? "";
   const [isSuccess, setIsSuccess] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [state, formAction, isPending] = useActionState(
     async (_prev: { success: boolean; error?: string } | null, formData: FormData) => {
+      if (captchaToken) formData.set("cf-turnstile-response", captchaToken);
       const result = await submitContactForm(formData);
       if (result.success) {
         setIsSuccess(true);
       }
+      // Turnstile tokens are single-use: get a fresh one for the next submit.
+      setCaptchaReset((value) => value + 1);
       return result;
     },
     null,
@@ -142,6 +148,12 @@ export function IletisimForm() {
               className={cn(fieldClass, "min-h-[10rem] py-3")}
             />
           </div>
+          <TurnstileWidget
+            siteKey={turnstileSiteKey}
+            action="contact"
+            onToken={setCaptchaToken}
+            resetKey={captchaReset}
+          />
           {hasError ? (
             <p id="iletisim-hata" role="alert" className="text-sm font-medium text-destructive">
               {state?.error}
@@ -157,7 +169,7 @@ export function IletisimForm() {
             </p>
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || (Boolean(turnstileSiteKey) && !captchaToken)}
               className={buttonClasses({ className: "w-full sm:w-auto" })}
             >
               <Send aria-hidden className="size-4" />
