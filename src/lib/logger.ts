@@ -9,12 +9,18 @@ const REDACTED = "[REDACTED]";
 
 // Context keys whose values never belong in logs (card data, secrets, and the
 // gateway tokens of stored cards — utoken/ctoken/cardToken charge a card).
+// Faz 4: any "...token" (admin API / login / KVKK export download / e-mail
+// verification / unsubscribe tokens), trusted-device cookies and KYC
+// document storage keys.
 const SENSITIVE_KEY =
-  /(card.?number|^pan$|cvv|cvc|cvv2|security.?code|card.?expire|expiry|password|passwd|secret|hashdata|authorization|^md$|^cookie$|utoken|ctoken|card.?token|card.?user.?key|gateway.?customer.?ref)/i;
+  /(card.?number|^pan$|cvv|cvc|cvv2|security.?code|card.?expire|expiry|password|passwd|secret|hashdata|authorization|^md$|^cookie$|utoken|ctoken|card.?token|card.?user.?key|gateway.?customer.?ref|token$|trusted.?device.?cookie|unsubscribe.?(url|link)|download.?url)/i;
 
 // cPanel/WHM single sign-on URLs: the cpsess token and the session parameter
 // are a live login (create_user_session); never let one reach the logs.
 const PANEL_SESSION = /(\/cpsess)\d+|([?&]session=)[^&\s"']+/gi;
+
+// Admin API tokens and customer API keys (kc_admin_… / kc_live_…): the prefix stays for debugging.
+const API_SECRET = /\b(kc_(?:admin|live)_)[A-Za-z0-9_-]{8,}/g;
 
 // 12-19 digits, optionally grouped by spaces/dashes: candidate card numbers.
 const CARD_CANDIDATE = /\b\d(?:[ -]?\d){11,18}\b/g;
@@ -36,10 +42,13 @@ function luhn(digits: string) {
 
 /** Masks anything that looks like a card number (Luhn-valid 12-19 digits) or a panel session token. */
 export function redactText(value: string) {
-  return value.replace(PANEL_SESSION, (_match, cpsess, session) => `${cpsess ?? session}${REDACTED}`).replace(CARD_CANDIDATE, (match) => {
-    const digits = match.replace(/\D/g, "");
-    return digits.length >= 12 && luhn(digits) ? `[KART ****${digits.slice(-4)}]` : match;
-  });
+  return value
+    .replace(PANEL_SESSION, (_match, cpsess, session) => `${cpsess ?? session}${REDACTED}`)
+    .replace(API_SECRET, (_match, prefix) => `${prefix}${REDACTED}`)
+    .replace(CARD_CANDIDATE, (match) => {
+      const digits = match.replace(/\D/g, "");
+      return digits.length >= 12 && luhn(digits) ? `[KART ****${digits.slice(-4)}]` : match;
+    });
 }
 
 /** Sensitive keys lose their value; flags like `secretConfigured: true` stay. */

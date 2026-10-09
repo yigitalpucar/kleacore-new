@@ -69,4 +69,25 @@ describe("createLogger", () => {
     expect(line).toContain("session=[REDACTED]");
     spy.mockRestore();
   });
+
+  it("redacts Faz 4 secrets: API tokens, one-time links and token-named context keys", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    createLogger("faz4").warn("auth failed for Bearer kc_admin_0123456789abcdef0123", {
+      loginToken: "abc.def",
+      exportToken: "tok-123",
+      unsubscribeUrl: "https://kleacore.com/abonelik/iptal?t=signed",
+      downloadUrl: "https://kleacore.com/api/kvkk/indir?token=x",
+      tokenPrefix: "kc_admin_01234567",
+      apiKey: "kc_live_abcdefghijklmnop",
+    });
+    const line = spy.mock.calls[0][0] as string;
+    const entry = JSON.parse(line);
+    expect(line).not.toMatch(/0123456789abcdef0123|abc\.def|tok-123|signed|token=x|abcdefghijklmnop/);
+    expect(entry.message).toBe("auth failed for Bearer kc_admin_[REDACTED]");
+    expect(entry.loginToken).toBe("[REDACTED]");
+    expect(entry.unsubscribeUrl).toBe("[REDACTED]");
+    // A token prefix is a lookup handle, not the secret.
+    expect(entry.tokenPrefix).toBe("kc_admin_[REDACTED]");
+    spy.mockRestore();
+  });
 });

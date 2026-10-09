@@ -173,6 +173,11 @@ export function SepetContent({
       const paidWithBalance = Boolean(result.data && "paidWithBalance" in result.data && result.data.paidWithBalance);
 
       if (selectedKind === "balance") {
+        if (paidWithBalance && result.data && "kycRequired" in result.data && result.data.kycRequired) {
+          toast.info("Ödemeniz alındı. Sunucunuzun kurulumu için kimlik doğrulaması gerekli.");
+          router.push("/musteri/panel/kimlik-dogrulama");
+          return;
+        }
         if (paidWithBalance) {
           toast.success("Siparişiniz bakiyenizden ödendi.");
         } else {

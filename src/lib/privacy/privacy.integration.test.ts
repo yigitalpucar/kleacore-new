@@ -132,7 +132,8 @@ describe.runIf(enabled)("KVKK requests (integration, real Postgres)", () => {
       address: "Test Sok. 1",
       sessionVersion: before.sessionVersion + 1,
     });
-    expect(await db.loginEvent.count({ where: { userId: customerId } })).toBe(0);
+    // Sign-in history is a security log kept for its retention; only the e-mail is anonymised.
+    expect(await db.loginEvent.count({ where: { userId: customerId, email: { not: anonymousEmail(customerId) } } })).toBe(0);
     const invoice = await db.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
     expect(invoice).toMatchObject({ invoiceNumber: `KVKKTEST-${suffix}`, status: "PAID", customerId });
     expect(invoice.totalAmount.toFixed(2)).toBe("120.00");

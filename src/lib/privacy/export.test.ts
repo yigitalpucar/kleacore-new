@@ -31,6 +31,12 @@ const fx = vi.hoisted(() => {
             city: "İstanbul",
             country: "Türkiye",
             balance: "0.00",
+            marketingConsent: true,
+            marketingConsentAt: at,
+            kycStatus: "APPROVED",
+            kycSubmittedAt: at,
+            kycReviewedAt: at,
+            kycRejectionReason: null,
             createdAt: at,
           };
         }),
@@ -64,8 +70,15 @@ const fx = vi.hoisted(() => {
           messages: [{ senderName: "Ayşe", senderRole: "CUSTOMER", message: "Satır 1\nSatır 2, virgül", createdAt: at, files: [{ fileName: "ekran.png" }] }],
         },
       ]),
-      consentRecord: model("consentRecord", [{ documentType: "KVKK_NOTICE", documentVersion: 1, snapshotHash: "abc", ipAddress: "203.0.113.5", acceptedAt: at, order: null }]),
+      consentRecord: model("consentRecord", [
+        { documentType: "KVKK_NOTICE", documentVersion: 1, snapshotHash: "abc", ipAddress: "203.0.113.5", acceptedAt: at, order: null },
+        { documentType: "MARKETING_CONSENT", documentVersion: 1, snapshotHash: "def", ipAddress: "203.0.113.5", acceptedAt: at, order: null },
+      ]),
       loginEvent: model("loginEvent", [{ createdAt: at, success: true, method: "password", ipAddress: "203.0.113.5", uaFamily: "Chrome · macOS" }]),
+      kycDocument: model("kycDocument", [{ type: "IDENTITY_FRONT", mimeType: "image/jpeg", sizeBytes: 1024, uploadedAt: at, deleteAfter: null, deletedAt: null }]),
+      broadcastRecipient: model("broadcastRecipient", [
+        { channel: "EMAIL", to: "ayse@example.com", status: "SENT", sentAt: at, createdAt: at, broadcast: { kind: "MARKETING", subject: "Ekim kampanyası" } },
+      ]),
       savedCard: model("savedCard", [{ brand: "VISA", last4: "4242", status: "ACTIVE", consentAt: at, createdAt: at }]),
       dataRequest: {
         findMany: vi.fn(async () => [{ requestNumber: "KVKK-2026-000001", type: "EXPORT", status: "IN_PROGRESS", createdAt: at }]),
@@ -129,6 +142,8 @@ const SECRET_FIELDS = [
   "cardToken",
   "gatewayCustomerRef",
   "keyHash",
+  "storageKey",
+  "sha256",
 ];
 
 describe("collectPersonalData", () => {
@@ -149,6 +164,15 @@ describe("collectPersonalData", () => {
     expect(byKey["destek-mesajlari"][0]).toMatchObject({ ticketNumber: "T-1", ekler: "ekran.png" });
     expect(byKey.onaylar[0]).toMatchObject({ documentType: "KVKK_NOTICE" });
     expect(byKey["giris-gecmisi"][0]).toMatchObject({ ipAddress: "203.0.113.5" });
+    expect(byKey["kimlik-dogrulama"]).toEqual([
+      expect.objectContaining({ kayit: "Durum", kycStatus: "APPROVED" }),
+      expect.objectContaining({ kayit: "Belge", type: "IDENTITY_FRONT", sizeBytes: 1024 }),
+    ]);
+    expect(byKey["ticari-ileti-onayi"]).toEqual([
+      { marketingConsent: true, marketingConsentAt: fx.at },
+      expect.objectContaining({ kayit: "Onay kaydı", documentType: "MARKETING_CONSENT" }),
+    ]);
+    expect(byKey["toplu-duyurular"][0]).toMatchObject({ konu: "Ekim kampanyası", status: "SENT" });
   });
 
   it("never selects secrets (password hash, 2FA, tokens, panel passwords, card tokens)", async () => {

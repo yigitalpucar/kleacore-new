@@ -5,6 +5,9 @@ import { db } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
 import { isPositive } from "@/lib/money";
 import { getStorageDriver } from "@/lib/storage";
+import { getKycConfig } from "@/lib/kyc/settings";
+import { KYC_APPROVED_RETENTION_YEARS, planKycErasure } from "@/lib/kyc/retention";
+import { LOGIN_EVENT_RETENTION_DAYS } from "./maintenance";
 import { DataRequestError } from "./requests";
 
 const log = createLogger("privacy.anonymize");
@@ -22,7 +25,12 @@ const log = createLogger("privacy.anonymize");
  *    account has invoices, the billing identity printed on them (name,
  *    company, tax number/office, address) stays on the user row as well;
  *  - legal consent records (distance-sales / KVKK acceptance proof);
- *  - the KVKK request itself (proof that it was answered).
+ *  - the KVKK request itself (proof that it was answered);
+ *  - approved KYC documents while the 5651 retention runs (last server
+ *    service ended < KYC_APPROVED_RETENTION_YEARS ago, src/lib/kyc/retention.ts);
+ *  - sign-in history (security log) until the normal LOGIN_EVENT_RETENTION_DAYS
+ *    purge; its e-mail column is anonymised.
+ * Staff API tokens the account still owns are revoked.
  * Everything else that identifies the person is deleted or overwritten.
  */
 
@@ -64,7 +72,13 @@ export interface AnonymizationSnapshot {
     domainsWithWhois: number;
     contactMessages: number;
     activityLogs: number;
+    kycDocumentsDeleted: number;
+    kycDocumentsRetained: number;
+    broadcastRecipients: number;
+    staffApiTokens: number;
   };
+  /** Approved KYC documents are kept until (null: none retained). */
+  kycRetainedUntil?: Date | null;
 }
 
 export interface PlanLine {
@@ -112,7 +126,9 @@ export function buildAnonymizationPlan(snapshot: AnonymizationSnapshot): Anonymi
     },
     { label: "Destek talepleri", count: c.tickets, detail: "Konu ve tüm mesaj metinleri anonimleştirilir." },
     { label: "Destek ekleri", count: c.ticketAttachments, detail: "Dosyalar depolamadan ve kayıtlardan silinir." },
-    { label: "Giriş geçmişi", count: c.loginEvents, detail: "IP ve tarayıcı kayıtları silinir." },
+    { label: "Kimlik doğrulama belgeleri (KYC)", count: c.kycDocumentsDeleted, detail: "Dosyalar depolamadan, kayıtlar veritabanından silinir." },
+    { label: "Toplu duyuru alıcı kayıtları", count: c.broadcastRecipients, detail: "Alıcı e-posta / telefon adresi silinir." },
+    { label: "Personel API token'ları", count: c.staffApiTokens, detail: "İptal edilir; son kullanım IP'si silinir." },
     { label: "Hatırlanan cihazlar", count: c.trustedDevices, detail: "Silinir." },
     { label: "API anahtarları", count: c.apiKeys, detail: "Silinir." },
     { label: "Oturum kayıtları", count: c.sessions, detail: "Silinir." },
@@ -133,7 +149,20 @@ export function buildAnonymizationPlan(snapshot: AnonymizationSnapshot): Anonymi
     { label: "Siparişler (tutarlar)", count: c.orders, detail: "Fatura dayanağı; 10 yıl saklanır." },
     { label: "Yasal onay kayıtları", count: c.consents, detail: "Mesafeli sözleşme / KVKK onay ispatı." },
     { label: "KVKK başvurusu", count: 1, detail: "Başvurunun yanıtlandığının ispatı." },
+    {
+      label: "Giriş geçmişi",
+      count: c.loginEvents,
+      detail: `Güvenlik kaydı (IP, tarayıcı, zaman); ${LOGIN_EVENT_RETENTION_DAYS} gün sonunda bakım işiyle silinir. E-posta alanı anonimleştirilir.`,
+    },
   ];
+  if (c.kycDocumentsRetained > 0) {
+    const until = snapshot.kycRetainedUntil ? ` (${snapshot.kycRetainedUntil.toISOString().slice(0, 10)} tarihine kadar)` : "";
+    retained.push({
+      label: "Onaylı kimlik belgeleri (KYC)",
+      count: c.kycDocumentsRetained,
+      detail: `5651 sayılı Kanun: sunucu hizmetinin bitişinden itibaren ${KYC_APPROVED_RETENTION_YEARS} yıl saklanır${until}; sonra silinir.`,
+    });
+  }
 
   return {
     userId: user.id,
@@ -154,6 +183,7 @@ export async function loadAnonymizationSnapshot(userId: string, client: Client =
   if (!user) throw new DataRequestError("NO_USER", "Hesap bulunamadı");
 
   const ticketWhere = { customerId: userId };
+  const kyc = await planKycErasure(client, userId, (await getKycConfig()).requiredCategories, now);
   const [
     openServices,
     unpaidInvoices,
@@ -179,6 +209,8 @@ export async function loadAnonymizationSnapshot(userId: string, client: Client =
     domainsWithWhois,
     contactMessages,
     activityLogs,
+    broadcastRecipients,
+    staffApiTokens,
   ] = await Promise.all([
     client.service.count({ where: { customerId: userId, status: { in: ["PENDING", "ACTIVE", "SUSPENDED"] } } }),
     client.invoice.count({ where: { customerId: userId, status: { in: ["PENDING", "OVERDUE"] } } }),
@@ -214,6 +246,8 @@ export async function loadAnonymizationSnapshot(userId: string, client: Client =
     }),
     client.contactMessage.count({ where: { email: { equals: user.email, mode: "insensitive" } } }),
     client.activityLog.count({ where: { userId } }),
+    client.broadcastRecipient.count({ where: { userId } }),
+    client.staffApiToken.count({ where: { userId, revokedAt: null } }),
   ]);
 
   return {
@@ -249,7 +283,12 @@ export async function loadAnonymizationSnapshot(userId: string, client: Client =
       domainsWithWhois,
       contactMessages,
       activityLogs,
+      kycDocumentsDeleted: kyc.deletable.length,
+      kycDocumentsRetained: kyc.retained,
+      broadcastRecipients,
+      staffApiTokens,
     },
+    kycRetainedUntil: kyc.retainedUntil,
   };
 }
 
@@ -293,6 +332,7 @@ export async function applyAnonymization(
   const userId = request.userId;
   const unusablePassword = await hash(randomBytes(32).toString("base64url"), 10);
 
+  const kycConfig = await getKycConfig();
   const { plan, attachmentKeys } = await db.$transaction(
     async (tx) => {
       const snapshot = await loadAnonymizationSnapshot(userId, tx, now);
@@ -302,10 +342,20 @@ export async function applyAnonymization(
         throw new DataRequestError("CONFIRM_MISMATCH", "Onay için hesabın e-posta adresini doğru yazın");
       }
 
-      const attachments = await tx.ticketAttachment.findMany({
-        where: { ticket: { customerId: userId } },
-        select: { storageKey: true, storageDriver: true },
-      });
+      const attachments = (
+        (await tx.ticketAttachment.findMany({
+          where: { ticket: { customerId: userId } },
+          select: { storageKey: true, storageDriver: true },
+        })) ?? []
+      ).slice();
+      // KYC: files of the deletable documents go with the attachments (after commit).
+      const kyc = await planKycErasure(tx, userId, kycConfig.requiredCategories, now);
+      for (const doc of kyc.deletable) {
+        if (!doc.deletedAt) attachments.push({ storageKey: doc.storageKey, storageDriver: doc.storageDriver });
+      }
+      if (kyc.deletable.length > 0) {
+        await tx.kycDocument.deleteMany({ where: { id: { in: kyc.deletable.map((doc) => doc.id) } } });
+      }
 
       await tx.user.update({
         where: { id: userId },
@@ -325,6 +375,8 @@ export async function applyAnonymization(
           autoPayConsentAt: null,
           autoPayConsentIp: null,
           failedLoginNoticeAt: null,
+          marketingConsent: false,
+          kycRejectionReason: null,
           emailVerifiedAt: null,
           lastLoginAt: null,
           ...(plan.keepBillingIdentity
@@ -346,7 +398,14 @@ export async function applyAnonymization(
       await tx.passwordResetToken.deleteMany({ where: { userId } });
       await tx.emailVerificationToken.deleteMany({ where: { userId } });
       await tx.trustedDevice.deleteMany({ where: { userId } });
-      await tx.loginEvent.deleteMany({ where: { userId } });
+      // Kept for the security-log retention; only the typed e-mail goes.
+      await tx.loginEvent.updateMany({ where: { userId }, data: { email: anonymousEmail(userId) } });
+      await tx.broadcastRecipient.updateMany({ where: { userId }, data: { to: REDACTED_TEXT } });
+      await tx.staffApiToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now, revokedById: actor.id },
+      });
+      await tx.staffApiToken.updateMany({ where: { userId }, data: { lastUsedIp: null } });
       await tx.notification.deleteMany({ where: { userId } });
       await tx.emailMessage.deleteMany({ where: { customerId: userId } });
       await tx.emailAccount.deleteMany({ where: { customerId: userId } });

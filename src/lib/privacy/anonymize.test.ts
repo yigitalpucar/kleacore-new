@@ -11,6 +11,8 @@ const fx = vi.hoisted(() => {
     user: { id: "cus-1", email: "ayse@example.com", role: "CUSTOMER", balance: "0.00" } as Record<string, unknown>,
     request: {} as Record<string, unknown>,
     attachments: [] as Array<{ storageKey: string; storageDriver: string }>,
+    kycDocuments: [] as Array<Record<string, unknown>>,
+    serverServices: [] as Array<Record<string, unknown>>,
   };
   const READS = new Set(["count", "findUnique", "findFirst", "findMany"]);
   const model = (name: string) =>
@@ -28,6 +30,8 @@ const fx = vi.hoisted(() => {
           if (name === "user" && method === "findUnique") return state.user;
           if (name === "dataRequest" && method === "findUnique") return state.request;
           if (name === "ticketAttachment" && method === "findMany") return state.attachments;
+          if (name === "kycDocument" && method === "findMany") return state.kycDocuments;
+          if (name === "service" && method === "findMany") return state.serverServices;
           if (READS.has(method)) return null;
           return method.endsWith("Many") ? { count: 1 } : {};
         },
@@ -45,6 +49,9 @@ const fx = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/db", () => ({ db: fx.client }));
+vi.mock("@/lib/kyc/settings", () => ({
+  getKycConfig: async () => ({ requiredCategories: ["vds", "server", "datacenter"], rejectedRetentionDays: 30 }),
+}));
 vi.mock("@/lib/storage", () => ({
   getStorageDriver: () => ({ delete: async (key: string) => void fx.deleted.push(key) }),
 }));
@@ -62,6 +69,8 @@ beforeEach(() => {
   fx.deleted.length = 0;
   fx.state.counts = {};
   fx.state.attachments = [];
+  fx.state.kycDocuments = [];
+  fx.state.serverServices = [];
   fx.state.user = { id: "cus-1", email: "ayse@example.com", role: "CUSTOMER", balance: "0.00" };
   fx.state.request = { id: "dr-1", type: "ERASURE", status: "IN_PROGRESS", userId: "cus-1", anonymizedAt: null, requestNumber: "KVKK-2026-000003" };
 });
@@ -93,6 +102,10 @@ const snapshot = (counts: Partial<AnonymizationSnapshot["counts"]> = {}, user: P
     domainsWithWhois: 0,
     contactMessages: 0,
     activityLogs: 0,
+    kycDocumentsDeleted: 0,
+    kycDocumentsRetained: 0,
+    broadcastRecipients: 0,
+    staffApiTokens: 0,
     ...counts,
   },
 });
@@ -165,7 +178,9 @@ describe("dry run vs apply", () => {
       "apiKey.deleteMany",
       "session.deleteMany",
       "trustedDevice.deleteMany",
-      "loginEvent.deleteMany",
+      "loginEvent.updateMany",
+      "broadcastRecipient.updateMany",
+      "staffApiToken.updateMany",
       "emailMessage.deleteMany",
       "ticketAttachment.deleteMany",
       "ticketMessage.updateMany",
@@ -204,4 +219,61 @@ describe("dry run vs apply", () => {
     await expect(applyAnonymization("dr-1", { id: "admin-1" }, "ayse@example.com")).rejects.toThrow("zaten");
     expect(writes()).toEqual([]);
   });
+
+  it("keeps sign-in history for its retention (e-mail anonymised), redacts broadcast addresses, revokes staff API tokens", async () => {
+    const now = new Date("2026-10-09T10:00:00Z");
+    await applyAnonymization("dr-1", { id: "admin-1" }, "ayse@example.com", now);
+    const written = writes();
+    expect(written.find((c) => c.model === "loginEvent" && c.method === "deleteMany")).toBeUndefined();
+    expect(written.find((c) => c.model === "loginEvent" && c.method === "updateMany")?.args).toEqual({
+      where: { userId: "cus-1" },
+      data: { email: anonymousEmail("cus-1") },
+    });
+    expect(written.find((c) => c.model === "broadcastRecipient")?.args).toMatchObject({ data: { to: expect.stringContaining("KVKK") } });
+    expect(written.find((c) => c.model === "staffApiToken")?.args).toEqual({
+      where: { userId: "cus-1", revokedAt: null },
+      data: { revokedAt: now, revokedById: "admin-1" },
+    });
+    const plan = await previewAnonymizationForRequest("dr-1");
+    expect(plan.retained.map((line) => line.label)).toContain("Giriş geçmişi");
+  });
 });
+
+describe("KYC documents on erasure", () => {
+  const docs = [
+    { id: "kyc-1", storageDriver: "local", storageKey: "kyc/2026/09/front", deletedAt: null, deleteAfter: null },
+    { id: "kyc-2", storageDriver: "local", storageKey: "kyc/2026/09/back", deletedAt: null, deleteAfter: null },
+    { id: "kyc-3", storageDriver: "local", storageKey: "kyc/2026/08/rejected", deletedAt: null, deleteAfter: new Date("2026-09-10") },
+    { id: "kyc-4", storageDriver: "local", storageKey: "kyc/2026/07/gone", deletedAt: new Date("2026-08-01"), deleteAfter: new Date("2026-08-01") },
+  ];
+
+  it("retains approved documents for 2 years after the last server service; deletes the rest (files + rows)", async () => {
+    fx.state.user = { ...fx.state.user, kycStatus: "APPROVED" };
+    fx.state.kycDocuments = docs;
+    fx.state.serverServices = [{ status: "CANCELLED", cancelledAt: new Date("2026-04-01"), expiresAt: null, updatedAt: new Date("2026-04-01") }];
+
+    const preview = await previewAnonymizationForRequest("dr-1", new Date("2026-10-09"));
+    expect(preview.retained.find((l) => l.label.startsWith("Onaylı kimlik"))).toMatchObject({
+      count: 2,
+      detail: expect.stringContaining("2028-04-01"),
+    });
+    expect(preview.changes.find((l) => l.label.startsWith("Kimlik doğrulama"))?.count).toBe(2);
+
+    await applyAnonymization("dr-1", { id: "admin-1" }, "ayse@example.com", new Date("2026-10-09"));
+    const removed = writes().find((c) => c.model === "kycDocument" && c.method === "deleteMany")?.args;
+    expect(removed).toEqual({ where: { id: { in: ["kyc-3", "kyc-4"] } } });
+    // The stub's file is already gone; only the rejected document's file is deleted.
+    expect(fx.deleted).toEqual(["kyc/2026/08/rejected"]);
+  });
+
+  it("deletes approved documents too once the retention after the last server service has passed", async () => {
+    fx.state.user = { ...fx.state.user, kycStatus: "APPROVED" };
+    fx.state.kycDocuments = docs.slice(0, 2);
+    fx.state.serverServices = [{ status: "CANCELLED", cancelledAt: new Date("2023-01-01"), expiresAt: null, updatedAt: new Date("2023-01-01") }];
+
+    await applyAnonymization("dr-1", { id: "admin-1" }, "ayse@example.com", new Date("2026-10-09"));
+    expect(writes().find((c) => c.model === "kycDocument")?.args).toEqual({ where: { id: { in: ["kyc-1", "kyc-2"] } } });
+    expect(fx.deleted).toEqual(["kyc/2026/09/front", "kyc/2026/09/back"]);
+  });
+});
+

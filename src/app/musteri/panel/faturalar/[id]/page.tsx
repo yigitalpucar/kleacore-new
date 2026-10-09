@@ -8,6 +8,8 @@ import { getSavedCardAvailability, listChargeableCards } from "@/lib/payments/sa
 import { getBankAccounts, getInvoiceBankTransferNotices } from "@/lib/dal/bank-transfer";
 import { FaturaDetayContent, type InvoicePaymentNotice } from "./content";
 
+import { WaitingOrdersNotice } from "@/components/panel/waiting-orders-notice";
+
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Fatura detayı" };
@@ -145,14 +147,17 @@ export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
   ]);
 
   return (
-    <FaturaDetayContent
-      invoice={serializedInvoice}
-      paymentNotice={paymentNotice}
-      paymentOptions={paymentOptions}
-      bankAccounts={bankAccounts}
-      bankTransferNotices={bankTransferNotices}
-      initialMethod={odeme === "havale" ? "bank_transfer" : null}
-      savedCards={savedCards}
-    />
+    <>
+      {invoice.status === "PAID" ? <WaitingOrdersNotice userId={invoice.customerId} /> : null}
+      <FaturaDetayContent
+        invoice={serializedInvoice}
+        paymentNotice={paymentNotice}
+        paymentOptions={paymentOptions}
+        bankAccounts={bankAccounts}
+        bankTransferNotices={bankTransferNotices}
+        initialMethod={odeme === "havale" ? "bank_transfer" : null}
+        savedCards={savedCards}
+      />
+    </>
   );
 }

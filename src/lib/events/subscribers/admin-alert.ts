@@ -89,6 +89,15 @@ export function buildAdminAlert(event: DispatchedEvent): Alert | null {
       path: `/yonetim/siparisler/${p.orderId}`,
     };
   }
+  if (isEvent(event, "kyc.required")) {
+    const p = event.payload;
+    return {
+      title: `Kimlik doğrulaması bekleniyor: ${p.orderNumber}`,
+      message: `${p.productName} siparişinin ödemesi alındı; kurulum müşterinin kimlik doğrulaması onaylanana kadar bekliyor. Müşteriden belge istendi.`,
+      details: [{ label: "Sipariş", value: p.orderNumber }],
+      path: `/yonetim/siparisler/${p.orderId}`,
+    };
+  }
   if (isEvent(event, "kyc.submitted")) {
     const p = event.payload;
     return {
@@ -133,6 +142,7 @@ export const ADMIN_ALERT_EVENTS: readonly EventType[] = [
   "payment.failed",
   "user.login_failed_locked",
   "order.review_required",
+  "kyc.required",
   "kyc.submitted",
   "privacy.request_received",
 ];

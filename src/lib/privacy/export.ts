@@ -33,6 +33,9 @@ export const EXPORT_SECTION_KEYS = [
   "destek-mesajlari",
   "onaylar",
   "giris-gecmisi",
+  "kimlik-dogrulama",
+  "ticari-ileti-onayi",
+  "toplu-duyurular",
   "kayitli-kartlar",
   "kvkk-basvurulari",
 ] as const;
@@ -62,6 +65,12 @@ export async function collectPersonalData(userId: string): Promise<PersonalDataS
       affiliateCode: true,
       autoPayEnabled: true,
       autoPayConsentAt: true,
+      marketingConsent: true,
+      marketingConsentAt: true,
+      kycStatus: true,
+      kycSubmittedAt: true,
+      kycReviewedAt: true,
+      kycRejectionReason: true,
       emailVerifiedAt: true,
       lastLoginAt: true,
       createdAt: true,
@@ -70,7 +79,7 @@ export async function collectPersonalData(userId: string): Promise<PersonalDataS
   });
   if (!user) throw new DataRequestError("NO_USER", "Hesap bulunamadı");
 
-  const [orders, invoices, payments, services, domains, tickets, consents, logins, cards, requests] = await Promise.all([
+  const [orders, invoices, payments, services, domains, tickets, consents, logins, cards, requests, kycDocuments, broadcasts] = await Promise.all([
     db.order.findMany({
       where: { customerId: userId },
       orderBy: { createdAt: "asc" },
@@ -198,6 +207,24 @@ export async function collectPersonalData(userId: string): Promise<PersonalDataS
       orderBy: { createdAt: "asc" },
       select: { requestNumber: true, type: true, status: true, createdAt: true, receivedAt: true, completedAt: true },
     }),
+    // KYC: status and document metadata only — never the document contents.
+    db.kycDocument.findMany({
+      where: { userId },
+      orderBy: { uploadedAt: "asc" },
+      select: { type: true, mimeType: true, sizeBytes: true, uploadedAt: true, deleteAfter: true, deletedAt: true },
+    }),
+    db.broadcastRecipient.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        channel: true,
+        to: true,
+        status: true,
+        sentAt: true,
+        createdAt: true,
+        broadcast: { select: { kind: true, subject: true } },
+      },
+    }),
   ]);
 
   return [
@@ -274,6 +301,35 @@ export async function collectPersonalData(userId: string): Promise<PersonalDataS
       rows: consents.map(({ order, ...c }) => ({ ...c, orderNumber: order?.orderNumber ?? null })),
     },
     { key: "giris-gecmisi", title: "Giriş geçmişi", rows: logins },
+    {
+      key: "kimlik-dogrulama",
+      title: "Kimlik doğrulama (KYC) — durum ve belge bilgileri (belge içerikleri dahil edilmez)",
+      rows: [
+        {
+          kayit: "Durum",
+          kycStatus: user.kycStatus,
+          kycSubmittedAt: user.kycSubmittedAt,
+          kycReviewedAt: user.kycReviewedAt,
+          kycRejectionReason: user.kycRejectionReason,
+        },
+        ...(kycDocuments ?? []).map((doc) => ({ kayit: "Belge", ...doc })),
+      ],
+    },
+    {
+      key: "ticari-ileti-onayi",
+      title: "Ticari elektronik ileti onayı",
+      rows: [
+        { marketingConsent: user.marketingConsent, marketingConsentAt: user.marketingConsentAt },
+        ...consents
+          .filter((c) => c.documentType === "MARKETING_CONSENT")
+          .map(({ order: _order, ...c }) => ({ kayit: "Onay kaydı", ...c })),
+      ],
+    },
+    {
+      key: "toplu-duyurular",
+      title: "Gönderilen toplu duyurular",
+      rows: (broadcasts ?? []).map(({ broadcast, ...b }) => ({ ...b, tur: broadcast.kind, konu: broadcast.subject })),
+    },
     { key: "kayitli-kartlar", title: "Kayıtlı kartlar (maskeli)", rows: cards },
     { key: "kvkk-basvurulari", title: "KVKK başvuruları", rows: requests },
   ];

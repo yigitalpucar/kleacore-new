@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle2, FileText, Package, Receipt } from "lucide-react";
+import { CheckCircle2, FileText, IdCard, Package, Receipt } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Topbar } from "@/components/layout/topbar";
@@ -39,6 +39,7 @@ async function getCheckoutSummary(sessionId?: string) {
             select: {
               id: true,
               orderNumber: true,
+              provisioningHoldReasons: true,
             },
           },
         },
@@ -62,6 +63,8 @@ async function getCheckoutSummary(sessionId?: string) {
     invoices,
     orders,
     totalAmount,
+    // Paid server orders waiting for identity verification (docs/fraud-kyc.md).
+    kycRequired: orders.some((order) => order.provisioningHoldReasons.includes("KYC")),
   };
 }
 
@@ -120,6 +123,28 @@ export default async function CheckoutSuccessPage({ searchParams }: CheckoutSucc
                 kontrol edebilirsiniz.
               </p>
             )}
+
+            {summary?.kycRequired ? (
+              <section
+                role="status"
+                aria-labelledby="kyc-gerekli"
+                className="flex items-start gap-3 rounded-2xl border border-foreground/30 bg-background p-5"
+              >
+                <IdCard aria-hidden className="mt-0.5 size-5 shrink-0" />
+                <div className="min-w-0 space-y-3">
+                  <h2 id="kyc-gerekli" className="font-semibold">
+                    Kimlik doğrulaması gerekli
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Sunucu hizmetinizin kurulumu, 5651 sayılı Kanun gereği kimliğiniz doğrulandıktan sonra başlar.
+                    Belgelerinizi yükleyin; onaylandığında kurulum kendiliğinden başlar.
+                  </p>
+                  <Link href="/musteri/panel/kimlik-dogrulama" className={buttonClasses()}>
+                    Kimlik belgelerini yükle
+                  </Link>
+                </div>
+              </section>
+            ) : null}
 
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <Link href="/musteri/panel/faturalar" className={buttonClasses()}>

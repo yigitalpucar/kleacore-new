@@ -895,6 +895,14 @@ export async function checkoutCart(input: CheckoutInput) {
       }
     }
 
+    // Paid server orders of a customer without approved KYC are held: the
+    // cart sends the customer straight to identity verification.
+    const kycRequired =
+      paidWithBalance &&
+      (await db.order.count({
+        where: { id: { in: result.orderIds }, provisioningHeldAt: { not: null }, provisioningHoldReasons: { has: "KYC" } },
+      })) > 0;
+
     revalidatePath("/musteri/panel");
     revalidatePath("/musteri/panel/faturalar");
     revalidatePath("/musteri/panel/hizmetlerim");
@@ -903,7 +911,7 @@ export async function checkoutCart(input: CheckoutInput) {
     revalidatePath("/yonetim/siparisler");
     revalidatePath("/yonetim/faturalar");
 
-    return { success: true, data: { ...result, paymentMethod: methodId, paidWithBalance } };
+    return { success: true, data: { ...result, paymentMethod: methodId, paidWithBalance, kycRequired } };
   } catch (error) {
     if (error instanceof Error) {
       if (error.message === "LEGAL_CONSENT_MISSING") {

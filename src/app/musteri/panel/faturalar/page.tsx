@@ -4,6 +4,8 @@ import { getInvoicesByCustomer } from "@/lib/dal/invoices";
 import { max, sub, sum, toNumber } from "@/lib/money";
 import { FaturalarContent } from "./content";
 
+import { WaitingOrdersNotice } from "@/components/panel/waiting-orders-notice";
+
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Faturalarım" };
@@ -56,5 +58,10 @@ export default async function FaturalarPage() {
     overdue: outstandingTotal(["OVERDUE"]),
   };
 
-  return <FaturalarContent invoices={serializedInvoices} stats={stats} />;
+  return (
+    <>
+      <WaitingOrdersNotice userId={userId} />
+      <FaturalarContent invoices={serializedInvoices} stats={stats} />
+    </>
+  );
 }
