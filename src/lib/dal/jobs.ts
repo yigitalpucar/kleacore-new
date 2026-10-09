@@ -17,6 +17,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   "usage-sync": "Hosting kullanım senkronu (kuyruğa alma)",
   "support-mail": "Destek e-postaları (IMAP → ticket)",
   "support-autoclose": "Destek talebi otomatik kapatma",
+  "kyc-retention": "Reddedilen KYC belgelerinin silinmesi",
   notifications: "Fatura bildirimleri ve bildirim kuyruğu eşitleme",
   "jobs-drain": "İş kuyruğu (drain)",
 };

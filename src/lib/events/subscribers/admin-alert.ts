@@ -62,6 +62,27 @@ export function buildAdminAlert(event: DispatchedEvent): Alert | null {
       path: `/yonetim/faturalar/${p.invoiceId}`,
     };
   }
+  if (isEvent(event, "order.review_required")) {
+    const p = event.payload;
+    return {
+      title: `Sipariş incelemede: ${p.orderNumber}`,
+      message: `Risk puanı ${p.score} (eşik ${p.threshold}). ${p.paymentBlocked ? "Ödeme onaya kadar engellendi." : "Ödeme alınabilir; kurulum onay bekleyecek."}`,
+      details: [
+        { label: "Aşama", value: p.stage === "payment" ? "Ödeme" : "Sipariş" },
+        ...(p.reasons.length ? [{ label: "Kurallar", value: p.reasons.join(", ").slice(0, 600) }] : []),
+      ],
+      path: `/yonetim/siparisler/${p.orderId}`,
+    };
+  }
+  if (isEvent(event, "kyc.submitted")) {
+    const p = event.payload;
+    return {
+      title: "Kimlik doğrulama belgesi gönderildi",
+      message: `${p.customerName ?? "Bir müşteri"} kimlik doğrulama belgelerini yükledi; inceleme bekliyor.`,
+      details: p.documentTypes.length ? [{ label: "Belgeler", value: p.documentTypes.join(", ") }] : [],
+      path: `/yonetim/kyc/${p.userId}`,
+    };
+  }
   if (isEvent(event, "user.login_failed_locked")) {
     const p = event.payload;
     return {
@@ -83,6 +104,8 @@ export const ADMIN_ALERT_EVENTS: readonly EventType[] = [
   "service.provisioning_failed",
   "payment.failed",
   "user.login_failed_locked",
+  "order.review_required",
+  "kyc.submitted",
 ];
 
 /** E-mail (and SMS when admin_notification_phone is set) to the staff address. */

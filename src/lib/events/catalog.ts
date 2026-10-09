@@ -92,6 +92,92 @@ const orderCancelled = defineEvent({
 });
 
 // ---------------------------------------------------------------------------
+// Order risk review + KYC (Faz 4, docs/fraud-kyc.md)
+// ---------------------------------------------------------------------------
+
+const orderReviewShape = { orderId: id, orderNumber: z.string(), customerId: id };
+
+const orderReviewRequired = defineEvent({
+  type: "order.review_required",
+  label: "Sipariş incelemeye alındı",
+  aggregate: "Order",
+  aggregateKey: "orderId",
+  schema: z.object({
+    ...orderReviewShape,
+    score: z.number().int(),
+    threshold: z.number().int(),
+    paymentBlocked: z.boolean().default(false),
+    /** "checkout" | "payment" */
+    stage: z.string(),
+    /** Labels of the matched rules. */
+    reasons: z.array(z.string()).default([]),
+  }),
+});
+
+const orderReviewApproved = defineEvent({
+  type: "order.review_approved",
+  label: "Sipariş incelemesi onaylandı",
+  aggregate: "Order",
+  aggregateKey: "orderId",
+  schema: z.object({
+    ...orderReviewShape,
+    /** The order was already paid (provisioning continues) or still awaits payment. */
+    paid: z.boolean(),
+    note: z.string().optional(),
+  }),
+});
+
+const orderReviewRejected = defineEvent({
+  type: "order.review_rejected",
+  label: "Sipariş incelemesi reddedildi",
+  aggregate: "Order",
+  aggregateKey: "orderId",
+  schema: z.object({
+    ...orderReviewShape,
+    reason: z.string().optional(),
+    paid: z.boolean(),
+    /** Refund status when the order had been paid. */
+    refundStatus: z.enum(["COMPLETED", "PENDING", "FAILED", "NONE"]).default("NONE"),
+  }),
+});
+
+const kycSubmitted = defineEvent({
+  type: "kyc.submitted",
+  label: "Kimlik doğrulama belgeleri gönderildi",
+  aggregate: "User",
+  aggregateKey: "userId",
+  schema: z.object({
+    userId: id,
+    customerName: z.string().optional(),
+    documentTypes: z.array(z.string()).default([]),
+  }),
+});
+
+const kycApproved = defineEvent({
+  type: "kyc.approved",
+  label: "Kimlik doğrulama onaylandı",
+  aggregate: "User",
+  aggregateKey: "userId",
+  schema: z.object({ userId: id, releasedOrders: z.number().int().default(0) }),
+});
+
+const kycRejected = defineEvent({
+  type: "kyc.rejected",
+  label: "Kimlik doğrulama reddedildi",
+  aggregate: "User",
+  aggregateKey: "userId",
+  schema: z.object({ userId: id, reason: z.string() }),
+});
+
+const kycRequired = defineEvent({
+  type: "kyc.required",
+  label: "Kurulum kimlik doğrulaması bekliyor",
+  aggregate: "User",
+  aggregateKey: "userId",
+  schema: z.object({ userId: id, orderId: id, orderNumber: z.string(), productName: z.string().optional() }),
+});
+
+// ---------------------------------------------------------------------------
 // Invoices & payments
 // ---------------------------------------------------------------------------
 
@@ -536,6 +622,13 @@ export const eventDefinitions = [
   orderCreated,
   orderPaid,
   orderCancelled,
+  orderReviewRequired,
+  orderReviewApproved,
+  orderReviewRejected,
+  kycSubmitted,
+  kycApproved,
+  kycRejected,
+  kycRequired,
   invoiceCreated,
   invoicePaid,
   invoiceOverdue,

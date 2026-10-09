@@ -9,6 +9,7 @@
     "jobs:worker": "tsx --env-file=.env scripts/worker.ts",
     "modules:sync-legacy": "tsx --env-file=.env scripts/modules-sync-legacy.ts",
     "import:preview": "tsx --env-file=.env scripts/import-preview.ts",
+    "fraud:load-ip-db": "tsx --env-file=.env scripts/load-ip-country-db.ts",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:content": "node scripts/seed-content.mjs",

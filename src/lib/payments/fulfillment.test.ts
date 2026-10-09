@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   prepareOrderProvisioning: vi.fn(),
   unsuspendServiceIfNeeded: vi.fn(),
   onDomainRenewalPaid: vi.fn(),
+  holdOrderProvisioningIfNeeded: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({ db: {} }));
@@ -24,6 +25,7 @@ vi.mock("@/lib/provisioning/internal", () => ({
   prepareOrderProvisioning: mocks.prepareOrderProvisioning,
 }));
 vi.mock("@/lib/domains/renew", () => ({ onDomainRenewalPaid: mocks.onDomainRenewalPaid }));
+vi.mock("@/lib/provisioning/hold", () => ({ holdOrderProvisioningIfNeeded: mocks.holdOrderProvisioningIfNeeded }));
 vi.mock("@/lib/payments/service-lifecycle", () => ({
   unsuspendServiceIfNeeded: mocks.unsuspendServiceIfNeeded,
   runUnsuspendJobsForInvoices: vi.fn(),
@@ -202,11 +204,46 @@ beforeEach(() => {
   mocks.emitEvent.mockImplementation(async (_tx, type) => ({ id: `evt-${type}`, type, queued: true }));
   mocks.applyServiceRenewalFromOrder.mockResolvedValue({ applied: false });
   mocks.applyPlanChangeFromOrder.mockResolvedValue({ applied: false });
+  mocks.holdOrderProvisioningIfNeeded.mockResolvedValue([]);
   mocks.prepareOrderProvisioning.mockResolvedValue({
     type: "service",
     identifier: "svc-1",
     status: "QUEUED",
     jobId: "pj-1",
+  });
+});
+
+describe("provisioning gating (fraud review / KYC hold)", () => {
+  it("takes the payment but does not provision a held order; order.paid is still emitted", async () => {
+    mocks.holdOrderProvisioningIfNeeded.mockResolvedValue(["FRAUD_REVIEW", "KYC"]);
+    const { state, tx } = createStore([invoice()], [payment()]);
+
+    const result = await fulfillInvoicePayment(tx, { invoiceId: "inv-1", performedBy: "cus-1", paymentReference: "sess-1" });
+
+    expect(result.fulfilled).toBe(true);
+    expect(state.invoices.get("inv-1")?.status).toBe("PAID");
+    expect(state.payments[0].status).toBe("COMPLETED");
+    expect(mocks.holdOrderProvisioningIfNeeded).toHaveBeenCalledWith(tx, "ord-1", expect.objectContaining({ invoiceId: "inv-1" }));
+    expect(mocks.prepareOrderProvisioning).not.toHaveBeenCalled();
+    expect(mocks.emitEvent.mock.calls.map((call) => call[1])).toEqual(["invoice.paid", "order.paid"]);
+  });
+
+  it("provisions normally when nothing holds the order", async () => {
+    const { tx } = createStore([invoice()], [payment()]);
+    await fulfillInvoicePayment(tx, { invoiceId: "inv-1", performedBy: "cus-1", paymentReference: "sess-1" });
+    expect(mocks.holdOrderProvisioningIfNeeded).toHaveBeenCalledTimes(1);
+    expect(mocks.prepareOrderProvisioning).toHaveBeenCalledTimes(1);
+  });
+
+  it("never holds renewals (existing service)", async () => {
+    mocks.applyServiceRenewalFromOrder.mockResolvedValue({
+      applied: true,
+      serviceId: "svc-1",
+      newExpiryDate: new Date("2027-10-01T00:00:00Z"),
+    });
+    const { tx } = createStore([invoice()], [payment()]);
+    await fulfillInvoicePayment(tx, { invoiceId: "inv-1", performedBy: "cus-1", paymentReference: "sess-1" });
+    expect(mocks.holdOrderProvisioningIfNeeded).not.toHaveBeenCalled();
   });
 });
 

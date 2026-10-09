@@ -16,6 +16,14 @@ import {
 import { billingAutoChargeFailed, billingCardExpiring } from "./cards";
 import { domainExpiryNotice, domainRegistered, domainRenewed } from "./domains";
 import {
+  kycApproved,
+  kycRejected,
+  kycVerificationRequired,
+  orderReviewApproved,
+  orderReviewPending,
+  orderReviewRejected,
+} from "./review";
+import {
   serviceActivated,
   serviceCancellationApproved,
   serviceCancellationReceived,
@@ -52,6 +60,12 @@ const definitions = [
   billingRefundIssued,
   billingAutoChargeFailed,
   billingCardExpiring,
+  orderReviewPending,
+  orderReviewApproved,
+  orderReviewRejected,
+  kycVerificationRequired,
+  kycApproved,
+  kycRejected,
   affiliatePayoutCompleted,
   serviceActivated,
   serviceSuspended,

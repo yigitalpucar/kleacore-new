@@ -180,7 +180,7 @@ describe.runIf(enabled)("payment fulfilment (integration, real Postgres)", () =>
         const queued = await boss.findJobs(PROVISIONING_RUN_JOB, { key: job.id });
         if (queued.length) await boss.deleteJob(PROVISIONING_RUN_JOB, queued.map((q) => q.id));
       }
-      const events = await db.domainEvent.findMany({ where: { aggregateId: { in: [...createdInvoices, ...createdOrders] } } });
+      const events = await db.domainEvent.findMany({ where: { aggregateId: { in: [...createdInvoices, ...createdOrders, customerId] } } });
       for (const event of events) {
         const queued = await boss.findJobs(EVENTS_DISPATCH_JOB, { key: event.id });
         if (queued.length) await boss.deleteJob(EVENTS_DISPATCH_JOB, queued.map((q) => q.id));
@@ -197,7 +197,7 @@ describe.runIf(enabled)("payment fulfilment (integration, real Postgres)", () =>
       await db.order.deleteMany({ where: { customerId } });
       await db.service.deleteMany({ where: { customerId } });
       await db.stripeWebhookEvent.deleteMany({ where: { eventId: { startsWith: tag } } });
-      await db.activityLog.deleteMany({ where: { userId: { in: [customerId, admin.id] }, entityId: { in: createdInvoices } } });
+      await db.activityLog.deleteMany({ where: { userId: { in: [customerId, admin.id] }, entityId: { in: [...createdInvoices, customerId] } } });
       await db.user.delete({ where: { id: customerId } });
     }
     await stopBoss({ graceful: false });
@@ -260,15 +260,28 @@ describe.runIf(enabled)("payment fulfilment (integration, real Postgres)", () =>
     expect(after.invoice.status).toBe("PAID");
   });
 
-  it("a VDS payment opens a MANUAL task and a PENDING service instead of remote provisioning", async () => {
+  it("a VDS payment of an unverified customer is held for KYC; approval opens the MANUAL task", async () => {
     const reference = `${tag}-kt-vds`;
     const { order, invoice } = await scenario({ slug: "vds", reference, provider: "kuveytturk" });
 
     await fulfillGatewayReference(reference, "Kuveyt Türk VPOS ödemesi", { requestedAmount: 120 });
 
-    const after = await state(invoice.id, order.id);
+    // Paid, but provisioning waits for identity verification (5651).
+    let after = await state(invoice.id, order.id);
     expect(after.invoice.status).toBe("PAID");
     expect(after.payments[0].status).toBe("COMPLETED");
+    expect(after.order).toMatchObject({ status: "PROCESSING", serviceId: null, provisioningHoldReasons: ["KYC"] });
+    expect(after.order.provisioningHeldAt).toBeInstanceOf(Date);
+    expect(after.job).toBeNull();
+    expect(await db.domainEvent.count({ where: { type: "kyc.required", aggregateId: customerId } })).toBe(1);
+
+    // Customer uploads, staff approves → released through the normal path.
+    await db.user.update({ where: { id: customerId }, data: { kycStatus: "PENDING" } });
+    const { approveKyc } = await import("@/lib/kyc/service");
+    await expect(approveKyc({ userId: customerId, reviewerId: admin.id })).resolves.toEqual({ released: 1 });
+
+    after = await state(invoice.id, order.id);
+    expect(after.order).toMatchObject({ status: "COMPLETED", provisioningHeldAt: null, provisioningHoldReasons: [] });
     expect(after.job).toMatchObject({ kind: "MANUAL", status: "PENDING", serviceId: after.order.serviceId });
     const service = await db.service.findUniqueOrThrow({ where: { id: after.order.serviceId! } });
     expect(service).toMatchObject({ status: "PENDING", expiresAt: null, nextDueDate: null });
@@ -280,6 +293,32 @@ describe.runIf(enabled)("payment fulfilment (integration, real Postgres)", () =>
     expect(remote.createRemoteService).not.toHaveBeenCalled();
     // A stray queue attempt never touches a MANUAL task.
     await expect(runQueuedProvisioningJob(after.job!.id, ctx(0))).resolves.toEqual({ skipped: "MANUAL_TASK" });
+  });
+
+  it("an order under fraud review is paid but provisions only after approval (queued provisioning.run)", async () => {
+    const reference = `${tag}-paytr-review`;
+    const { order, invoice } = await scenario({ slug: "hosting", reference, provider: "paytr", domain: "itest-review.com" });
+    await db.fraudCheck.create({
+      data: { orderId: order.id, customerId, score: 60, threshold: 50, status: "REVIEW", rules: [], stage: "checkout" },
+    });
+
+    await fulfillGatewayReference(reference, "PayTR iframe ödemesi", { paidAmount: 120 });
+    let after = await state(invoice.id, order.id);
+    expect(after.invoice.status).toBe("PAID");
+    expect(after.order).toMatchObject({ status: "PROCESSING", serviceId: null, provisioningHoldReasons: ["FRAUD_REVIEW"] });
+    expect(after.job).toBeNull();
+
+    const { approveFraudReview } = await import("@/lib/fraud/review");
+    const decision = await approveFraudReview({ orderId: order.id, reviewerId: admin.id });
+    expect(decision.release).toMatchObject({ released: true });
+    await expect(approveFraudReview({ orderId: order.id, reviewerId: admin.id })).rejects.toThrow();
+
+    after = await state(invoice.id, order.id);
+    expect(after.order.status).toBe("COMPLETED");
+    expect(after.order.serviceId).toBeTruthy();
+    expect(after.job).toMatchObject({ kind: "PROVISION", status: "PENDING" });
+    expect(await queueJobs(PROVISIONING_RUN_JOB, after.job!.id)).toHaveLength(1);
+    expect(remote.createRemoteService).not.toHaveBeenCalled();
   });
 
   it("concurrent callbacks of one session settle once (one payment, one job, one follow-up)", async () => {

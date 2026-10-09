@@ -197,6 +197,61 @@ export const notificationPlanners: PlannerMap = {
     },
   ],
 
+  "order.review_required": (payload) => [
+    {
+      template: "order.review-pending",
+      userId: payload.customerId,
+      data: { orderNumber: payload.orderNumber, paymentBlocked: payload.paymentBlocked },
+      // One "inceleniyor" mail per order, even if checkout and payment both flag it.
+      dedupeKey: `order.review-pending:${payload.orderId}`,
+    },
+  ],
+
+  "order.review_approved": (payload) => [
+    {
+      template: "order.review-approved",
+      userId: payload.customerId,
+      data: { orderNumber: payload.orderNumber, paid: payload.paid },
+      dedupeKey: `order.review-approved:${payload.orderId}`,
+    },
+  ],
+
+  "order.review_rejected": (payload) => [
+    {
+      template: "order.review-rejected",
+      userId: payload.customerId,
+      data: { orderNumber: payload.orderNumber, reason: payload.reason?.slice(0, 500), paid: payload.paid },
+      dedupeKey: `order.review-rejected:${payload.orderId}`,
+    },
+  ],
+
+  "kyc.required": (payload) => [
+    {
+      template: "kyc.verification-required",
+      userId: payload.userId,
+      data: { orderNumber: payload.orderNumber, productName: payload.productName },
+      dedupeKey: `kyc.required:${payload.orderId}`,
+    },
+  ],
+
+  "kyc.approved": (payload, event) => [
+    {
+      template: "kyc.approved",
+      userId: payload.userId,
+      data: { releasedOrders: payload.releasedOrders },
+      dedupeKey: `kyc.approved:${event.id}`,
+    },
+  ],
+
+  "kyc.rejected": (payload, event) => [
+    {
+      template: "kyc.rejected",
+      userId: payload.userId,
+      data: { reason: payload.reason.slice(0, 500) },
+      dedupeKey: `kyc.rejected:${event.id}`,
+    },
+  ],
+
   "service.activated": (payload) => [
     {
       template: "service.activated",
