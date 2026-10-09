@@ -20,7 +20,8 @@ export default async function SablonlarPage({
 }) {
   await requirePermission("settings.manage");
   const sp = await searchParams;
-  const templates = listTemplates();
+  // Broadcast templates carry per-send content (Duyurular) and are not editable here.
+  const templates = listTemplates().filter((template) => template.editable !== false);
   const selectedKey = typeof sp.t === "string" ? sp.t : templates[0]?.key;
   const selected = templates.find((template) => template.key === selectedKey) ?? templates[0];
   const channel = sp.c === "SMS" && selected.sms ? "SMS" : "EMAIL";

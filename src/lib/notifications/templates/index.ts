@@ -14,6 +14,7 @@ import {
   billingRefundIssued,
 } from "./billing";
 import { serviceBackupCompleted, serviceBackupFailed, serviceBackupRestored } from "./backups";
+import { broadcastMarketing, broadcastService } from "./broadcast";
 import { billingAutoChargeFailed, billingCardExpiring } from "./cards";
 import { domainExpiryNotice, domainRegistered, domainRenewed } from "./domains";
 import {
@@ -96,6 +97,8 @@ const definitions = [
   privacyRequestVerify,
   privacyRequestReceived,
   privacyRequestCompleted,
+  broadcastService,
+  broadcastMarketing,
 ] as const;
 
 export type RegisteredTemplate = (typeof definitions)[number];

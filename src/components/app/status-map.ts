@@ -39,7 +39,9 @@ export type StatusKind =
   | "bankTransferNotice"
   | "dnsZone"
   | "kyc"
-  | "fraudCheck";
+  | "fraudCheck"
+  | "broadcast"
+  | "broadcastRecipient";
 
 export type StatusAudience = "customer" | "admin";
 
@@ -266,6 +268,23 @@ const fraudCheck: Map = {
   REJECTED: { label: "Reddedildi", tone: "danger" },
 };
 
+const broadcast: Map = {
+  DRAFT: { label: "Taslak", tone: "muted" },
+  SCHEDULED: { label: "Zamanlandı", tone: "info" },
+  SENDING: { label: "Gönderiliyor", tone: "warning" },
+  COMPLETED: { label: "Tamamlandı", tone: "success" },
+  CANCELLED: { label: "İptal edildi", tone: "neutral" },
+};
+
+const broadcastRecipient: Map = {
+  PENDING: { label: "Bekliyor", tone: "muted" },
+  QUEUED: { label: "Sırada", tone: "info" },
+  SENT: { label: "Gönderildi", tone: "success" },
+  FAILED: { label: "Başarısız", tone: "danger" },
+  SKIPPED: { label: "Atlandı", tone: "neutral" },
+  CANCELLED: { label: "İptal edildi", tone: "neutral" },
+};
+
 const MAPS: Record<StatusKind, Map> = {
   service,
   invoice,
@@ -297,6 +316,8 @@ const MAPS: Record<StatusKind, Map> = {
   dnsZone,
   kyc,
   fraudCheck,
+  broadcast,
+  broadcastRecipient,
 };
 
 /** Label + tone for a status. Unknown values fall back to the raw value. */

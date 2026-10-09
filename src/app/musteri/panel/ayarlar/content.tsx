@@ -41,6 +41,7 @@ import { Switch } from "@/components/ui/switch";
 import { formatDate, formatDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 import { updateProfile, changePassword } from "@/lib/actions/customer/profile";
+import { updateMarketingConsent } from "@/lib/actions/customer/marketing-consent";
 import { createApiKey, revokeApiKey, deleteApiKey } from "@/lib/actions/customer/api-keys";
 import { disable2FA, enable2FA, verify2FASetup } from "@/lib/actions/customer/two-factor";
 import { SecurityActivity, type SecurityOverviewData } from "./security-activity";
@@ -78,6 +79,9 @@ interface AyarlarContentProps {
   initialTab?: "security";
   /** Logins, sessions and remembered devices for the security tab. */
   security: SecurityOverviewData;
+  /** Ticari elektronik ileti onayı (kampanya e-posta / SMS). */
+  marketingConsent?: boolean;
+  marketingConsentAt?: string | null;
 }
 
 interface NewlyCreatedApiKey {
@@ -87,7 +91,8 @@ interface NewlyCreatedApiKey {
   createdAt: string;
 }
 
-// Shown for reference only: preferences can't be saved yet (no server action).
+// Shown for reference only: these preferences can't be saved yet. The
+// marketing consent ("Kampanya ve duyurular") is live, see MarketingConsentRow.
 const notificationGroups = [
   {
     title: "E-posta",
@@ -95,7 +100,6 @@ const notificationGroups = [
       { id: "email_invoices", enabled: true, label: "Fatura bildirimleri", description: "Yeni fatura ve ödeme hatırlatmaları" },
       { id: "email_services", enabled: true, label: "Hizmet bildirimleri", description: "Hizmet yenileme ve süre bitimi uyarıları" },
       { id: "email_support", enabled: true, label: "Destek bildirimleri", description: "Destek taleplerinize gelen yanıtlar" },
-      { id: "email_marketing", enabled: false, label: "Kampanya ve duyurular", description: "İndirimler, yeni ürünler ve duyurular" },
     ],
   },
   {
@@ -126,6 +130,8 @@ export function AyarlarContent({
   staffTwoFactorRequired = false,
   initialTab,
   security,
+  marketingConsent = false,
+  marketingConsentAt = null,
 }: AyarlarContentProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>(staffTwoFactorRequired ? "security" : (initialTab ?? "profile"));
@@ -877,9 +883,11 @@ export function AyarlarContent({
               description="Hangi konularda e-posta veya SMS almak istediğinizi seçin."
               footer={<UnavailableAction variant="primary" label="Tercihleri kaydet" />}
             >
+              <MarketingConsentRow initial={marketingConsent} changedAt={marketingConsentAt} />
               <p className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2.5 text-[13px] text-muted-foreground">
                 <ToneDot tone="info" className="mt-1.5" />
-                Varsayılan tercihler gösteriliyor. Tercihleri değiştirip kaydetme özelliği yakında eklenecek.
+                Aşağıdaki bildirimler hesabınız ve hizmetleriniz için gereklidir; planlı bakım ve kesinti duyuruları her zaman
+                gönderilir. Bu tercihleri değiştirme özelliği yakında eklenecek.
               </p>
               {notificationGroups.map((group) => (
                 <fieldset key={group.title} className="space-y-2">
@@ -1075,5 +1083,53 @@ export function AyarlarContent({
         </div>
       </div>
     </>
+  );
+}
+
+/** Live marketing consent switch: saved immediately, recorded as a consent record. */
+function MarketingConsentRow({ initial, changedAt }: { initial: boolean; changedAt: string | null }) {
+  const [enabled, setEnabled] = useState(initial);
+  const [at, setAt] = useState(changedAt);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggle = async (next: boolean) => {
+    setPending(true);
+    setError(null);
+    const result = await updateMarketingConsent(next);
+    setPending(false);
+    if (!result.success) {
+      setError(result.error);
+      return;
+    }
+    setEnabled(result.granted);
+    setAt(new Date().toISOString());
+  };
+
+  return (
+    <div className="rounded-md border">
+      <div className="flex min-h-14 items-center justify-between gap-4 px-3 py-3">
+        <div className="min-w-0 space-y-0.5">
+          <label htmlFor="notif-marketing" className="text-sm font-medium">
+            Kampanya ve duyurular
+          </label>
+          <p className="text-[13px] text-muted-foreground">
+            İndirim, yeni ürün ve kampanya içerikli e-posta ve SMS (ticari elektronik ileti onayı). İstediğiniz zaman
+            kapatabilirsiniz.
+          </p>
+          {at ? (
+            <p className="text-[12px] text-muted-foreground">
+              {enabled ? "Onay verildi" : "Onay geri alındı"}: {formatDateTime(at)}
+            </p>
+          ) : null}
+          {error ? (
+            <p role="alert" className="text-[13px] text-red-600 dark:text-red-400">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <Switch id="notif-marketing" checked={enabled} disabled={pending} onCheckedChange={(value) => void toggle(value)} />
+      </div>
+    </div>
   );
 }

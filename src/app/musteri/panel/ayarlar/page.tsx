@@ -102,6 +102,8 @@ export default async function AyarlarPage({
       staffTwoFactorRequired={twoFactorNotice === "personel" && !profile?.twoFactorEnabled}
       initialTab={sekme === "guvenlik" ? "security" : undefined}
       security={security}
+      marketingConsent={profile?.marketingConsent ?? false}
+      marketingConsentAt={profile?.marketingConsentAt?.toISOString() ?? null}
     />
   );
 }

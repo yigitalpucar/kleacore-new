@@ -16,6 +16,7 @@ import {
   ListChecks,
   LayoutDashboard,
   Mail,
+  Megaphone,
   Network,
   Waypoints,
   Newspaper,
@@ -112,6 +113,7 @@ export function buildAdminNav(counts: AdminCounts, role: StaffRole): AppNavGroup
       label: "Destek ve içerik",
       items: [
         { title: "Destek talepleri", href: `${ADMIN_ROOT}/destek`, icon: Headphones, badge: counts.openTickets || null },
+        { title: "Duyurular", href: `${ADMIN_ROOT}/duyurular`, icon: Megaphone },
         { title: "Blog", href: `${ADMIN_ROOT}/icerik/blog`, icon: Newspaper },
         { title: "Bilgi bankası", href: `${ADMIN_ROOT}/icerik/bilgi-bankasi`, icon: BookOpen },
       ],
@@ -308,6 +310,7 @@ export const ADMIN_SEGMENT_LABELS: Record<string, string> = {
   "tld-fiyatlari": "TLD fiyatları",
   "bilgi-bankasi": "Bilgi bankası",
   durum: "Sistem durumu",
+  duyurular: "Duyurular",
   sablonlar: "Şablonlar",
   hatirlatmalar: "Hatırlatma takvimi",
   personel: "Personel",

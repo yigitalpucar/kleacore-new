@@ -20,6 +20,8 @@ interface MailInput {
   replyTo?: string;
   /** Message-ID becomes `<tag.random@sender-domain>` (ticket mail threading). */
   messageIdTag?: string;
+  /** One-click unsubscribe URL (RFC 2369 + RFC 8058 headers). */
+  listUnsubscribe?: string;
 }
 
 export interface MailResult {
@@ -100,9 +102,18 @@ export async function sendTransactionalEmail(input: MailInput): Promise<MailResu
     attachments: input.attachments,
     ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     ...(input.messageIdTag ? { messageId: threadMessageId(input.messageIdTag, from) } : {}),
+    ...(input.listUnsubscribe ? { headers: listUnsubscribeHeaders(input.listUnsubscribe) } : {}),
   });
 
   return { sent: true, messageId: info.messageId };
+}
+
+/** RFC 2369 List-Unsubscribe + RFC 8058 one-click POST (Gmail / Yahoo bulk sender rules). */
+export function listUnsubscribeHeaders(url: string): Record<string, string> {
+  return {
+    "List-Unsubscribe": `<${url}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
 }
 
 function threadMessageId(tag: string, from: string) {

@@ -361,6 +361,25 @@ export const serverTerminateJob = defineJob({
   },
 });
 
+export const BROADCAST_DISPATCH_JOB = "broadcast.dispatch";
+
+/**
+ * One throttled batch of a bulk announcement (src/lib/broadcasts/dispatch.ts):
+ * hands at most `broadcast_rate_per_minute` recipients to notification.send,
+ * then schedules itself a minute later. Exclusive per broadcast + minute;
+ * recipients are claimed atomically, so a retry never sends twice.
+ */
+export const broadcastDispatchJob = defineJob({
+  name: BROADCAST_DISPATCH_JOB,
+  label: "Toplu duyuru gönderimi (parti)",
+  schema: z.object({ broadcastId: z.string().min(1) }).strict(),
+  queue: { policy: "exclusive", retryLimit: 3, retryDelay: 60, retryBackoff: true, expireInSeconds: 10 * 60 },
+  handler: async ({ broadcastId }) => {
+    const { runBroadcastTick } = await import("@/lib/broadcasts/dispatch");
+    return runBroadcastTick(broadcastId);
+  },
+});
+
 const definitions = [
   provisioningRunJob,
   domainRenewJob,
@@ -376,6 +395,7 @@ const definitions = [
   backupRunJob,
   backupRestoreJob,
   serverTerminateJob,
+  broadcastDispatchJob,
 ] as const;
 
 export type RegisteredJob = (typeof definitions)[number];

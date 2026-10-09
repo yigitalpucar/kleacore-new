@@ -31,7 +31,10 @@ const MAX_SMS = 918; // 6 GSM parts; longer texts are almost certainly a mistake
 
 function requireTemplate(key: string) {
   if (!hasTemplate(key)) throw new Error("UNKNOWN_TEMPLATE");
-  return getTemplate(key);
+  const template = getTemplate(key);
+  // Broadcast templates carry their content per send; nothing to override.
+  if (template.editable === false) throw new Error("UNKNOWN_TEMPLATE");
+  return template;
 }
 
 /** Fields that are validated / stored for a channel. */

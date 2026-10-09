@@ -33,6 +33,7 @@ async function deliverEmail(
     attachments: [logoAttachment()],
     ...(headers.replyTo ? { replyTo: headers.replyTo } : {}),
     ...(headers.messageIdTag ? { messageIdTag: headers.messageIdTag } : {}),
+    ...(headers.listUnsubscribe ? { listUnsubscribe: headers.listUnsubscribe } : {}),
   });
   if (result.sent) return { status: "SENT", providerMessageId: result.messageId };
   return { status: "SKIPPED", reason: result.reason ?? "EMAIL_NOT_SENT" };
@@ -80,6 +81,7 @@ export async function deliverNotificationLog(notificationLogId: string, context:
           ? { status: "SENT", sentAt: new Date(), providerMessageId: outcome.providerMessageId ?? null, error: null, attempts: { increment: 1 } }
           : { status: "SKIPPED", error: outcome.reason, attempts: { increment: 1 } },
     });
+    await updateBroadcastRecipient(row, outcome.status, outcome.status === "SKIPPED" ? outcome.reason : null);
     return { status: outcome.status, logId: row.id };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -91,6 +93,7 @@ export async function deliverNotificationLog(notificationLogId: string, context:
         attempts: { increment: 1 },
       },
     });
+    if (context.isFinalAttempt) await updateBroadcastRecipient(row, "FAILED", message);
     log.warn("notification delivery failed", {
       logId: row.id,
       template: row.template,
@@ -99,5 +102,20 @@ export async function deliverNotificationLog(notificationLogId: string, context:
       error: message,
     });
     throw error;
+  }
+}
+
+/** Mirrors a final delivery outcome onto the broadcast recipient row (progress UI). Never throws. */
+async function updateBroadcastRecipient(
+  row: { id: string; template: string },
+  status: "SENT" | "SKIPPED" | "FAILED",
+  error: string | null
+) {
+  if (!row.template.startsWith("broadcast.")) return;
+  try {
+    const { recordBroadcastDelivery } = await import("@/lib/broadcasts/progress");
+    await recordBroadcastDelivery(row.id, status, error);
+  } catch (syncError) {
+    log.warn("broadcast recipient status not updated", { logId: row.id, error: syncError });
   }
 }

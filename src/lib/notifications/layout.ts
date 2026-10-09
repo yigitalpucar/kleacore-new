@@ -105,7 +105,16 @@ ${content.note ? `<p style="margin:20px 0 0;padding-top:16px;border-top:1px dash
  * (DB) templates, so both look the same.
  */
 export function renderEmailShell(
-  input: { subject: string; preheader: string; bodyHtml: string; replyMarker?: string },
+  input: {
+    subject: string;
+    preheader: string;
+    bodyHtml: string;
+    replyMarker?: string;
+    /** Replaces the default footer line (why the mail was sent). */
+    footerNote?: string;
+    /** Marketing mail: unsubscribe link in the footer. */
+    unsubscribeUrl?: string;
+  },
   brand: NotificationBrand,
   options: { logoSrc: string }
 ) {
@@ -136,7 +145,8 @@ ${input.bodyHtml}
 </td></tr>
 <tr><td style="padding:20px 32px;font-size:12px;line-height:1.5;color:${COLORS.muted};text-align:center">
 ${footer}
-<p style="margin:8px 0 0">Bu e-posta hesabınızla ilgili bir işlem nedeniyle otomatik olarak gönderilmiştir.</p>
+<p style="margin:8px 0 0">${escapeHtml(input.footerNote ?? "Bu e-posta hesabınızla ilgili bir işlem nedeniyle otomatik olarak gönderilmiştir.")}</p>
+${input.unsubscribeUrl ? `<p style="margin:8px 0 0"><a href="${escapeHtml(safeUrl(input.unsubscribeUrl))}" style="color:${COLORS.muted};text-decoration:underline">Kampanya e-postalarından çık</a></p>` : ""}
 </td></tr>
 </table>
 </td></tr>
@@ -164,6 +174,34 @@ export function renderEmailLayout(
   );
   const text = renderText(content, brand, greeting);
   return { subject: content.subject, preheader, html, text };
+}
+
+/**
+ * Staff-authored body (broadcasts) in the branded shell. `bodyHtml` must be
+ * sanitised already; the text part gets the company footer and, for
+ * marketing mail, the unsubscribe link.
+ */
+export function renderRawEmail(
+  content: {
+    subject: string;
+    preheader: string;
+    bodyHtml: string;
+    text: string;
+    footerNote?: string;
+    unsubscribeUrl?: string;
+  },
+  brand: NotificationBrand,
+  options: { logoSrc: string }
+): RenderedEmail {
+  const html = renderEmailShell(content, brand, options);
+  const lines = [content.text.trim(), "", "—", ...footerLines(brand)];
+  if (content.unsubscribeUrl) lines.push("", `Kampanya e-postalarından çıkmak için: ${content.unsubscribeUrl}`);
+  return {
+    subject: content.subject,
+    preheader: content.preheader,
+    html,
+    text: lines.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+  };
 }
 
 /** Plain-text footer appended to admin-edited templates' text part. */

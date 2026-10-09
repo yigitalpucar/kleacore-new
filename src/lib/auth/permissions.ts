@@ -49,6 +49,8 @@ export const PERMISSIONS = [
   "kyc.review",
   /** KVKK data-subject requests: exports, anonymisation (ADMIN only by default). */
   "privacy.manage",
+  /** Bulk announcements (e-mail / SMS) to customers — ADMIN only by default. */
+  "broadcast.send",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -152,6 +154,7 @@ export const ADMIN_ROUTE_PERMISSIONS: Record<string, readonly Permission[] | nul
   "/yonetim/raporlar": ["reports.view"],
   "/yonetim/durum": ["status.manage"],
   "/yonetim/isler": ["jobs.manage"],
+  "/yonetim/duyurular": ["broadcast.send"],
   "/yonetim/bildirimler": ["settings.manage"],
   "/yonetim/aktivite": ["activity.view", "activity.view_own"],
   /** Domain event log (payloads of every business event; redelivery needs jobs.manage). */
