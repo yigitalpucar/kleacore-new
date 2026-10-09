@@ -2,14 +2,8 @@
 
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/utils/auth-helpers";
-import {
-  createRemoteService,
-  suspendRemoteService,
-  terminateRemoteService,
-  unsuspendRemoteService,
-} from "@/lib/integrations/provisioning-provider";
-import { emitEvent } from "@/lib/events/emit";
-import { logActivity } from "@/lib/activity-log";
+import { createRemoteService } from "@/lib/integrations/provisioning-provider";
+import { suspendServiceAs, terminateServiceAs, unsuspendServiceAs } from "@/lib/services/admin-lifecycle";
 import { productPeriodPricing } from "@/lib/billing/period-price";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod } from "@prisma/client";
@@ -127,68 +121,14 @@ export async function suspendService(id: string, reason: string) {
   const session = await requirePermission("services.manage");
 
   try {
-    const service = await db.service.findUnique({
-      where: { id },
-      include: {
-        product: {
-          include: { category: true },
-        },
-        customer: {
-          select: { id: true, name: true, surname: true, email: true },
-        },
-      },
-    });
-    if (!service) {
-      return { success: false, error: "Hizmet bulunamadı" };
-    }
-
-    if (service.status !== "ACTIVE") {
-      return { success: false, error: "Sadece aktif hizmetler askıya alınabilir" };
-    }
-
-    const suspendedAt = new Date();
-    const serviceLabel = service.label || service.domain || service.product.name;
-    // Status + service.suspended (customer notice via the outbox) commit together.
-    const updatedService = await db.$transaction(async (tx) => {
-      const row = await tx.service.update({
-        where: { id },
-        data: {
-          status: "SUSPENDED",
-          suspendedAt,
-          suspendReason: reason,
-        },
-      });
-      await emitEvent(
-        tx,
-        "service.suspended",
-        { serviceId: id, customerId: service.customerId, serviceLabel, reason, suspendedAt },
-        { actorId: session.user.id }
-      );
-      return row;
-    });
-    const integration = await suspendRemoteService(
-      { ...updatedService, product: service.product, customer: service.customer },
-      reason
-    );
-
-    await logActivity({
-      userId: session.user.id,
-      action: "SUSPEND_SERVICE",
-      entity: "Service",
-      entityId: id,
-      details: {
-        serviceLabel: service.label || service.domain || service.product.name,
-        customerId: service.customerId,
-        reason,
-        suspendedAt: suspendedAt.toISOString(),
-      },
-    });
+    const result = await suspendServiceAs(session.user.id, id, reason);
+    if (!result.success) return result;
 
     revalidatePath("/yonetim/hizmetler");
     revalidatePath("/yonetim/aktivite");
     revalidatePath("/musteri/panel/hizmetlerim");
     revalidatePath("/musteri/panel/e-posta");
-    return { success: true, integration };
+    return result;
   } catch (error) {
     log.error("suspend service failed", { error });
     return { success: false, error: "Hizmet askıya alınırken bir hata oluştu" };
@@ -199,52 +139,11 @@ export async function activateService(id: string) {
   const session = await requirePermission("services.manage");
 
   try {
-    const service = await db.service.findUnique({
-      where: { id },
-      include: {
-        product: { include: { category: true } },
-        customer: {
-          select: { id: true, name: true, surname: true, email: true },
-        },
-      },
-    });
-    if (!service) {
-      return { success: false, error: "Hizmet bulunamadı" };
-    }
-
-    if (service.status !== "SUSPENDED") {
-      return { success: false, error: "Sadece askıdaki hizmetler aktifleştirilebilir" };
-    }
-
-    const updatedService = await db.$transaction(async (tx) => {
-      const row = await tx.service.update({
-        where: { id },
-        data: {
-          status: "ACTIVE",
-          suspendedAt: null,
-          suspendReason: null,
-        },
-      });
-      await emitEvent(
-        tx,
-        "service.unsuspended",
-        {
-          serviceId: service.id,
-          customerId: service.customerId,
-          serviceLabel: service.label || service.domain || service.product.name,
-        },
-        { actorId: session.user.id }
-      );
-      return row;
-    });
-    const integration = await unsuspendRemoteService({
-      ...updatedService,
-      product: service.product,
-      customer: service.customer,
-    });
+    const result = await unsuspendServiceAs(session.user.id, id);
+    if (!result.success) return result;
 
     revalidatePath("/yonetim/hizmetler");
-    return { success: true, integration };
+    return result;
   } catch (error) {
     log.error("activate service failed", { error });
     return { success: false, error: "Hizmet aktifleştirilirken bir hata oluştu" };
@@ -255,53 +154,11 @@ export async function cancelService(id: string) {
   const session = await requirePermission("services.manage");
 
   try {
-    const service = await db.service.findUnique({
-      where: { id },
-      include: {
-        product: { include: { category: true } },
-        customer: {
-          select: { id: true, name: true, surname: true, email: true },
-        },
-      },
-    });
-    if (!service) {
-      return { success: false, error: "Hizmet bulunamadı" };
-    }
-
-    if (service.status === "CANCELLED") {
-      return { success: false, error: "Bu hizmet zaten iptal edilmiş" };
-    }
-
-    const terminatedAt = new Date();
-    const updatedService = await db.$transaction(async (tx) => {
-      const row = await tx.service.update({
-        where: { id },
-        data: {
-          status: "CANCELLED",
-          cancelledAt: terminatedAt,
-        },
-      });
-      await emitEvent(
-        tx,
-        "service.terminated",
-        {
-          serviceId: id,
-          customerId: service.customerId,
-          serviceLabel: service.label || service.domain || service.product.name,
-          terminatedAt,
-        },
-        { actorId: session.user.id }
-      );
-      return row;
-    });
-    const integration = await terminateRemoteService({
-      ...updatedService,
-      product: service.product,
-      customer: service.customer,
-    });
+    const result = await terminateServiceAs(session.user.id, id);
+    if (!result.success) return result;
 
     revalidatePath("/yonetim/hizmetler");
-    return { success: true, integration };
+    return result;
   } catch (error) {
     log.error("cancel service failed", { error });
     return { success: false, error: "Hizmet iptal edilirken bir hata oluştu" };
