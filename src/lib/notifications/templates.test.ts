@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 const settingRows = vi.hoisted(() => ({ rows: [] as Array<{ key: string; value: string }> }));
 vi.mock("@/lib/db", () => ({ db: { setting: { findMany: async () => settingRows.rows } } }));
 
-import { DEFAULT_BRAND, loadBrand, renderNotification } from "./render";
+import { DEFAULT_BRAND, loadBrand, redactSensitive, renderNotification } from "./render";
+import { getTemplate } from "./templates";
 import { listTemplates } from "./templates";
 import type { RenderContext } from "./templates/types";
 
@@ -178,3 +179,23 @@ describe("e-mail footer company block", () => {
     expect(rendered.text).toContain("30 N Gould St Ste R");
   });
 });
+
+describe("inbox copies of templates with sensitive fields", () => {
+  it("every template with an inbox copy renders with its secrets replaced by the placeholder", () => {
+    for (const template of listTemplates()) {
+      if (!template.inbox || !template.sensitive?.length) continue;
+      const data = redactSensitive(template, template.sample as Record<string, unknown>);
+      expect(() => renderNotification(template.key, data, ctx), template.key).not.toThrow();
+    }
+  });
+
+  it("the KVKK result mail links the export, the inbox copy shows no link", () => {
+    const template = getTemplate("privacy.request-completed");
+    const real = renderNotification(template.key, template.sample, ctx);
+    expect(real.html).toContain("kvkk-basvuru/indir?token=ornek");
+    const inbox = renderNotification(template.key, redactSensitive(template, template.sample as Record<string, unknown>), ctx);
+    expect(inbox.html).not.toContain("token=ornek");
+    expect(inbox.html).not.toContain('href="••');
+  });
+});
+

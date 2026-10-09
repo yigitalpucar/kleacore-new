@@ -80,7 +80,9 @@ export const privacyRequestCompleted = defineTemplate({
     ...requestShape,
     outcome: z.enum(["COMPLETED", "REJECTED"]),
     responseText: z.string().min(1),
-    downloadUrl: z.string().url().optional(),
+    // Not .url(): the inbox copy renders with the sensitive link replaced by
+    // a placeholder (render.ts redactSensitive), which must still validate.
+    downloadUrl: z.string().min(1).optional(),
     downloadExpiresAt: dateField.optional(),
   }),
   sensitive: ["downloadUrl"],
@@ -102,7 +104,8 @@ export const privacyRequestCompleted = defineTemplate({
       { label: "Başvuru no", value: data.requestNumber, mono: true },
       { label: "Talep türü", value: dataRequestTypeLabel(data.type) },
     ],
-    action: data.downloadUrl ? { label: "Verilerimi indir", url: data.downloadUrl } : undefined,
+    // Only a real link becomes a button (the inbox copy has the placeholder).
+    action: data.downloadUrl && /^https?:\/\//.test(data.downloadUrl) ? { label: "Verilerimi indir", url: data.downloadUrl } : undefined,
     outro: data.downloadUrl
       ? [
           `İndirme bağlantısı yalnızca bir kez kullanılabilir${data.downloadExpiresAt ? ` ve ${dateTime(data.downloadExpiresAt)} tarihine kadar geçerlidir` : ""}. Süresi dolarsa yeni bir başvuru yapabilirsiniz.`,
