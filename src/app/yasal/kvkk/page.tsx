@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   LegalContactCard,
   LegalLayout,
@@ -145,6 +146,12 @@ export default function KVKKPage() {
             </li>
           ))}
         </ul>
+        <p>
+          Haklarınızı kullanmak için{" "}
+          <Link href="/yasal/kvkk-basvuru">KVKK başvuru formunu</Link> doldurabilir veya müşteri panelinizdeki
+          “Kişisel verilerim” sayfasından başvurabilirsiniz. Başvurunuzu en geç 30 gün içinde ücretsiz olarak
+          sonuçlandırırız.
+        </p>
       </LegalSection>
 
       <LegalSection id="veri-saklama" title="5. Veri Saklama Süreleri">
