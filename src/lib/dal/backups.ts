@@ -88,7 +88,8 @@ export async function getSchedules(serviceId: string) {
 
 export async function getBackupsByCustomer(customerId: string) {
   return db.backup.findMany({
-    where: { customerId },
+    // Deleted archives and final (termination) backups are not the customer's to manage.
+    where: { customerId, deletedAt: null, trigger: { not: "FINAL" } },
     include: {
       service: {
         select: {

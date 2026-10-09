@@ -27,7 +27,7 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 | KLEACORE: Domain Senkronu (Gri) | `0 1 * * *` | `/app/cron-run.sh domain-sync` |
 | KLEACORE: Domain Yenileme Faturaları | `30 1 * * *` | `/app/cron-run.sh domain-renewals` |
 | KLEACORE: Günlük Faturalama | `0 2 * * *` | `/app/cron-run.sh daily-billing` |
-| KLEACORE: Yedeklemeler | `0 3 * * *` | `/app/cron-run.sh run-backups` |
+| KLEACORE: Yedeklemeler | `15 * * * *` | `/app/cron-run.sh run-backups` |
 | KLEACORE: SSL Süre Kontrolü | `0 4 * * *` | `/app/cron-run.sh ssl-expiry` |
 | KLEACORE: Hosting Kullanım Senkronu | `30 4 * * *` | `/app/cron-run.sh usage-sync` |
 | KLEACORE: Gecikmiş Faturalar | `0 5 * * *` | `/app/cron-run.sh overdue-invoices` |

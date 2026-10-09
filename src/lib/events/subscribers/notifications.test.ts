@@ -56,6 +56,9 @@ const cases: Array<{ type: EventType; payload: Record<string, unknown>; template
   { type: "security.failed_login_burst", payload: { userId: "cus-1", failedAttempts: 5, windowMinutes: 60, lastAttemptAt: at }, template: "security.failed-login-burst", dedupeKey: "security.failed-burst:evt-1" },
   { type: "privacy.request_received", payload: { requestId: "dr-1", requestNumber: "KVKK-2026-000001", type: "EXPORT", userId: null, email: "ayse@example.com", name: "Ayşe", dueAt: at, source: "form" }, template: "privacy.request-received", dedupeKey: "privacy.received:dr-1" },
   { type: "privacy.request_completed", payload: { requestId: "dr-1", requestNumber: "KVKK-2026-000001", type: "EXPORT", userId: "cus-1", email: "ayse@example.com", name: "Ayşe", outcome: "COMPLETED", responseText: "Verileriniz hazır.", downloadUrl: "https://kleacore.test/yasal/kvkk-basvuru/indir?token=x", downloadExpiresAt: at }, template: "privacy.request-completed", dedupeKey: "privacy.completed:dr-1" },
+  { type: "backup.completed", payload: { backupId: "bk-1", serviceId: "svc-1", customerId: "cus-1", serviceLabel: "VDS", trigger: "SCHEDULED", sizeMB: 2048, completedAt: at, notifyCustomer: true }, template: "service.backup-completed", dedupeKey: "backup.completed:bk-1" },
+  { type: "backup.failed", payload: { backupId: "bk-1", serviceId: "svc-1", customerId: "cus-1", serviceLabel: "VDS", trigger: "MANUAL", operation: "backup", error: "x", notifyCustomer: true }, template: "service.backup-failed", dedupeKey: "backup.failed:bk-1:backup:evt-1" },
+  { type: "backup.restored", payload: { backupId: "bk-1", serviceId: "svc-1", customerId: "cus-1", serviceLabel: "VDS", backupCreatedAt: at }, template: "service.backup-restored", dedupeKey: "backup.restored:evt-1" },
 ];
 
 function event(type: EventType, payload: Record<string, unknown>): DispatchedEvent {
@@ -106,6 +109,15 @@ describe("notifications subscriber", () => {
       await planNotifications(
         event("service.suspended", { serviceId: "s", customerId: "c", serviceLabel: "x", reason: "r", suspendedAt: at, notify: false })
       )
+    ).toEqual([]);
+  });
+
+  it("sends backup notices only when the instance enables them, never for final backups", async () => {
+    const base = { backupId: "bk-1", serviceId: "s", customerId: "c", serviceLabel: "VDS", completedAt: at };
+    expect(await planNotifications(event("backup.completed", { ...base, trigger: "MANUAL" }))).toEqual([]);
+    expect(await planNotifications(event("backup.completed", { ...base, trigger: "FINAL", notifyCustomer: true }))).toEqual([]);
+    expect(
+      await planNotifications(event("backup.failed", { ...base, trigger: "SCHEDULED", operation: "backup", error: "x", notifyCustomer: false }))
     ).toEqual([]);
   });
 

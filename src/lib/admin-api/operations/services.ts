@@ -218,13 +218,24 @@ export const terminateService = defineOperation({
   path: "/services/{id}/terminate",
   tag: TAG,
   summary: "Hizmeti sonlandır",
-  description: "Geri alınamaz: hizmet CANCELLED olur ve uzak hesap silinir. Gerekçe aktivite kaydına yazılır.",
+  description:
+    "Geri alınamaz: hizmet CANCELLED olur ve uzak hesap silinir. Gerekçe aktivite kaydına yazılır. Yedekli bir VDS önce son yedeğini alır; silme yedek bitince kuyruktan yapılır (`integration.error = FINAL_BACKUP_PENDING`). `skipFinalBackup: true` ek olarak `backups.manage` yetkisi ister.",
   permission: "services.manage",
   params: idParams,
-  body: z.object({ reason: reasonSchema }),
+  body: z.object({
+    reason: reasonSchema,
+    skipFinalBackup: z.boolean().optional().describe("Son yedeği almadan sil (backups.manage gerekir)"),
+  }),
   response: actionResult,
   handler: async ({ params, body, context }) => {
-    const result = await terminateServiceAs(context.owner.id, params.id, body.reason);
+    if (body.skipFinalBackup && !context.scopes.includes("backups.manage")) {
+      throw new ApiError(403, "insufficient_scope", 'Son yedek olmadan silmek için "backups.manage" yetkisi gerekli', {
+        required: "backups.manage",
+      });
+    }
+    const result = await terminateServiceAs(context.owner.id, params.id, body.reason, {
+      skipFinalBackup: body.skipFinalBackup === true,
+    });
     if (!result.success) throw failure(result);
     return { data: { service: serializeService(await loadService(params.id)), integration: result.integration } };
   },

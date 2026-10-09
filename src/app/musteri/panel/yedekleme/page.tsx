@@ -29,6 +29,9 @@ export default async function YedeklemePage() {
     completedAt: b.completedAt ? b.completedAt.toISOString() : null,
     createdAt: b.createdAt.toISOString(),
     scheduleId: b.scheduleId,
+    trigger: b.trigger,
+    // VDS (Proxmox) backups: restore needs the typed confirmation on the server page.
+    vds: Boolean(b.provider && b.moduleInstanceId),
   }));
 
   const serializedSchedules = schedules.map((s) => {

@@ -263,7 +263,7 @@ Durum etiketleri: **Var** (çalışan kod + çağrı yeri var) · **Kısmen** (�
 |---|---|---|---|---|
 | Uygulama/DB yedeği + uzak depolama | Var | **Kısmen** — `scripts/backup-postgres.sh` (yerel) | Kritik | Şifreli off-site (SFTP/B2/Drive) + geri yükleme provası |
 | Müşteri hizmet yedeği (cPanel) | — | **Var** — `integrations/backups/providers/cpanel-backup.ts`, `/api/cron/run-backups` | Orta | |
-| Proxmox VM yedeği (vzdump/PBS) tetikleme | — | **Yok** | Orta | |
+| Proxmox VM yedeği (vzdump/PBS) tetikleme | — | **Var (Faz 4)** — `src/lib/backups`, `backup.run` / `backup.restore` / `server.terminate` işleri, fesih öncesi son yedek; `docs/modules/proxmox.md` §9 | Orta | |
 
 ---
 

@@ -23,6 +23,7 @@ import { decryptSecret, encryptSecret } from "@/lib/secrets/crypto";
 import type {
   OperationResult,
   RemoteAccount,
+  ServerBackupArchive,
   ServerAccountContext,
   ServerAccountCreated,
   ServerModule,
@@ -31,6 +32,7 @@ import type {
   ServerUsage,
 } from "../../contracts";
 import { defineModule, type ResolvedModuleInstance } from "../../types";
+import { ownerMarker, vmNameFor } from "./names";
 import {
   ProxmoxApiError,
   ProxmoxTaskError,
@@ -40,7 +42,17 @@ import {
   type ProxmoxRuntime,
   type ProxmoxTransport,
 } from "./client";
-import { findBootDisk, parseUsage, rewriteNet0, type RrdPoint, type VmConfig, type VmStatusCurrent } from "./parse";
+import {
+  archiveFromTaskLog,
+  backupVmidOf,
+  findBootDisk,
+  parseUsage,
+  rewriteNet0,
+  type RrdPoint,
+  type StorageContentItem,
+  type VmConfig,
+  type VmStatusCurrent,
+} from "./parse";
 
 export const PROXMOX_MODULE_ID = "proxmox";
 const MODULE_ID = PROXMOX_MODULE_ID;
@@ -68,6 +80,18 @@ export const proxmoxConfigSchema = z.object({
   nameservers: z.array(z.string().trim().min(1)).default(["1.1.1.1", "8.8.8.8"]),
   taskTimeoutSeconds: z.coerce.number().int().min(30).max(540).default(420),
   testDisableKvm: z.boolean().default(false),
+  // Backups (vzdump) — docs/modules/proxmox.md §9.
+  backupStorage: z.string().trim().min(1).default("local"),
+  /** Proxmox Backup Server storage id; when set, backups go there instead of backupStorage. */
+  pbsStorage: z.string().trim().optional(),
+  backupMode: z.enum(["snapshot", "suspend", "stop"]).default("snapshot"),
+  /** Default backup slots (keep last N) of a VDS whose product sets none; 0 = no customer backups. */
+  backupRetention: z.coerce.number().int().min(0).max(50).default(2),
+  manualBackupsPerDay: z.coerce.number().int().min(1).max(24).default(3),
+  /** Final backup before termination is kept this many days, then deleted. */
+  finalBackupKeepDays: z.coerce.number().int().min(1).max(365).default(14),
+  /** E-mail the customer when an (automatic or manual) backup completes / fails. */
+  backupNotifyCustomer: z.boolean().default(false),
 });
 
 export type ProxmoxModuleConfig = z.infer<typeof proxmoxConfigSchema>;
@@ -87,6 +111,8 @@ export const proxmoxProductOptionsSchema = z.object({
     .trim()
     .regex(/^[a-z_][a-z0-9_-]{0,31}$/, "Küçük harf, rakam, - ve _ (en fazla 32)")
     .default("kleacore"),
+  /** Backups included (keep last N); empty = the instance default, 0 = none. */
+  backupSlots: z.coerce.number().int().min(0).max(50).optional(),
 });
 
 export type ProxmoxProductOptions = z.infer<typeof proxmoxProductOptionsSchema>;
@@ -217,15 +243,7 @@ const defaultDeps: ProxmoxModuleDeps = { ipam: dbIpam, generatePassword: () => g
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** VM name for a service: "kc-" + last 12 id characters (DNS-safe, unique enough; ownership is checked by marker). */
-export function vmNameFor(serviceId: string) {
-  return `kc-${serviceId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(-12)}`;
-}
-
-/** Written into the VM description; the only proof a VM belongs to a service. */
-export function ownerMarker(serviceId: string) {
-  return `kleacore-service:${serviceId}`;
-}
+export { ownerMarker, vmNameFor };
 
 function isOwnedBy(config: VmConfig | null | undefined, serviceId: string) {
   return typeof config?.description === "string" && config.description.includes(ownerMarker(serviceId));
@@ -246,7 +264,18 @@ const STEP_CODES: Record<string, string> = {
   power: "PROXMOX_POWER",
   usage: "PROXMOX_USAGE",
   resolve: "PROXMOX_VM",
+  backup: "PROXMOX_BACKUP",
+  restore: "PROXMOX_RESTORE",
+  backupDelete: "PROXMOX_BACKUP_DELETE",
 };
+
+/** A task still running after the wait budget: the caller retries with resumeUpid. */
+function failStep<T = { reference?: string }>(step: string, error: unknown): IntegrationResult<T> {
+  if (error instanceof ProxmoxTaskError && error.timedOut) {
+    return { ok: false, provider: MODULE_ID, error: `${STEP_CODES[step] ?? "PROXMOX"}_RUNNING: ${errorText(error)}` };
+  }
+  return fail<T>(step, error);
+}
 
 function fail<T = { reference?: string }>(step: string, error: unknown): IntegrationResult<T> {
   return { ok: false, provider: MODULE_ID, error: `${STEP_CODES[step] ?? "PROXMOX"}: ${errorText(error)}` };
@@ -618,6 +647,68 @@ export function createProxmoxModule(
     );
   }
 
+  function backupStorage() {
+    return config.pbsStorage || config.backupStorage;
+  }
+
+  function isPbs(storage: string) {
+    return Boolean(config.pbsStorage) && storage === config.pbsStorage;
+  }
+
+  async function listContent(node: string, storage: string, vmid: number) {
+    const rows = await client.get<StorageContentItem[]>(
+      `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/content`,
+      { content: "backup", vmid }
+    );
+    // Some storages ignore the vmid filter: check it ourselves.
+    return (rows ?? []).filter((row) => backupVmidOf(row.volid) === vmid);
+  }
+
+  function toArchive(item: StorageContentItem, node: string, storage: string): ServerBackupArchive {
+    return {
+      volid: item.volid,
+      storage,
+      node,
+      sizeBytes: typeof item.size === "number" ? item.size : null,
+      createdAt: typeof item.ctime === "number" ? new Date(item.ctime * 1000) : null,
+      notes: item.notes ?? null,
+      format: item.format ?? null,
+    };
+  }
+
+  /** The service's VM by VMID without the owner-marker check (resumed foreign restore). */
+  async function findVmById(ctx: Ctx): Promise<OwnedVm> {
+    const vmid = parseVmid(ctx.service.remoteId);
+    if (!vmid) throw new Error(`Geçersiz VMID: "${ctx.service.remoteId ?? ""}"`);
+    const vm = (await listVms()).find((row) => row.vmid === vmid);
+    if (!vm) throw new ProxmoxApiError(`VM ${vmid} Proxmox'ta bulunamadı`, 404, "/cluster/resources");
+    return { vmid, node: vm.node, config: await getConfig(vm.node, vmid) };
+  }
+
+  /**
+   * After restoring another VM's archive into this service's VM: the config
+   * now carries the old VM's name, owner marker and network. Re-apply this
+   * service's (same IP lease: allocate is idempotent per service).
+   */
+  async function adoptRestoredVm(ctx: Ctx, vm: OwnedVm) {
+    const lease = await deps.ipam.allocate({ serviceId: ctx.service.id, instanceId: instance.id, poolId: ctx.options.ipPoolId });
+    const current = await getConfig(vm.node, vm.vmid);
+    const net0 = rewriteNet0(
+      typeof current.net0 === "string" ? current.net0 : undefined,
+      ctx.options.bridge || config.bridge,
+      ctx.options.vlan ?? lease.vlan
+    );
+    await client.put(qemu(vm.node, vm.vmid, "/config"), {
+      name: vmNameFor(ctx.service.id),
+      description: `${ownerMarker(ctx.service.id)}\n${ctx.service.label || ctx.service.product.name}`,
+      tags: VM_TAG,
+      onboot: 1,
+      ipconfig0: `ip=${lease.address}/${lease.prefix},gw=${lease.gateway}`,
+      nameserver: (lease.dnsServers.length ? lease.dnsServers : config.nameservers).join(" "),
+      net0: net0 ?? undefined,
+    });
+  }
+
   return {
     moduleId: MODULE_ID,
 
@@ -754,6 +845,140 @@ export function createProxmoxModule(
       }
     },
 
+    async createBackup(ctx, input) {
+      const store = ctx.state ?? memoryState();
+      const deadline = runtime.now() + taskTimeoutMs;
+      let vm: OwnedVm;
+      try {
+        vm = await resolveOwnedVm(ctx);
+      } catch (error) {
+        return fail("resolve", error);
+      }
+      const storage = input.storage || backupStorage();
+      try {
+        let upid = input.resumeUpid ?? null;
+        if (!upid) {
+          if (input.shutdownFirst) await power(vm, store, "stop");
+          const started = await client.post<unknown>(`/nodes/${encodeURIComponent(vm.node)}/vzdump`, {
+            vmid: vm.vmid,
+            storage,
+            mode: input.mode ?? config.backupMode,
+            // PBS compresses (and deduplicates) on its own.
+            compress: isPbs(storage) ? undefined : "zstd",
+            "notes-template": [input.tag, input.notes].filter(Boolean).join(" "),
+            // Never let the storage's own prune settings delete archives: retention is ours.
+            remove: 0,
+          });
+          upid = isUpid(started) ? started : null;
+          if (upid) {
+            await store.patch({ lastUpid: upid });
+            await input.onStarted?.({ upid, node: vm.node, storage });
+          }
+        }
+        if (upid) await client.waitForTask(upid, { timeoutMs: Math.max(deadline - runtime.now(), 1_000) });
+
+        const items = await listContent(vm.node, storage, vm.vmid);
+        let item = items.find((row) => (row.notes ?? "").includes(input.tag));
+        if (!item && upid) {
+          const fromLog = archiveFromTaskLog(await client.taskLog(upid, 500).catch(() => []), storage);
+          item = items.find((row) => row.volid === fromLog);
+        }
+        if (!item) throw new Error(`Yedek tamamlandı ama arşiv ${storage} üzerinde bulunamadı (VM ${vm.vmid})`);
+        return { ok: true, provider: MODULE_ID, reference: item.volid, data: { ...toArchive(item, vm.node, storage), upid } };
+      } catch (error) {
+        const result = failStep<ServerBackupArchive & { upid: string | null }>("backup", error);
+        await store.patch({ lastError: result.error, lastErrorAt: new Date(runtime.now()).toISOString() }).catch(() => undefined);
+        return result;
+      }
+    },
+
+    async listBackups(ctx, options = {}) {
+      try {
+        const vm = await resolveOwnedVm(ctx);
+        const storage = options.storage || backupStorage();
+        const items = await listContent(vm.node, storage, vm.vmid);
+        return { ok: true, provider: MODULE_ID, data: items.map((item) => toArchive(item, vm.node, storage)) };
+      } catch (error) {
+        return fail<ServerBackupArchive[]>("backup", error);
+      }
+    },
+
+    async restoreBackup(ctx, input) {
+      const store = ctx.state ?? memoryState();
+      const deadline = runtime.now() + taskTimeoutMs;
+      let vm: OwnedVm;
+      try {
+        // A resumed foreign restore already replaced the config (and its owner
+        // marker) with the archive's: find the VM by VMID only.
+        vm = input.foreign && input.resumeUpid ? await findVmById(ctx) : await resolveOwnedVm(ctx);
+      } catch (error) {
+        return fail("resolve", error);
+      }
+      try {
+        if (!input.foreign && backupVmidOf(input.volid) !== vm.vmid) {
+          throw new Error(`Yedek (${input.volid}) bu sunucuya ait değil; geri yükleme yapılmadı`);
+        }
+        let upid = input.resumeUpid ?? null;
+        if (!upid) {
+          const status = await getStatus(vm.node, vm.vmid);
+          if (status.status === "running" || status.status === "paused") {
+            // The disks are overwritten anyway: hard stop.
+            await runTask(store, () => client.post(qemu(vm.node, vm.vmid, "/status/stop")), POWER_TIMEOUT_MS);
+          }
+          const started = await client.post<unknown>(`/nodes/${encodeURIComponent(vm.node)}/qemu`, {
+            vmid: vm.vmid,
+            archive: input.volid,
+            force: 1,
+            // A foreign archive carries another VM's MAC: give the NIC a new one.
+            unique: input.foreign ? 1 : undefined,
+            pool: config.pool || undefined,
+          });
+          upid = isUpid(started) ? started : null;
+          if (upid) {
+            await store.patch({ lastUpid: upid });
+            await input.onStarted?.({ upid, node: vm.node });
+          }
+        }
+        if (upid) await client.waitForTask(upid, { timeoutMs: Math.max(deadline - runtime.now(), 1_000) });
+
+        if (input.foreign) await adoptRestoredVm(ctx, vm);
+        const status = await getStatus(vm.node, vm.vmid);
+        if (status.status !== "running") {
+          await runTask(store, () => client.post(qemu(vm.node, vm.vmid, "/status/start")), Math.max(deadline - runtime.now(), POWER_TIMEOUT_MS));
+        }
+        return { ok: true, provider: MODULE_ID, reference: String(vm.vmid), data: { reference: String(vm.vmid) } };
+      } catch (error) {
+        const result = failStep("restore", error);
+        await store.patch({ lastError: result.error, lastErrorAt: new Date(runtime.now()).toISOString() }).catch(() => undefined);
+        return result;
+      }
+    },
+
+    async deleteBackup(_ctx, input) {
+      try {
+        if (backupVmidOf(input.volid) !== input.vmid) {
+          throw new Error(`Yedek (${input.volid}) VM ${input.vmid} için değil; silinmedi`);
+        }
+        const storage = input.storage || input.volid.split(":")[0] || backupStorage();
+        const node = input.node || config.node;
+        let result: unknown;
+        try {
+          result = await client.del<unknown>(
+            `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/content/${encodeURIComponent(input.volid)}`
+          );
+        } catch (error) {
+          if (error instanceof ProxmoxApiError && error.isNotFound) {
+            return { ok: true, provider: MODULE_ID, reference: input.volid, data: { reference: input.volid } };
+          }
+          throw error;
+        }
+        if (isUpid(result)) await client.waitForTask(result, { timeoutMs: Math.min(taskTimeoutMs, 120_000) });
+        return { ok: true, provider: MODULE_ID, reference: input.volid, data: { reference: input.volid } };
+      } catch (error) {
+        return failStep("backupDelete", error);
+      }
+    },
+
     async listAccounts(): Promise<IntegrationResult<RemoteAccount[]>> {
       try {
         const vms = await listVms();
@@ -834,8 +1059,28 @@ export const proxmoxModule = defineModule({
       label: "Yalnızca test: KVM kapalı (kvm: 0)",
       hint: "İç içe sanallaştırmada KVM yoksa VM'ler yazılımsal emülasyonla (çok yavaş) açılır. Üretimde kapalı tutun.",
     },
+    backupStorage: {
+      label: "Yedek depolaması",
+      placeholder: "local",
+      hint: "vzdump arşivlerinin yazılacağı depolama (içerik türü \"VZDump backup file\" açık olmalı).",
+    },
+    pbsStorage: {
+      label: "Proxmox Backup Server depolaması (isteğe bağlı)",
+      hint: "Doluysa yedekler yukarıdaki depolama yerine bu PBS depolamasına alınır.",
+    },
+    backupMode: { label: "Yedek modu", hint: "snapshot: VM çalışırken (önerilen), suspend: kısa duraklatma, stop: kapatıp yedekleme." },
+    backupRetention: {
+      label: "Varsayılan yedek hakkı (son N yedek)",
+      hint: "Ürün kendi hakkını belirtmezse VDS başına saklanan yedek sayısı. 0 = müşteri yedeği yok.",
+    },
+    manualBackupsPerDay: { label: "Günlük manuel yedek sınırı", hint: "Müşterinin bir sunucu için günde başlatabileceği \"Şimdi yedek al\" sayısı." },
+    finalBackupKeepDays: {
+      label: "Fesih yedeği saklama süresi (gün)",
+      hint: "Fesihten önce alınan son yedek bu süre sonunda otomatik silinir.",
+    },
+    backupNotifyCustomer: { label: "Yedek bildirimleri müşteriye", hint: "Açıksa müşteriye yedek tamamlandı/başarısız e-postası gider. Hatalar her zaman yöneticiye bildirilir." },
   },
-  capabilities: ["provision", "changePackage", "usage", "power", "reinstall", "listAccounts", "ipam"],
+  capabilities: ["provision", "changePackage", "usage", "power", "reinstall", "listAccounts", "ipam", "backups"],
   productCategories: ["vds", "vps", "server", "cloud"],
   productOptionsSchema: proxmoxProductOptionsSchema,
   productOptionsFields: {
@@ -849,6 +1094,10 @@ export const proxmoxModule = defineModule({
     ipPoolId: { label: "IP havuzu kimliği (isteğe bağlı)", hint: "Boşsa örneğe bağlı ilk IP havuzu." },
     osLabel: { label: "İşletim sistemi adı", placeholder: "Ubuntu 22.04 LTS", hint: "Müşteri panelinde gösterilir." },
     ciUser: { label: "Varsayılan kullanıcı adı (cloud-init)", placeholder: "kleacore" },
+    backupSlots: {
+      label: "Yedek hakkı (son N yedek, isteğe bağlı)",
+      hint: "Boşsa Proxmox örneğinin varsayılanı. 0 = bu pakette müşteri yedeği yok.",
+    },
   },
   async healthCheck(instance) {
     const config = instance.config;

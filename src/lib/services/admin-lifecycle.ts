@@ -119,8 +119,18 @@ export async function unsuspendServiceAs(actorId: string, id: string): Promise<L
   return { success: true, integration };
 }
 
-/** Terminates (cancels) the service; `reason` goes to the activity log. */
-export async function terminateServiceAs(actorId: string, id: string, reason?: string): Promise<LifecycleResult> {
+/**
+ * Terminates (cancels) the service; `reason` goes to the activity log.
+ * A VDS with backups is destroyed only after its final backup (the remote
+ * termination is queued behind it) unless `skipFinalBackup` — the caller must
+ * have checked backups.manage for that.
+ */
+export async function terminateServiceAs(
+  actorId: string,
+  id: string,
+  reason?: string,
+  options: { skipFinalBackup?: boolean } = {}
+): Promise<LifecycleResult> {
   const service = await loadService(id);
   if (!service) {
     return { success: false, error: "Hizmet bulunamadı", status: 404 };
@@ -152,11 +162,22 @@ export async function terminateServiceAs(actorId: string, id: string, reason?: s
     );
     return row;
   });
-  const integration = await terminateRemoteService({
-    ...updatedService,
-    product: service.product,
-    customer: service.customer,
-  });
+  const integration = await terminateRemoteService(
+    {
+      ...updatedService,
+      product: service.product,
+      customer: service.customer,
+    },
+    { skipFinalBackup: options.skipFinalBackup === true, actorId }
+  );
+  if (options.skipFinalBackup) {
+    await logActivity({
+      userId: actorId,
+      action: "SERVICE_TERMINATED_WITHOUT_FINAL_BACKUP",
+      entity: "Service",
+      entityId: id,
+    });
+  }
 
   if (reason) {
     await logActivity({

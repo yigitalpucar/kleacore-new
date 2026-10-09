@@ -126,7 +126,20 @@ export async function unsuspendRemoteService(service: ServiceWithProduct) {
   return provider.unsuspendService(service);
 }
 
-export async function terminateRemoteService(service: ServiceWithProduct) {
+/**
+ * Destroys the remote account. A VDS on a module with backups (Proxmox) is
+ * never destroyed without a completed final backup: the first call queues
+ * the backup and returns `{ ok: false, skipped: true, error:
+ * "FINAL_BACKUP_PENDING" }`; the backup job finishes the termination
+ * (server.terminate). `skipFinalBackup` is the admin's explicit opt-out.
+ */
+export async function terminateRemoteService(
+  service: ServiceWithProduct,
+  options: { skipFinalBackup?: boolean; actorId?: string | null } = {}
+) {
+  const { finalBackupGate } = await import("@/lib/backups/vds");
+  const gate = await finalBackupGate(service, options);
+  if (gate) return gate;
   const provider = await getProvisioningProviderForService(service);
   return provider.terminateService(service);
 }

@@ -9,6 +9,7 @@ import { omitModuleData } from "@/lib/modules/service-state";
 import { getPanelCapabilities } from "@/lib/services/panel-access";
 import { requirePermission } from "@/lib/utils/auth-helpers";
 import { hasPermission } from "@/lib/auth/permissions";
+import { getAdminVdsBackupsView } from "@/lib/backups/vds";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +27,11 @@ export default async function ServiceDetailPage({
 
   if (!service) return notFound();
 
-  const [moduleView, proxmoxView, panel] = await Promise.all([
+  const [moduleView, proxmoxView, panel, vdsBackups] = await Promise.all([
     getServiceModuleView(service),
     getProxmoxAdminView(service),
     getPanelCapabilities(service),
+    getAdminVdsBackupsView(service),
   ]);
   // Never ship secrets to the browser: moduleData may hold encrypted VDS
   // credentials, panelPassword the encrypted cPanel password.
@@ -40,6 +42,8 @@ export default async function ServiceDetailPage({
       service={serializeMoney({ ...rest, hasPanelPassword: Boolean(panelPassword) })}
       moduleView={moduleView}
       proxmoxView={proxmoxView}
+      vdsBackups={vdsBackups}
+      canManageBackups={hasPermission(session.user.role, "backups.manage")}
       canManage={canManage}
       canCreateInvoice={hasPermission(session.user.role, "invoices.edit")}
       panelLogin={canManage && !proxmoxView && panel.sso && (service.status === "ACTIVE" || service.status === "SUSPENDED")}

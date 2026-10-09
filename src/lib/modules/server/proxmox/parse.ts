@@ -148,3 +148,44 @@ export function parseUsage(status: VmStatusCurrent, rrd: RrdPoint[] | null | und
   }
   return usage;
 }
+
+// ---------------------------------------------------------------------------
+// Backups (vzdump archives on a storage)
+// ---------------------------------------------------------------------------
+
+/** Row of GET /nodes/{node}/storage/{storage}/content?content=backup. */
+export interface StorageContentItem {
+  volid: string;
+  size?: number;
+  ctime?: number;
+  notes?: string;
+  format?: string;
+  subtype?: string;
+  vmid?: number | string;
+  content?: string;
+}
+
+/**
+ * VMID an archive belongs to, from its volume id:
+ * "local:backup/vzdump-qemu-1000-2026_10_09-03_00_01.vma.zst" (dir/NFS/CIFS)
+ * or "pbs:backup/vm/1000/2026-10-09T00:00:01Z" (Proxmox Backup Server).
+ */
+export function backupVmidOf(volid: string): number | null {
+  const match = /vzdump-qemu-(\d+)-/.exec(volid) ?? /(?:^|[:/])vm\/(\d+)\//.exec(volid);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Archive written by a finished vzdump task, from its log:
+ * "creating vzdump archive '/var/lib/vz/dump/vzdump-qemu-1000-….vma.zst'"
+ * or "creating Proxmox Backup Server archive 'vm/1000/2026-10-09T00:00:01Z'".
+ */
+export function archiveFromTaskLog(lines: string[], storage: string): string | null {
+  for (const line of lines) {
+    const pbs = /creating Proxmox Backup Server archive '([^']+)'/.exec(line);
+    if (pbs) return `${storage}:backup/${pbs[1]}`;
+    const file = /creating (?:vzdump )?archive '([^']+)'/.exec(line);
+    if (file) return `${storage}:backup/${file[1].split("/").pop()}`;
+  }
+  return null;
+}

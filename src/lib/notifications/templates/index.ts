@@ -13,6 +13,7 @@ import {
   billingPaymentReceived,
   billingRefundIssued,
 } from "./billing";
+import { serviceBackupCompleted, serviceBackupFailed, serviceBackupRestored } from "./backups";
 import { billingAutoChargeFailed, billingCardExpiring } from "./cards";
 import { domainExpiryNotice, domainRegistered, domainRenewed } from "./domains";
 import {
@@ -75,6 +76,9 @@ const definitions = [
   serviceCancellationReceived,
   serviceCancellationApproved,
   sslExpiryNotice,
+  serviceBackupCompleted,
+  serviceBackupFailed,
+  serviceBackupRestored,
   domainRegistered,
   domainRenewed,
   domainExpiryNotice,

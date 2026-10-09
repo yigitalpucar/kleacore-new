@@ -287,6 +287,80 @@ export const importApplyJob = defineJob({
   },
 });
 
+export const BACKUP_RUN_JOB = "backup.run";
+
+/**
+ * One VDS backup (Proxmox vzdump / PBS) — src/lib/backups/vds.ts. Singleton
+ * policy keyed by "<instance>:<node>": one backup runs per node at a time,
+ * the rest wait in the queue. An attempt waits for the task up to the
+ * module's task timeout; a still-running task is resumed (same UPID) by the
+ * next attempt, so 20 retries a minute apart cover long backups (~3 h).
+ */
+export const backupRunJob = defineJob({
+  name: BACKUP_RUN_JOB,
+  label: "Sunucu yedeği (vzdump)",
+  schema: z.object({ backupId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "singleton",
+    retryLimit: 20,
+    retryDelay: 60,
+    retryBackoff: false,
+    expireInSeconds: 10 * 60,
+  },
+  handler: async ({ backupId }, context) => {
+    const { runVdsBackupJob } = await import("@/lib/backups/vds");
+    return runVdsBackupJob(backupId, context);
+  },
+});
+
+export const BACKUP_RESTORE_JOB = "backup.restore";
+
+/**
+ * Customer-confirmed (or admin) restore of a VDS backup into the same VMID
+ * (qmrestore force=1). Exclusive per target service; resumable like
+ * backup.run. The final failure notifies the customer and alerts admins.
+ */
+export const backupRestoreJob = defineJob({
+  name: BACKUP_RESTORE_JOB,
+  label: "Sunucu yedeğini geri yükleme",
+  schema: z.object({ backupId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 15,
+    retryDelay: 60,
+    retryBackoff: false,
+    expireInSeconds: 10 * 60,
+  },
+  handler: async ({ backupId }, context) => {
+    const { runVdsRestoreJob } = await import("@/lib/backups/vds");
+    return runVdsRestoreJob(backupId, context);
+  },
+});
+
+export const SERVER_TERMINATE_JOB = "server.terminate";
+
+/**
+ * Continues a VDS termination once its final backup completed (queued by
+ * backup.run). Only runs for services still CANCELLED. 4 attempts, ≈ 5, 10,
+ * 20 min apart; the final failure flags the service for the admin.
+ */
+export const serverTerminateJob = defineJob({
+  name: SERVER_TERMINATE_JOB,
+  label: "Sunucu silme (fesih, son yedekten sonra)",
+  schema: z.object({ serviceId: z.string().min(1) }).strict(),
+  queue: {
+    policy: "exclusive",
+    retryLimit: 3,
+    retryDelay: 5 * 60,
+    retryBackoff: true,
+    expireInSeconds: 10 * 60,
+  },
+  handler: async ({ serviceId }, context) => {
+    const { runServerTerminateJob } = await import("@/lib/backups/vds");
+    return runServerTerminateJob(serviceId, context);
+  },
+});
+
 const definitions = [
   provisioningRunJob,
   domainRenewJob,
@@ -299,6 +373,9 @@ const definitions = [
   dnsServiceSetupJob,
   importFetchJob,
   importApplyJob,
+  backupRunJob,
+  backupRestoreJob,
+  serverTerminateJob,
 ] as const;
 
 export type RegisteredJob = (typeof definitions)[number];

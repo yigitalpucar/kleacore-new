@@ -259,6 +259,14 @@ enum BackupType {
   FILES
 }
 
+/// Why a backup exists: customer "Şimdi yedek al", the service's schedule, or
+/// the final backup taken before a VDS is destroyed on termination.
+enum BackupTrigger {
+  MANUAL
+  SCHEDULED
+  FINAL
+}
+
 enum TransactionType {
   DEPOSIT
   PAYMENT
@@ -1511,6 +1519,34 @@ model Backup {
   completedAt DateTime?
   createdAt   DateTime        @default(now())
 
+  // VDS (Proxmox vzdump) backups — src/lib/backups, docs/modules/proxmox.md §9.
+  trigger            BackupTrigger @default(MANUAL)
+  /// Module / provider that holds the archive ("proxmox", "cpanel-backup").
+  provider           String?
+  moduleInstanceId   String?
+  node               String?
+  storage            String?
+  vmid               Int?
+  /// Storage volume id of the archive (local:backup/vzdump-qemu-…, pbs:backup/vm/…).
+  volid              String?
+  /// UPID of the running vzdump task (a retried job resumes it).
+  upid               String?
+  error              String?
+  /// FINAL backups: deleted by the cleanup after this date.
+  expiresAt          DateTime?
+  /// The archive was deleted on the storage; the row stays for history.
+  deletedAt          DateTime?
+  /// Schedule idempotency: "<scheduleId>:<slot ISO>" — one backup per slot.
+  slotKey            String?       @unique
+  /// queued | running | done | failed (customer restore of this archive).
+  restoreStatus      String?
+  restoreUpid        String?
+  restoreTargetId    String?
+  restoreRequestedAt DateTime?
+  restoreError       String?
+
+  @@index([serviceId, status])
+  @@index([trigger, expiresAt])
   @@map("backups")
 }
 
@@ -1522,10 +1558,15 @@ model BackupSchedule {
   isActive  Boolean   @default(true)
   lastRunAt DateTime?
   nextRunAt DateTime?
+  /// VDS schedules: start hour of the run window (CRON_TIMEZONE, 0–23).
+  hour      Int       @default(3)
+  /// Weekly schedules: day of week (0 = Sunday … 6 = Saturday).
+  weekday   Int?
   backups   Backup[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  @@index([serviceId])
   @@map("backup_schedules")
 }
 

@@ -66,7 +66,7 @@ Hata kodları adımı söyler: `PROXMOX_LOOKUP | _IP | _CLONE | _CONFIG | _RESIZ
 
 ### 4.4 Fesih (`terminate`)
 
-Yalnızca açık yönetici işlemiyle çalışır: hizmet detayı → **Hizmeti iptal et** (onay metni VM'in kalıcı silineceğini söyler) veya hizmeti iptal eden bir **iade**. Hiçbir cron fesih çağırmaz (vade+30 yalnızca aday listesi). Akış: sahiplik işareti kontrolü → `POST …/status/stop` → `DELETE /nodes/{node}/qemu/{vmid}?purge=1&destroy-unreferenced-disks=1` → köprü IP'yi havuza bırakır. VM zaten yoksa başarı sayılır. Fesih öncesi vzdump yedeği (yol haritası 2.3 notu) henüz yok.
+Yalnızca açık yönetici işlemiyle çalışır: hizmet detayı → **Hizmeti iptal et** (onay metni VM'in kalıcı silineceğini söyler) veya hizmeti iptal eden bir **iade**. Hiçbir cron fesih çağırmaz (vade+30 yalnızca aday listesi). Akış: **önce son yedek** (§9.6) → sahiplik işareti kontrolü → `POST …/status/stop` → `DELETE /nodes/{node}/qemu/{vmid}?purge=1&destroy-unreferenced-disks=1` → köprü IP'yi havuza bırakır. VM zaten yoksa başarı sayılır.
 
 ### 4.5 Güç işlemleri (müşteri paneli)
 
@@ -111,6 +111,9 @@ pveum role add KleacoreVDS -privs "VM.Allocate VM.Clone VM.Audit VM.PowerMgmt VM
   VM.Config.CDROM VM.Config.HWType Datastore.AllocateSpace Datastore.Audit Sys.Audit SDN.Use Pool.Audit Pool.Allocate"
 #    (PVE 8'de isteğe bağlı olarak VM.Monitor eklenebilir; modül kullanmaz.)
 
+#    Yedekleme (§9) için ayrıca: VM.Backup (vzdump), Datastore.AllocateSpace + Datastore.Audit yedek depolamasında.
+#    PVE 9: pveum role modify KleacoreVDS -append 1 -privs "VM.Backup"
+
 # 2) Ayrı kullanıcı + token (privsep=0: token kullanıcının izinlerini taşır, ACL tek yerde)
 pveum user add kleacore@pve --comment "KLEACORE otomasyon"
 pveum user token add kleacore@pve kleacore --privsep 0 --comment "KLEACORE VDS"
@@ -123,6 +126,7 @@ pveum acl modify /vms/9000                 --users kleacore@pve --roles PVETempl
 pveum acl modify /storage/local-lvm        --users kleacore@pve --roles PVEDatastoreUser # disk alanı
 pveum acl modify /nodes/<node>             --users kleacore@pve --roles PVEAuditor      # node durumu (Sys.Audit)
 pveum acl modify /sdn/zones/localnetwork   --users kleacore@pve --roles PVESDNUser      # vmbr0'ı kullanma (PVE 8+)
+pveum acl modify /storage/local            --users kleacore@pve --roles PVEDatastoreUser # yedek depolaması (backupStorage / pbsStorage)
 ```
 
 KLEACORE örneğinde: `tokenId = kleacore@pve!kleacore`, `pool = kleacore`, VMID aralığı mevcut VM'lerle çakışmayan bir blok (ör. 1000–1999). Şablon (9000) pool dışında kalır; yalnızca klonlanabilir. TLS için `/etc/pve/pve-root-ca.pem` içeriğini `caCert` alanına yapıştırın (`verifyTls` açık kalsın).
@@ -150,3 +154,78 @@ Bu çalışmada gerçek Proxmox'a **hiç istek atılmadı** (token yoktu). Sahip
 11. Hata yolu: `testDisableKvm` kapalıyken yeni sipariş → `PROXMOX_START` hataları, son denemeden sonra IP havuza döner, kartta "VM … bırakıldı" notu; **Proxmox'ta yeniden dene** (kvm açılarak) kaldığı yerden tamamlar.
 12. Fesih: hizmeti iptal et → VM silinir (purge), IP havuza döner (bekleme süresiyle).
 13. Temizlik: test VM'lerini, pool'u gerekirse token'ı silin.
+
+## 9. Yedekleme (vzdump / PBS) — Faz 4
+
+Kod: modül `createBackup / listBackups / restoreBackup / deleteBackup` (yetenek `backups`), uygulama katmanı `src/lib/backups/` (`policy.ts` saf kurallar, `vds.ts` DB + kuyruk), müşteri `src/components/panel/vds-backups.tsx`, yönetim `src/components/admin/modules/vds-backups-card.tsx`. Testler: `proxmox.backups.test.ts` (sahte PVE), `src/lib/backups/*.test.ts`, `vds.integration.test.ts` (`RUN_DB_TESTS=1`).
+
+### 9.1 Ayarlar
+
+Örnek (`/yonetim/moduller` → Proxmox):
+
+| Alan | Varsayılan | Not |
+|---|---|---|
+| `backupStorage` | `local` | vzdump arşivlerinin depolaması (içerik türü "VZDump backup file" açık olmalı) |
+| `pbsStorage` | — | Doluysa yedekler bu Proxmox Backup Server depolamasına gider (`compress` gönderilmez, PBS kendisi sıkıştırır) |
+| `backupMode` | `snapshot` | `snapshot` / `suspend` / `stop` |
+| `backupRetention` | 2 | Ürün belirtmezse VDS başına yedek hakkı (son N); 0 = müşteri yedeği yok |
+| `manualBackupsPerDay` | 3 | "Şimdi yedek al" günlük sınırı (hizmet başına, `rate_limit_buckets`) |
+| `finalBackupKeepDays` | 14 | Fesih öncesi son yedeğin saklama süresi |
+| `backupNotifyCustomer` | kapalı | Müşteriye "yedek alındı / alınamadı" e-postası. Hatalar her zaman yöneticiye (`admin.event-alert`) gider |
+
+Ürün seçeneği `backupSlots` (boş = örnek varsayılanı, 0 = yok). **Ek yedek hakkı**: eklenti (ProductAddon) sistemi satın alınan eklentiyi hizmete bağlamıyor (yalnız sipariş satırı JSON'unda), bu yüzden ek hak yönetim hizmet sayfasındaki **Ek yedek hakkı** alanından elle verilir (`moduleData._backups.extraSlots`). Hak = ürün (veya örnek) + ek.
+
+### 9.2 Yedek alma
+
+`Backup` satırı kayıttır (`trigger` MANUAL / SCHEDULED / FINAL, `volid`, `storage`, `node`, `vmid`, `upid`, `size` MB). Her yedek `backup.run` işinde çalışır: **pg-boss `singleton` politikası, anahtar `<örnek>:<node>`** → bir node'da aynı anda tek yedek işi (PVE de vzdump'ı node başına kilitler). Akış: sahiplik işareti kontrolü → `POST /nodes/{node}/vzdump` (`vmid`, `storage`, `mode`, `compress=zstd`, `notes-template=kleacore-backup:<backupId> …`, `remove=0` — depolamanın kendi prune ayarı arşivlerimizi silmesin) → UPID `Backup.upid`'e yazılır → görev beklenir (`taskTimeoutSeconds`) → `GET /nodes/{node}/storage/{storage}/content?content=backup&vmid=` içinde notlardaki etiketle (yoksa görev kaydındaki "creating … archive" satırıyla) arşiv bulunur → `volid` + boyut.
+Görev süreyi aşarsa iş `PROXMOX_BACKUP_RUNNING` ile yeniden denenir ve **aynı UPID'i** bekler (20 deneme × ~1 dk + bekleme ≈ 3 saat). Görev hata ile biterse UPID temizlenir, sonraki deneme yeni vzdump başlatır; son denemede `FAILED` + `backup.failed` olayı.
+
+Kurallar: yalnız ACTIVE ve kurulmuş VDS; aynı anda tek yedek; geri yükleme / yeniden kurulum sürerken yedek yok. Manuel yedek boş hak ister; otomatik yedek hak doluysa en eskiyi döndürür. Başarılı yedekten sonra **son N** dışındakiler (en eskiden) `DELETE /nodes/{node}/storage/{storage}/content/{volid}` ile silinir, satıra `deletedAt` yazılır (FINAL yedekler bu budamaya girmez).
+
+### 9.3 Zamanlama
+
+Müşteri VDS sayfası → Yedekler → Otomatik yedekleme: Kapalı / Her gün / Haftada bir + saat penceresi (Türkiye saati, `CRON_TIMEZONE`). `BackupSchedule` hizmet başına bir satır (`frequency`, `hour`, `weekday`, `nextRunAt`). `run-backups` cron'u artık **saatlik (:15)**; vadesi gelen zamanlama `nextRunAt` üzerinde karşılaştır-ve-ayarla ile sahiplenilir ve yedek benzersiz `slotKey = <zamanlamaId>:<slot ISO>` ile açılır → üst üste binen iki cron aynı dilimi iki kez yedekleyemez. Cron ayrıca kuyruğa girememiş (`SCHEDULED`, 20 dk'dan eski) yedekleri yeniden kuyruğa koyar ve süresi dolan son yedekleri siler. Modülsüz (cPanel) zamanlamalar eski yoldan çalışmaya devam eder.
+
+### 9.4 Geri yükleme
+
+Müşteri: yedek satırı → **Geri yükle** → uyarı (sonraki veriler kalıcı silinir) + sunucu adını (`kc-…`) yazarak onay → `backup.restore` işi (hizmet başına exclusive). Modül: arşivin bu VM'e ait olduğunu `volid` içindeki VMID'den doğrular → VM çalışıyorsa `status/stop` → `POST /nodes/{node}/qemu` (`vmid` aynı, `archive=volid`, `force=1`) → görev beklenir (devam ettirilebilir, `restoreUpid`) → VM başlatılır. Sonuç `backup.restored` / `backup.failed (operation=restore)` olayı; müşteri e-postası her zaman, hata yöneticiye de.
+
+### 9.5 Silme
+
+Müşteri kendi MANUAL/SCHEDULED yedeklerini silebilir (sürerken veya geri yüklenirken değil). Arşiv silinemezse satır kalır ve hata gösterilir. Fesih yedekleri müşteriye görünmez.
+
+### 9.6 Fesih öncesi son yedek
+
+`terminateRemoteService` (hizmet iptali, iade) `backups` yetenekli bir VDS'te önce `finalBackupGate`'e sorar:
+
+1. Tamamlanmış (silinmemiş) bir FINAL yedek varsa → VM silinir.
+2. Kuyrukta / sürüyorsa → `FINAL_BACKUP_PENDING` (VM'e dokunulmaz).
+3. Yoksa veya sonuncusu başarısızsa → yeni FINAL yedek (VM önce düzgün kapatılır, `mode=stop`) kuyruğa alınır → `FINAL_BACKUP_PENDING`.
+4. Yedek tamamlanınca `backup.run` → `server.terminate` işini kuyruğa koyar; iş hizmet hâlâ CANCELLED ise kapıdan geçip VM'i siler.
+5. Son yedek başarısız olursa VM **silinmez**; yöneticiye uyarı + hizmet kartında not. Yönetim hizmet sayfası → Sunucu yedekleri: **Son yedeği yeniden dene** veya **Yedeksiz sil** (sunucu adını yazarak; `backups.manage` + `services.manage`, etkinlik kaydı `SERVICE_TERMINATED_WITHOUT_FINAL_BACKUP`). `cancelService(id, { skipFinalBackup: true })` aynı atlamayı yapar.
+6. Modül kaydı alınamazsa (örnek silinmiş vb.) kapı **silmez** (`FINAL_BACKUP_CHECK_FAILED`).
+
+FINAL yedek `expiresAt = tamamlanma + finalBackupKeepDays` ile saklanır; yönetici **Süreyi değiştir** ile uzatabilir; süre dolunca `run-backups` arşivi siler (`deletedAt`).
+
+### 9.7 Son yedeği yeni bir hizmete geri yükleme (yönetici)
+
+Müşteri iptalden sonra verisini isterse:
+
+1. Müşteriye aynı Proxmox örneğinde yeni bir VDS hizmeti açın (normal sipariş / yönetimden hizmet ekle) ve kurulumun bitmesini bekleyin (yeni VMID + IP).
+2. **Eski** hizmetin sayfası → Sunucu yedekleri → son yedek → **Geri yükle** → "Hedef hizmet kimliği"ne yeni hizmetin kimliğini yazın, onay için **yeni** sunucu adını (`kc-…`) yazın.
+3. Modül yeni VM'i durdurur, `qmrestore … force=1 unique=1` ile arşivi yeni VMID'e açar (yeni MAC), ardından adı, sahiplik işaretini, `ipconfig0` / DNS / köprü-VLAN'ı **yeni hizmete** göre yeniden yazar ve VM'i başlatır.
+4. Sunucu içindeki kullanıcılar, şifreler, SSH anahtarları eski sunucununkidir; cloud-init yapılandırması değiştiği için ilk açılışta ağ yeni IP ile gelir. Panelde "ilk giriş bilgileri" yeni kurulumun şifresini gösterir — müşteriye eski şifresini kullanmasını söyleyin.
+
+Yalnızca aynı örnekteki **aktif** bir VDS'e yapılabilir; farklı örnek/cluster için PVE'de elle `qmrestore` gerekir.
+
+### 9.8 Olaylar ve şablonlar
+
+Olaylar: `backup.completed`, `backup.failed` (`operation` backup/restore), `backup.restored`. Şablonlar (Bildirimler → şablonlar, düzenlenebilir): `service.backup-completed`, `service.backup-failed`, `service.backup-restored`. Yönetim uyarısı: `backup.failed` → `admin.event-alert`.
+
+### 9.9 Yetkiler
+
+Yeni izin `backups.manage` (yalnız ADMIN): yönetimde yedek al / geri yükle / sil, ek hak, son yedek süresi, son yedeği yeniden dene, yedeksiz sil. Müşteri eylemleri sahiplik kontrolüyle (`customerId`) çalışır; FINAL yedekleri göremez.
+
+### 9.10 Uçtan uca test (izin verildiğinde)
+
+Test node'unda: token rolüne `VM.Backup` ekleyin, `local` depolamasında "VZDump backup file" içeriği açık olsun. Test VDS ürününde `backupSlots=2` → panelden **Şimdi yedek al** → `/yonetim/isler`'de `backup.run`, PVE'de Tasks → vzdump, Storage → local → Backups'ta notlu arşiv; üçüncü (otomatik) yedekten sonra en eski silinir. Geri yükleme: dosya oluşturun → geri yükleyin → dosya yok. Fesih: hizmeti iptal edin → önce VM kapanıp yedeklenir, sonra silinir; yönetimde son yedek ve saklama sonu görünür.

@@ -150,11 +150,15 @@ export async function activateService(id: string) {
   }
 }
 
-export async function cancelService(id: string) {
+export async function cancelService(id: string, options: { skipFinalBackup?: boolean } = {}) {
   const session = await requirePermission("services.manage");
+  // Destroying a VDS without its final backup is a backup decision too.
+  if (options.skipFinalBackup) await requirePermission("backups.manage");
 
   try {
-    const result = await terminateServiceAs(session.user.id, id);
+    const result = await terminateServiceAs(session.user.id, id, undefined, {
+      skipFinalBackup: options.skipFinalBackup === true,
+    });
     if (!result.success) return result;
 
     revalidatePath("/yonetim/hizmetler");

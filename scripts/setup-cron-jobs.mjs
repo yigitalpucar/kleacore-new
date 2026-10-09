@@ -33,7 +33,7 @@ const CRON_JOBS = [
     id: "run-backups",
     name: "Zamanlanmış Yedeklemeler",
     path: "/api/cron/run-backups",
-    schedule: "0 3 * * *",
+    schedule: "15 * * * *",
     description: "Zamanlanmış yedeklemeleri çalıştır",
   },
   {

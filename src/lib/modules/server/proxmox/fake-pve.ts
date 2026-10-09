@@ -19,6 +19,18 @@ interface FakeTask {
   exitstatus: string;
   done?: () => void;
   finished: boolean;
+  log?: string[];
+}
+
+export interface FakeArchive {
+  volid: string;
+  vmid: number;
+  size: number;
+  ctime: number;
+  notes?: string;
+  format?: string;
+  /** VM config captured at backup time (restored by qmrestore). */
+  config: Record<string, string | number>;
 }
 
 export interface FakeCall {
@@ -50,6 +62,23 @@ export function createFakePve(options: { node?: string; base?: string } = {}) {
     /** Next start task fails with this exit status (once). */
     failNextStart: null as string | null,
     rrd: [] as Array<Record<string, number>>,
+    /** Backup archives per storage id. */
+    storages: new Map<string, FakeArchive[]>(),
+    /** Next vzdump task fails with this exit status (once). */
+    failNextBackup: null as string | null,
+    /** Next restore task fails with this exit status (once). */
+    failNextRestore: null as string | null,
+    /** vzdump ignores notes-template (older PVE): archive found through the task log. */
+    ignoreNotes: false,
+    backupSeq: 0,
+
+    archives(storage = "local") {
+      return fake.storages.get(storage) ?? [];
+    },
+
+    addArchive(storage: string, archive: Omit<FakeArchive, "config"> & { config?: Record<string, string | number> }) {
+      fake.storages.set(storage, [...fake.archives(storage), { config: {}, ...archive }]);
+    },
 
     addTemplate(vmid = 9000, config: Record<string, string | number> = {}) {
       vms.set(vmid, {
@@ -84,9 +113,9 @@ export function createFakePve(options: { node?: string; base?: string } = {}) {
     },
   };
 
-  function newTask(exitstatus = "OK", done?: () => void) {
+  function newTask(exitstatus = "OK", done?: () => void, log?: string[]) {
     const upid = `UPID:${node}:0000${(++taskCounter).toString(16)}:00000001:6700000${taskCounter}:qmtask:${taskCounter}:kleacore@pve!kleacore:`;
-    tasks.set(upid, { node, pollsLeft: fake.taskPolls, exitstatus, done, finished: false });
+    tasks.set(upid, { node, pollsLeft: fake.taskPolls, exitstatus, done, finished: false, log });
     return upid;
   }
 
@@ -152,7 +181,91 @@ export function createFakePve(options: { node?: string; base?: string } = {}) {
     }
 
     if ((match = /^\/nodes\/([^/]+)\/tasks\/(.+)\/log$/.exec(path))) {
-      return json([{ n: 1, t: "task started" }, { n: 2, t: "TASK OK" }]);
+      const lines = tasks.get(match[2])?.log ?? ["task started", "TASK OK"];
+      return json(lines.map((t, index) => ({ n: index + 1, t })));
+    }
+
+    if ((match = /^\/nodes\/([^/]+)\/vzdump$/.exec(path)) && method === "POST") {
+      const vmid = Number(params.get("vmid"));
+      const storage = params.get("storage") ?? "local";
+      const vm = vms.get(vmid);
+      if (!vm) return error(500, `VM ${vmid} not found`);
+      if (fake.failNextBackup) {
+        const reason = fake.failNextBackup;
+        fake.failNextBackup = null;
+        return json(newTask(reason));
+      }
+      const seq = ++fake.backupSeq;
+      const stamp = `2026_10_09-03_00_${String(seq).padStart(2, "0")}`;
+      const pbs = storage.startsWith("pbs");
+      const volid = pbs ? `${storage}:backup/vm/${vmid}/2026-10-09T00:00:${String(seq).padStart(2, "0")}Z` : `${storage}:backup/vzdump-qemu-${vmid}-${stamp}.vma.zst`;
+      const log = [
+        `INFO: starting new backup job: vzdump ${vmid} --mode ${params.get("mode")} --storage ${storage}`,
+        pbs
+          ? `INFO: creating Proxmox Backup Server archive 'vm/${vmid}/2026-10-09T00:00:${String(seq).padStart(2, "0")}Z'`
+          : `INFO: creating vzdump archive '/var/lib/vz/dump/vzdump-qemu-${vmid}-${stamp}.vma.zst'`,
+        "INFO: Backup job finished successfully",
+        "TASK OK",
+      ];
+      return json(
+        newTask(
+          "OK",
+          () =>
+            fake.addArchive(storage, {
+              volid,
+              vmid,
+              size: 1024 * 1024 * (100 + seq),
+              ctime: 1_791_500_000 + seq,
+              notes: fake.ignoreNotes ? undefined : (params.get("notes-template") ?? undefined),
+              format: pbs ? "pbs-vm" : "vma.zst",
+              config: { ...vm.config },
+            }),
+          log
+        )
+      );
+    }
+
+    if ((match = /^\/nodes\/([^/]+)\/storage\/([^/]+)\/content$/.exec(path)) && method === "GET") {
+      const vmid = params.get("vmid");
+      return json(
+        fake
+          .archives(match[2])
+          .filter((archive) => !vmid || String(archive.vmid) === vmid)
+          .map(({ config: _config, ...archive }) => {
+            void _config;
+            return { ...archive, content: "backup", subtype: "qemu" };
+          })
+      );
+    }
+
+    if ((match = /^\/nodes\/([^/]+)\/storage\/([^/]+)\/content\/(.+)$/.exec(path)) && method === "DELETE") {
+      const storage = match[2];
+      const volid = match[3];
+      if (!fake.archives(storage).some((archive) => archive.volid === volid)) {
+        return error(500, `volume '${volid}' does not exist`);
+      }
+      return json(newTask("OK", () => fake.storages.set(storage, fake.archives(storage).filter((archive) => archive.volid !== volid))));
+    }
+
+    if ((match = /^\/nodes\/([^/]+)\/qemu$/.exec(path)) && method === "POST") {
+      const vmid = Number(params.get("vmid"));
+      const archiveId = params.get("archive") ?? "";
+      const archive = [...fake.storages.values()].flat().find((row) => row.volid === archiveId);
+      if (!archive) return error(500, `can't find archive '${archiveId}'`);
+      const existing = vms.get(vmid);
+      if (existing && params.get("force") !== "1") return error(500, `unable to restore VM ${vmid} - VM ${vmid} already exists`);
+      if (existing?.status === "running") return error(500, `unable to restore VM ${vmid} - VM is running`);
+      if (fake.failNextRestore) {
+        const reason = fake.failNextRestore;
+        fake.failNextRestore = null;
+        return json(newTask(reason));
+      }
+      if (existing) existing.config = { ...existing.config, lock: "create" };
+      return json(
+        newTask("OK", () => {
+          vms.set(vmid, { vmid, node, status: "stopped", config: { ...archive.config, restoredFrom: archiveId } });
+        })
+      );
     }
 
     if ((match = /^\/nodes\/([^/]+)\/qemu\/(\d+)\/clone$/.exec(path)) && method === "POST") {

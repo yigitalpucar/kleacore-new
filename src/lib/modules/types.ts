@@ -59,7 +59,8 @@ export interface CapabilitiesByKind {
     | "power" // powerAction
     | "reinstall" // reinstall
     | "listAccounts" // listAccounts (importers)
-    | "ipam"; // allocates addresses from an IpPool bound to the instance
+    | "ipam" // allocates addresses from an IpPool bound to the instance
+    | "backups"; // createBackup / listBackups / restoreBackup / deleteBackup
   registrar:
     | "register"
     | "renew"

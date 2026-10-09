@@ -53,6 +53,8 @@ import { toast } from "@/lib/toast";
 import { formatTRY } from "@/lib/format/price";
 import { billingPeriodLabel, formatDate, formatDateTime } from "@/lib/format/date";
 import { VdsPanel } from "@/components/panel/vds-panel";
+import { VdsBackups } from "@/components/panel/vds-backups";
+import type { VdsBackupsView } from "@/lib/backups/vds";
 import type { VdsPanelView } from "@/lib/modules/server-panel";
 
 const categoryIcons: Record<string, typeof Package> = {
@@ -114,6 +116,7 @@ interface ServiceData {
   suspendReason?: string | null;
   /** Module-bound VDS (Proxmox): live panel instead of the generic server cards. */
   vds?: VdsPanelView | null;
+  vdsBackups?: VdsBackupsView | null;
 }
 
 interface HizmetDetayContentProps {
@@ -331,6 +334,8 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
             />
           ) : null}
 
+          {vds && service.vdsBackups ? <VdsBackups view={service.vdsBackups} /> : null}
+
           {service.hostingAccess && service.status !== "PENDING" ? <HostingAccessCard data={service.hostingAccess} /> : null}
 
           {!vds && (isHosting || isServer) ? (
@@ -401,7 +406,7 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
             </SectionCard>
           ) : null}
 
-          {isHosting || isServer ? (
+          {(isHosting || isServer) && !service.vdsBackups ? (
             <SectionCard
               title="Son yedekler"
               actions={
