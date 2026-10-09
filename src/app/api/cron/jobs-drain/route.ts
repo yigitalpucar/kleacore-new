@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { sweepBroadcasts } from "@/lib/broadcasts/dispatch";
 import { runCronJob } from "@/lib/cron/handler";
 import { sweepPendingEvents } from "@/lib/events/dispatch";
 import { createLogger } from "@/lib/logger";
@@ -15,7 +16,8 @@ export const dynamic = "force-dynamic";
  * Not written to cron_runs (it would add 1440 rows a day); its liveness is
  * the `drain` heartbeat shown on /yonetim/isler and in /api/health.
  * First it sweeps the event outbox: domain events whose events.dispatch job
- * was never created (queue down at commit) get one and run in this drain.
+ * was never created (queue down at commit) get one and run in this drain;
+ * then due / stalled broadcasts get their next dispatch tick.
  */
 async function drain() {
   const budgetMs = Number(process.env.JOBS_DRAIN_BUDGET_MS) || 45_000;
@@ -26,8 +28,15 @@ async function drain() {
     log.error("event outbox sweep failed", { error });
     events = { error: error instanceof Error ? error.message : String(error) };
   }
+  let broadcasts: Awaited<ReturnType<typeof sweepBroadcasts>> | { error: string };
+  try {
+    broadcasts = await sweepBroadcasts();
+  } catch (error) {
+    log.error("broadcast sweep failed", { error });
+    broadcasts = { error: error instanceof Error ? error.message : String(error) };
+  }
   const jobs = await drainJobs({ budgetMs });
-  return { ...jobs, events };
+  return { ...jobs, events, broadcasts };
 }
 
 export async function GET(request: NextRequest) {

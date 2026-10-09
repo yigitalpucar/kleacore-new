@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { COMPANY_SETTING_KEYS, companyInfoFromSettings } from "@/lib/company-info";
 import { decryptSecret, encryptSecret, isEncryptedValue } from "@/lib/secrets/crypto";
 import { getAppBaseUrl } from "@/lib/stripe";
-import { LOGO_CID, renderEmailLayout, type RenderedEmail } from "./layout";
+import { LOGO_CID, renderEmailLayout, renderRawEmail, type RenderedEmail } from "./layout";
 import { renderOverrideEmail, renderOverrideSms, type TemplateOverride } from "./overrides";
 import { LOGO_PNG_BASE64 } from "./logo";
 import { getTemplate } from "./templates";
@@ -102,7 +102,9 @@ export function renderNotification(
   const logoSrc = options.logo === "inline" ? LOGO_DATA_URI : `cid:${LOGO_CID}`;
 
   let email: RenderedEmail | null = null;
-  if (options.override?.email) {
+  if (template.renderRaw) {
+    email = renderRawEmail(template.renderRaw(parsed, ctx), ctx.brand, { logoSrc });
+  } else if (options.override?.email) {
     try {
       email = renderOverrideEmail(template, parsed, ctx, options.override.email, { logoSrc });
     } catch (error) {
@@ -112,7 +114,7 @@ export function renderNotification(
   email ??= renderEmailLayout(template.render(parsed, ctx), ctx.brand, { logoSrc });
 
   let sms: string | null = template.sms ? template.sms(parsed, ctx) : null;
-  if (template.sms && options.override?.sms) {
+  if (template.sms && options.override?.sms && !template.renderRaw) {
     try {
       sms = renderOverrideSms(template, parsed, ctx, options.override.sms);
     } catch (error) {

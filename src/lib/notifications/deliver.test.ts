@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   settingFindMany: vi.fn(),
   sendTransactionalEmail: vi.fn(),
   sendSms: vi.fn(),
+  recordBroadcastDelivery: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -17,6 +18,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 vi.mock("@/lib/mail", () => ({ sendTransactionalEmail: mocks.sendTransactionalEmail }));
+vi.mock("@/lib/broadcasts/progress", () => ({ recordBroadcastDelivery: mocks.recordBroadcastDelivery }));
 vi.mock("@/lib/integrations/sms", () => ({
   getSmsProvider: async () => ({ name: "netgsm", sendSms: mocks.sendSms }),
 }));
@@ -104,5 +106,35 @@ describe("deliverNotificationLog", () => {
     await deliverNotificationLog("log-2", ctx());
     expect(mocks.sendSms).toHaveBeenCalledWith({ to: "+905551112233", message: expect.stringContaining("F-1") });
     expect(mocks.update.mock.calls[0][0].data).toMatchObject({ status: "SENT", providerMessageId: "sms-1" });
+  });
+
+  it("sends marketing broadcasts with List-Unsubscribe and mirrors the outcome onto the recipient", async () => {
+    mocks.findUnique.mockResolvedValue({
+      id: "log-b1",
+      template: "broadcast.marketing",
+      channel: "EMAIL",
+      to: "ayse@example.com",
+      status: "QUEUED",
+      data: {
+        broadcastId: "b1",
+        subject: "Yeni paketler",
+        bodyHtml: "<p>Merhaba</p>",
+        bodyText: "Merhaba",
+        unsubscribeUrl: "https://kleacore.test/abonelik/iptal?t=x",
+        oneClickUrl: "https://kleacore.test/api/abonelik/iptal?t=x",
+      },
+    });
+
+    await deliverNotificationLog("log-b1", ctx());
+
+    const mail = mocks.sendTransactionalEmail.mock.calls[0][0];
+    expect(mail.listUnsubscribe).toBe("https://kleacore.test/api/abonelik/iptal?t=x");
+    expect(mail.html).toContain("https://kleacore.test/abonelik/iptal?t=x");
+    expect(mocks.recordBroadcastDelivery).toHaveBeenCalledWith("log-b1", "SENT", null);
+  });
+
+  it("does not touch broadcast recipients for other templates", async () => {
+    await deliverNotificationLog("log-1", ctx());
+    expect(mocks.recordBroadcastDelivery).not.toHaveBeenCalled();
   });
 });

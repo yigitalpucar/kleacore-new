@@ -55,6 +55,25 @@ export interface MailHeaders {
   replyTo?: string;
   /** Embedded in the Message-ID (`<tag.random@domain>`) so a reply's In-Reply-To finds the thread. */
   messageIdTag?: string;
+  /**
+   * One-click unsubscribe URL (RFC 8058): sent as `List-Unsubscribe` +
+   * `List-Unsubscribe-Post` on marketing mail.
+   */
+  listUnsubscribe?: string;
+}
+
+/** Pre-built body for templates whose HTML is authored by staff (broadcasts). */
+export interface RawEmailContent {
+  subject: string;
+  preheader: string;
+  /** Inner card HTML, already sanitised. */
+  bodyHtml: string;
+  /** Plain-text body without the footer. */
+  text: string;
+  /** Replaces the default "sent because of an action on your account" footer line. */
+  footerNote?: string;
+  /** Adds an unsubscribe link to the footer. */
+  unsubscribeUrl?: string;
 }
 
 export type TemplateAudience = "customer" | "admin";
@@ -79,8 +98,15 @@ export interface NotificationTemplate<K extends string = string, S extends z.Zod
   render(data: z.output<S>, ctx: RenderContext): EmailContent;
   /** Optional short SMS text (sent only when an SMS provider is configured). */
   sms?(data: z.output<S>, ctx: RenderContext): string;
-  /** Optional mail headers (Reply-To, threading Message-ID). */
+  /** Optional mail headers (Reply-To, threading Message-ID, List-Unsubscribe). */
   mailHeaders?(data: z.output<S>): MailHeaders;
+  /**
+   * Staff-authored HTML instead of the structured layout (broadcasts). Used
+   * in place of `render` for the e-mail; admin overrides do not apply.
+   */
+  renderRaw?(data: z.output<S>, ctx: RenderContext): RawEmailContent;
+  /** false: hidden from the template editor (content is written per send). */
+  editable?: boolean;
 }
 
 export function defineTemplate<const K extends string, S extends z.ZodTypeAny>(

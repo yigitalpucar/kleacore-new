@@ -93,7 +93,7 @@ describe("variable whitelist", () => {
 });
 
 describe("default (seed) sources generated from the TS templates", () => {
-  it.each(listTemplates().map((template) => [template.key, template] as const))(
+  it.each(listTemplates().filter((template) => template.editable !== false).map((template) => [template.key, template] as const))(
     "%s: the default is valid and renders exactly like the TS template",
     (_key, template) => {
       const source = defaultTemplateSource(template, ctx);

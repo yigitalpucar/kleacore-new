@@ -13,6 +13,7 @@ import {
   billingPaymentReceived,
   billingRefundIssued,
 } from "./billing";
+import { broadcastMarketing, broadcastService } from "./broadcast";
 import { billingAutoChargeFailed, billingCardExpiring } from "./cards";
 import { domainExpiryNotice, domainRegistered, domainRenewed } from "./domains";
 import {
@@ -69,6 +70,8 @@ const definitions = [
   adminManualProvisioning,
   adminDomainRenewalFailed,
   adminEventAlert,
+  broadcastService,
+  broadcastMarketing,
 ] as const;
 
 export type RegisteredTemplate = (typeof definitions)[number];
