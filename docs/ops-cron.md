@@ -39,6 +39,7 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 | KLEACORE: E-Fatura Durumları | `*/15 * * * *` | `/app/cron-run.sh efatura-status` |
 | KLEACORE: Destek E-postaları | `*/2 * * * *` | `/app/cron-run.sh support-mail` |
 | KLEACORE: Destek Otomatik Kapatma | `15 * * * *` | `/app/cron-run.sh support-autoclose` |
+| KLEACORE: KYC Belge Saklama | `45 3 * * *` | `/app/cron-run.sh kyc-retention` |
 | KLEACORE: Bildirimler | `20 8-21 * * *` | `/app/cron-run.sh notifications` |
 | KLEACORE: İş Kuyruğu | `* * * * *` | `/app/cron-run.sh jobs-drain` |
 
@@ -49,6 +50,9 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
   talebe / yanıta çevirir (ayrıntı: `docs/ops-support-mail.md`). Posta kutusu
   yoksa hemen biter. Okuma süresi kilit içinde geçer; üst üste binen çalıştırma
   `locked` döner.
+- `kyc-retention`: reddedilen kimlik belgelerinin dosyalarını ret + `kyc_rejected_retention_days`
+  (varsayılan 30) gün sonra depolamadan siler; kayıt `deletedAt` ile kalır. Onaylı belgelere
+  dokunmaz (bkz. `docs/fraud-kyc.md`). Tekrar çalıştırmak güvenlidir.
 - `support-autoclose`: müşteri yanıtı beklenen talepler için gün-1 uyarısı ve
   otomatik kapatma (Ayarlar: `/yonetim/destek/ayarlar`, varsayılan 5 gün).
 - `usage-sync`: cPanel/WHM hesaplarının disk ve bu ayki bant genişliği
