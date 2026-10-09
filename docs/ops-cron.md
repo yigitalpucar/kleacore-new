@@ -39,6 +39,7 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
 | KLEACORE: E-Fatura Durumları | `*/15 * * * *` | `/app/cron-run.sh efatura-status` |
 | KLEACORE: Destek E-postaları | `*/2 * * * *` | `/app/cron-run.sh support-mail` |
 | KLEACORE: Destek Otomatik Kapatma | `15 * * * *` | `/app/cron-run.sh support-autoclose` |
+| KLEACORE: KVKK ve Güvenlik Bakımı | `30 9 * * *` | `/app/cron-run.sh privacy-maintenance` |
 | KLEACORE: Bildirimler | `20 8-21 * * *` | `/app/cron-run.sh notifications` |
 | KLEACORE: İş Kuyruğu | `* * * * *` | `/app/cron-run.sh jobs-drain` |
 
@@ -49,6 +50,10 @@ anahtar Dokploy'daki komut metninde ve görev loglarında açık duruyordu.
   talebe / yanıta çevirir (ayrıntı: `docs/ops-support-mail.md`). Posta kutusu
   yoksa hemen biter. Okuma süresi kilit içinde geçer; üst üste binen çalıştırma
   `locked` döner.
+- `privacy-maintenance`: onaylanmayan KVKK başvurularını (48 saat) iptal eder,
+  süresi dolan veri kopyalarını depolamadan siler, süresi dolan hatırlanan
+  cihazları ve 1 yıldan eski giriş kayıtlarını temizler; son 7 günü kalan veya
+  süresi geçen açık başvurular için yöneticiye bir kez hatırlatma gönderir.
 - `support-autoclose`: müşteri yanıtı beklenen talepler için gün-1 uyarısı ve
   otomatik kapatma (Ayarlar: `/yonetim/destek/ayarlar`, varsayılan 5 gün).
 - `usage-sync`: cPanel/WHM hesaplarının disk ve bu ayki bant genişliği
