@@ -1,4 +1,6 @@
+import { formatDate } from "@/lib/format/date";
 import { formatTRY } from "@/lib/format/price";
+import { dataRequestTypeLabel } from "@/lib/privacy/labels";
 import type { EventType } from "../catalog";
 import type { DispatchedEvent, EventSubscriber } from "./types";
 import { isEvent } from "./types";
@@ -74,6 +76,18 @@ export function buildAdminAlert(event: DispatchedEvent): Alert | null {
       path: `/yonetim/musteriler/${p.userId}`,
     };
   }
+  if (isEvent(event, "privacy.request_received")) {
+    const p = event.payload;
+    return {
+      title: `KVKK başvurusu: ${p.requestNumber}`,
+      message: `${p.name} (${p.email}) bir KVKK başvurusu yaptı. Yasal yanıt süresi 30 gündür.`,
+      details: [
+        { label: "Tür", value: dataRequestTypeLabel(p.type) },
+        { label: "Son tarih", value: formatDate(p.dueAt) },
+      ],
+      path: `/yonetim/kvkk-talepleri/${p.requestId}`,
+    };
+  }
   return null;
 }
 
@@ -83,6 +97,7 @@ export const ADMIN_ALERT_EVENTS: readonly EventType[] = [
   "service.provisioning_failed",
   "payment.failed",
   "user.login_failed_locked",
+  "privacy.request_received",
 ];
 
 /** E-mail (and SMS when admin_notification_phone is set) to the staff address. */

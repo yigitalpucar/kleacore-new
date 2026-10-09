@@ -44,6 +44,12 @@ const cases: Array<{ type: EventType; payload: Record<string, unknown>; template
   { type: "ticket.replied", payload: { ticketId: "t-1", ticketNumber: "T-1", subject: "Konu", customerId: "cus-1", authorRole: "STAFF", senderName: "Destek", messagePreview: "Merhaba" }, template: "support.ticket-replied", dedupeKey: "ticket.replied:evt-1" },
   { type: "ticket.replied", payload: { ticketId: "t-1", ticketNumber: "T-1", subject: "Konu", customerId: "cus-1", authorRole: "CUSTOMER", senderName: "Ayşe", messagePreview: "Merhaba" }, template: "admin.ticket-customer-reply", dedupeKey: "ticket.replied:evt-1" },
   { type: "user.password_changed", payload: { userId: "cus-1", changedAt: at, method: "reset" }, template: "auth.password-changed", dedupeKey: "password.changed:evt-1" },
+  { type: "user.two_factor_disabled", payload: { userId: "cus-1", disabledAt: at }, template: "auth.two-factor-disabled", dedupeKey: "two-factor.disabled:evt-1" },
+  { type: "user.email_changed", payload: { userId: "cus-1", oldEmail: "eski@example.com", newEmail: "yeni@example.com", changedAt: at }, template: "auth.email-changed", dedupeKey: "email.changed:evt-1" },
+  { type: "security.new_device_login", payload: { userId: "cus-1", loginEventId: "le-1", device: "Chrome · Windows", ipAddress: "203.0.113.5", network: "TR", occurredAt: at }, template: "security.new-device-login", dedupeKey: "security.new-device:le-1" },
+  { type: "security.failed_login_burst", payload: { userId: "cus-1", failedAttempts: 5, windowMinutes: 60, lastAttemptAt: at }, template: "security.failed-login-burst", dedupeKey: "security.failed-burst:evt-1" },
+  { type: "privacy.request_received", payload: { requestId: "dr-1", requestNumber: "KVKK-2026-000001", type: "EXPORT", userId: null, email: "ayse@example.com", name: "Ayşe", dueAt: at, source: "form" }, template: "privacy.request-received", dedupeKey: "privacy.received:dr-1" },
+  { type: "privacy.request_completed", payload: { requestId: "dr-1", requestNumber: "KVKK-2026-000001", type: "EXPORT", userId: "cus-1", email: "ayse@example.com", name: "Ayşe", outcome: "COMPLETED", responseText: "Verileriniz hazır.", downloadUrl: "https://kleacore.test/yasal/kvkk-basvuru/indir?token=x", downloadExpiresAt: at }, template: "privacy.request-completed", dedupeKey: "privacy.completed:dr-1" },
 ];
 
 function event(type: EventType, payload: Record<string, unknown>): DispatchedEvent {
@@ -59,6 +65,25 @@ describe("notifications subscriber", () => {
     expect(planned[0].dedupeKey).toEqual(dedupeKey);
     // The planned data is valid for the template (renders without throwing).
     expect(() => renderNotification(template, planned[0].data, ctx)).not.toThrow();
+  });
+
+  it("sends the e-mail change notice to the OLD address and KVKK mails to the request address", async () => {
+    const [changed] = await planNotifications(
+      event("user.email_changed", { userId: "cus-1", oldEmail: "eski@example.com", newEmail: "yeni@example.com", changedAt: at })
+    );
+    expect(changed.to).toBe("eski@example.com");
+    const [received] = await planNotifications(
+      event("privacy.request_received", {
+        requestId: "dr-1",
+        requestNumber: "KVKK-2026-000001",
+        type: "ERASURE",
+        email: "basvuru@example.com",
+        name: "Ayşe",
+        dueAt: at,
+        source: "form",
+      })
+    );
+    expect(received).toMatchObject({ to: "basvuru@example.com", userId: null, channel: "EMAIL" });
   });
 
   it("covers every mapped event type in the table above", () => {

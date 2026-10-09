@@ -32,6 +32,8 @@ import {
   supportTicketReceived,
   supportTicketReplied,
 } from "./support";
+import { privacyRequestCompleted, privacyRequestReceived, privacyRequestVerify } from "./privacy";
+import { authEmailChanged, authTwoFactorDisabled, securityFailedLoginBurst, securityNewDeviceLogin } from "./security";
 import type { NotificationTemplate } from "./types";
 
 const definitions = [
@@ -69,6 +71,13 @@ const definitions = [
   adminManualProvisioning,
   adminDomainRenewalFailed,
   adminEventAlert,
+  authTwoFactorDisabled,
+  authEmailChanged,
+  securityNewDeviceLogin,
+  securityFailedLoginBurst,
+  privacyRequestVerify,
+  privacyRequestReceived,
+  privacyRequestCompleted,
 ] as const;
 
 export type RegisteredTemplate = (typeof definitions)[number];

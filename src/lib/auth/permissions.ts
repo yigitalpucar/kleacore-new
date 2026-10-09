@@ -41,6 +41,8 @@ export const PERMISSIONS = [
   "dns.manage",
   "jobs.manage",
   "status.manage",
+  /** KVKK data-subject requests: exports, anonymisation (ADMIN only by default). */
+  "privacy.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -146,6 +148,7 @@ export const ADMIN_ROUTE_PERMISSIONS: Record<string, readonly Permission[] | nul
   "/yonetim/entegrasyonlar": ["settings.manage"],
   "/yonetim/ayarlar": ["settings.manage"],
   "/yonetim/personel": ["staff.manage"],
+  "/yonetim/kvkk-talepleri": ["privacy.manage"],
 };
 
 /**

@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 const SERIES = {
   invoice: { prefix: "F", table: "invoices", column: "invoiceNumber" },
   order: { prefix: "S", table: "orders", column: "orderNumber" },
+  dataRequest: { prefix: "KVKK", table: "data_requests", column: "requestNumber" },
 } as const;
 
 type SeriesName = keyof typeof SERIES;
@@ -75,6 +76,12 @@ export async function generateInvoiceNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const value = await nextSequenceValue("invoice", year);
   return formatDocumentNumber(SERIES.invoice.prefix, year, value);
+}
+
+export async function generateDataRequestNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  const value = await nextSequenceValue("dataRequest", year);
+  return formatDocumentNumber(SERIES.dataRequest.prefix, year, value);
 }
 
 export function generateTicketNumber(): string {
