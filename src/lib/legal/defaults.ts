@@ -166,6 +166,17 @@ Uluslararası veri aktarımları için yürürlükteki mevzuata uygun güvencele
 privacy@kleacore.com</p>
 `;
 
+const MARKETING_CONSENT = `${PLACEHOLDER_NOTICE}
+<p>6563 sayılı Elektronik Ticaretin Düzenlenmesi Hakkında Kanun ve Ticari İletişim ve Ticari
+Elektronik İletiler Hakkında Yönetmelik kapsamında; kampanya, indirim, yeni ürün ve benzeri
+tanıtım amaçlı ticari elektronik iletilerin tarafıma e-posta ve SMS yoluyla gönderilmesine
+onay veriyorum.</p>
+<p>Bu onayı dilediğim zaman müşteri panelindeki <strong>Hesap ayarları → Bildirimler</strong>
+bölümünden veya iletilerdeki <strong>abonelikten çık</strong> bağlantısıyla ücretsiz olarak geri
+alabilirim. Onayı geri almam; hizmetlerim, faturalarım ve planlı bakım / kesinti duyuruları gibi
+hesabımla ilgili bilgilendirmeleri almama engel değildir.</p>
+`;
+
 export const DEFAULT_LEGAL_DOCUMENTS: Record<LegalDocumentType, DefaultLegalDocument> = {
   DISTANCE_SALES_CONTRACT: {
     type: "DISTANCE_SALES_CONTRACT",
@@ -187,5 +198,12 @@ export const DEFAULT_LEGAL_DOCUMENTS: Record<LegalDocumentType, DefaultLegalDocu
     title: "KVKK Aydınlatma Metni",
     isPlaceholder: false,
     content: KVKK_NOTICE,
+  },
+  MARKETING_CONSENT: {
+    type: "MARKETING_CONSENT",
+    version: 1,
+    title: "Ticari Elektronik İleti Onayı",
+    isPlaceholder: true,
+    content: MARKETING_CONSENT,
   },
 };

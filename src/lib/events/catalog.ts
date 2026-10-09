@@ -32,7 +32,8 @@ export type AggregateType =
   | "Ticket"
   | "User"
   | "Refund"
-  | "BankTransferNotice";
+  | "BankTransferNotice"
+  | "Broadcast";
 
 export interface EventDefinition<T extends string = string, S extends z.ZodTypeAny = z.ZodTypeAny> {
   type: T;
@@ -532,6 +533,56 @@ const userLoginFailedLocked = defineEvent({
   }),
 });
 
+const userMarketingConsentChanged = defineEvent({
+  type: "user.marketing_consent_changed",
+  label: "Ticari ileti onayı değişti",
+  aggregate: "User",
+  aggregateKey: "userId",
+  schema: z.object({
+    userId: id,
+    granted: z.boolean(),
+    source: z.enum(["panel", "unsubscribe_link", "one_click", "admin"]),
+  }),
+});
+
+// ---------------------------------------------------------------------------
+// Broadcasts (toplu duyurular)
+// ---------------------------------------------------------------------------
+
+const broadcastStarted = defineEvent({
+  type: "broadcast.started",
+  label: "Toplu duyuru gönderimi başladı",
+  aggregate: "Broadcast",
+  aggregateKey: "broadcastId",
+  schema: z.object({
+    broadcastId: id,
+    kind: z.enum(["SERVICE", "MARKETING"]),
+    subject: z.string(),
+    recipients: z.number().int(),
+  }),
+});
+
+const broadcastCompleted = defineEvent({
+  type: "broadcast.completed",
+  label: "Toplu duyuru tamamlandı",
+  aggregate: "Broadcast",
+  aggregateKey: "broadcastId",
+  schema: z.object({
+    broadcastId: id,
+    sent: z.number().int(),
+    failed: z.number().int(),
+    skipped: z.number().int(),
+  }),
+});
+
+const broadcastCancelled = defineEvent({
+  type: "broadcast.cancelled",
+  label: "Toplu duyuru iptal edildi",
+  aggregate: "Broadcast",
+  aggregateKey: "broadcastId",
+  schema: z.object({ broadcastId: id, cancelledRecipients: z.number().int() }),
+});
+
 export const eventDefinitions = [
   orderCreated,
   orderPaid,
@@ -567,6 +618,10 @@ export const eventDefinitions = [
   userVerified,
   userPasswordChanged,
   userLoginFailedLocked,
+  userMarketingConsentChanged,
+  broadcastStarted,
+  broadcastCompleted,
+  broadcastCancelled,
 ] as const;
 
 type Definitions = (typeof eventDefinitions)[number];

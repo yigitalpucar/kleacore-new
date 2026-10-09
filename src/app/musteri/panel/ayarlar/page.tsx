@@ -61,6 +61,8 @@ export default async function AyarlarPage({
       }
       twoFactorGloballyEnabled={twoFactorGloballyEnabled}
       staffTwoFactorRequired={twoFactorNotice === "personel" && !profile?.twoFactorEnabled}
+      marketingConsent={profile?.marketingConsent ?? false}
+      marketingConsentAt={profile?.marketingConsentAt?.toISOString() ?? null}
     />
   );
 }

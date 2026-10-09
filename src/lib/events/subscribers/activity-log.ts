@@ -17,6 +17,7 @@ export const ACTIVITY_LOGGED_EVENTS: readonly EventType[] = [
   "payment.failed",
   "service.provisioning_failed",
   "user.login_failed_locked",
+  "user.marketing_consent_changed",
 ];
 
 function actorFor(payload: Record<string, unknown>, actorId: string | null) {

@@ -99,6 +99,8 @@ export async function getUserProfile(userId: string) {
       country: true,
       twoFactorEnabled: true,
       twoFactorSecret: true,
+      marketingConsent: true,
+      marketingConsentAt: true,
     },
   });
 }

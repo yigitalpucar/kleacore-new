@@ -430,6 +430,13 @@ model User {
   autoPayConsentAt DateTime?
   autoPayConsentIp String?
 
+  // Ticari elektronik ileti (kampanya / duyuru) onayı (Faz 4 toplu duyurular).
+  // Varsayılan kapalı; açma/kapama ConsentRecord (MARKETING_CONSENT) ile kayıtlı.
+  // Hizmet/bakım duyuruları bu onaydan bağımsız gönderilir.
+  marketingConsent   Boolean   @default(false)
+  marketingConsentAt DateTime?
+  broadcastRecipients BroadcastRecipient[]
+
   // Timestamps
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
@@ -2009,6 +2016,8 @@ enum LegalDocumentType {
   DISTANCE_SALES_CONTRACT
   PRELIMINARY_INFORMATION
   KVKK_NOTICE
+  /// Ticari elektronik ileti onayı (6563 s. Kanun) — kampanya duyuruları
+  MARKETING_CONSENT
 }
 
 /// Versioned legal text. `content` is an HTML template; `{{...}}` variables are
@@ -2051,6 +2060,8 @@ model ConsentRecord {
   ipAddress       String?
   userAgent       String?
   acceptedAt      DateTime          @default(now())
+  /// Set when a revocable consent (MARKETING_CONSENT) is withdrawn.
+  revokedAt       DateTime?
 
   @@unique([orderId, documentId])
   @@index([userId, acceptedAt])
@@ -2486,4 +2497,95 @@ model PaymentAttempt {
   @@index([invoiceId, kind, status])
   @@index([userId, createdAt])
   @@map("payment_attempts")
+}
+
+// =====================
+// BROADCASTS (Faz 4 — toplu duyurular)
+// =====================
+
+enum BroadcastKind {
+  /// Hizmet / bakım duyurusu: işlemsel, etkilenen herkese gider
+  SERVICE
+  /// Kampanya: yalnız ticari ileti onayı verenlere
+  MARKETING
+}
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum BroadcastRecipientStatus {
+  PENDING
+  QUEUED
+  SENT
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+/// One announcement (e-mail and/or SMS) to an audience. Recipients are
+/// materialised when sending starts; delivery goes through NotificationLog
+/// in throttled batches (src/lib/broadcasts).
+model Broadcast {
+  id          String              @id @default(cuid())
+  kind        BroadcastKind       @default(SERVICE)
+  subject     String
+  /// Admin HTML with {{variables}} (safe template engine, sanitised on render).
+  bodyHtml    String              @db.Text
+  /// Optional plain-text part; derived from bodyHtml when empty.
+  bodyText    String              @default("") @db.Text
+  smsText     String?
+  channels    NotificationChannel[]
+  /// AudienceFilter JSON (src/lib/broadcasts/audience.ts).
+  audience    Json                @default("{}")
+  status      BroadcastStatus     @default(DRAFT)
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+  recipientsBuiltAt DateTime?
+  /// Start of the last dispatched batch (per-minute throttle).
+  lastBatchAt DateTime?
+  totalRecipients Int             @default(0)
+  /// SystemIncident created with "Sistem durumu olayı olarak da yayınla".
+  incidentId  String?
+  createdById String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  recipients BroadcastRecipient[]
+
+  @@index([status, scheduledAt])
+  @@index([createdAt])
+  @@map("broadcasts")
+}
+
+/// One (user, channel) of a broadcast. `attempt` is part of the
+/// NotificationLog dedupe key, so retries never send twice and "resend to
+/// failed" creates exactly one new message.
+model BroadcastRecipient {
+  id                String                   @id @default(cuid())
+  broadcastId       String
+  broadcast         Broadcast                @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel           NotificationChannel
+  to                String
+  status            BroadcastRecipientStatus @default(PENDING)
+  attempt           Int                      @default(0)
+  notificationLogId String?
+  error             String?
+  queuedAt          DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@unique([broadcastId, userId, channel])
+  @@index([broadcastId, status])
+  @@index([notificationLogId])
+  @@map("broadcast_recipients")
 }
