@@ -10,9 +10,11 @@ const mocks = vi.hoisted(() => ({
     },
   },
   isTwoFactorGloballyEnabled: vi.fn(),
+  recordLoginEvent: vi.fn(async () => null),
 }));
 
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
+vi.mock("@/lib/security/login-events", () => ({ recordLoginEvent: mocks.recordLoginEvent }));
 vi.mock("@/lib/auth/two-factor-settings", () => ({
   userRequiresTwoFactor: async (user: { twoFactorEnabled: boolean }) =>
     user.twoFactorEnabled && (await mocks.isTwoFactorGloballyEnabled()),
@@ -20,6 +22,7 @@ vi.mock("@/lib/auth/two-factor-settings", () => ({
 
 import { authorizeCredentials } from "./credentials";
 import { buildLoginToken, buildTwoFactorChallenge, hashLoginNonce } from "./two-factor";
+import { encodeTrustedDeviceCookie } from "./trusted-device";
 
 const PASSWORD = "Test12345!";
 const PASSWORD_HASH = hashSync(PASSWORD, 4);
@@ -90,6 +93,58 @@ describe("authorizeCredentials", () => {
 
     expect(await authorizeCredentials({ email: user.email, password: PASSWORD })).toBeNull();
     expect(mocks.db.user.update).not.toHaveBeenCalled();
+  });
+
+  it("a trusted-device cookie value never replaces the second factor in the provider", async () => {
+    const user = makeUser({ twoFactorEnabled: true });
+    mocks.db.user.findFirst.mockResolvedValue(user);
+    // A validly signed cookie for this very user (the strongest case).
+    const cookieValue = encodeTrustedDeviceCookie({
+      uid: user.id,
+      did: "td-1",
+      sec: "s".repeat(43),
+      exp: Date.now() + 60_000,
+    });
+
+    // Whatever field name an attacker tries, password alone stays rejected...
+    for (const field of ["trustedDevice", "rememberDevice", "deviceToken"]) {
+      expect(await authorizeCredentials({ email: user.email, password: PASSWORD, [field]: cookieValue })).toBeNull();
+    }
+    // ...and the cookie is not a login token either.
+    expect(await authorizeCredentials({ email: user.email, loginToken: cookieValue })).toBeNull();
+    expect(mocks.db.user.update).not.toHaveBeenCalled();
+    expect(mocks.db.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("audits password attempts: failures (incl. the 2FA bypass attempt) and the success", async () => {
+    const user = makeUser();
+    mocks.db.user.findFirst.mockResolvedValue(user);
+    const request = new Request("http://localhost/api/auth/callback/credentials", {
+      headers: { "x-forwarded-for": "198.51.100.4", "user-agent": "Mozilla/5.0 Firefox/131.0", "cf-ipcountry": "DE" },
+    });
+
+    await authorizeCredentials({ email: user.email, password: "Wrong12345!" }, request);
+    expect(mocks.recordLoginEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ userId: user.id, success: false, reason: "bad_password", ip: "198.51.100.4", country: "DE" })
+    );
+
+    await authorizeCredentials({ email: user.email, password: PASSWORD }, request);
+    expect(mocks.recordLoginEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ userId: user.id, success: true, method: "password", sessionVersion: 3, userAgent: "Mozilla/5.0 Firefox/131.0" })
+    );
+
+    const twoFactorUser = makeUser({ twoFactorEnabled: true });
+    mocks.db.user.findFirst.mockResolvedValue(twoFactorUser);
+    await authorizeCredentials({ email: twoFactorUser.email, password: PASSWORD }, request);
+    expect(mocks.recordLoginEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ userId: twoFactorUser.id, success: false, reason: "2fa_required" })
+    );
+  });
+
+  it("does not store attempts for unknown addresses", async () => {
+    mocks.db.user.findFirst.mockResolvedValue(null);
+    await authorizeCredentials({ email: "nobody@example.com", password: PASSWORD });
+    expect(mocks.recordLoginEvent).not.toHaveBeenCalled();
   });
 
   it("allows password login for a 2FA user when 2FA is disabled globally", async () => {

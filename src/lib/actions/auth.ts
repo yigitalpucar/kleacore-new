@@ -33,6 +33,9 @@ import {
   verifyTurnstileToken,
 } from "@/lib/security/turnstile";
 import { getRequestMeta } from "@/lib/request-meta";
+import { issueLoginToken } from "@/lib/auth/login-token";
+import { checkTrustedDevice, trustedDeviceCookieName } from "@/lib/auth/trusted-device";
+import { recordLoginEvent } from "@/lib/security/login-events";
 
 const PASSWORD_RESET_TTL_MINUTES = 30;
 
@@ -84,7 +87,8 @@ export async function loginAction(formData: FormData) {
     return { success: false, error: "Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin." };
   }
 
-  const { ip } = await getRequestMeta();
+  const requestMeta = await getRequestMeta();
+  const { ip } = requestMeta;
   const email = parsed.data.email;
 
   if (await isLoginCaptchaRequired(email, ip)) {
@@ -104,8 +108,11 @@ export async function loginAction(formData: FormData) {
     }
   }
 
-  const failedLogin = async () => {
+  const failedLogin = async (userId?: string, reason?: "bad_password" | "inactive") => {
     await recordFailedLogin(email, ip);
+    if (userId && reason) {
+      await recordLoginEvent({ userId, email, success: false, reason, method: "password", ...requestMeta });
+    }
     return {
       success: false,
       error: "E-posta veya şifre hatalı",
@@ -117,12 +124,12 @@ export async function loginAction(formData: FormData) {
     const user = await findUserByEmail(email);
 
     if (!user || user.status !== "ACTIVE") {
-      return await failedLogin();
+      return await failedLogin(user?.id, "inactive");
     }
 
     const passwordValid = await compare(parsed.data.password, user.password);
     if (!passwordValid) {
-      return await failedLogin();
+      return await failedLogin(user.id, "bad_password");
     }
     await clearFailedLogins(email);
 
@@ -132,6 +139,29 @@ export async function loginAction(formData: FormData) {
     );
 
     if (challengeToken) {
+      // "Bu cihazı hatırla": a valid trusted-device cookie for THIS user
+      // replaces the TOTP step (never the password, which was checked above).
+      const cookieStore = await cookies();
+      const cookieName = trustedDeviceCookieName(user.id);
+      const trusted = await checkTrustedDevice(user, cookieStore.get(cookieName)?.value, requestMeta);
+      if (trusted.ok) {
+        await signIn("credentials", {
+          email: user.email,
+          loginToken: await issueLoginToken(user),
+          redirect: false,
+        });
+        await recordLoginEvent({
+          userId: user.id,
+          email: user.email,
+          success: true,
+          method: "trusted_device",
+          sessionVersion: user.sessionVersion,
+          ...requestMeta,
+        });
+        return { success: true };
+      }
+      if (trusted.reason !== "missing") cookieStore.delete(cookieName);
+
       return {
         success: false,
         requires2FA: true,
@@ -382,6 +412,11 @@ export async function resetPasswordAction(formData: FormData) {
           usedAt: null,
           id: { not: resetToken.id },
         },
+      }),
+      // Trusted devices are tied to the old sessionVersion anyway; make it explicit.
+      db.trustedDevice.updateMany({
+        where: { userId: resetToken.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
       }),
     ]);
 

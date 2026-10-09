@@ -11,6 +11,9 @@ import {
 import { compare, hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { emitEventAfterCommit } from "@/lib/events/emit";
+import { revokeAllTrustedDevices } from "@/lib/auth/trusted-device";
+import { getRequestMeta } from "@/lib/request-meta";
+import { recordLoginEvent } from "@/lib/security/login-events";
 
 export async function updateProfile(formData: FormData) {
   const session = await requireCustomer();
@@ -93,11 +96,14 @@ export async function changePassword(formData: FormData) {
 
     const hashedPassword = await hash(parsed.data.newPassword, 12);
 
-    // Bumping sessionVersion revokes every other session of this user.
-    await db.user.update({
+    // Bumping sessionVersion revokes every other session of this user (and,
+    // through the version check, every trusted device; revoked explicitly too).
+    const updated = await db.user.update({
       where: { id: session.user.id },
       data: { password: hashedPassword, sessionVersion: { increment: 1 } },
+      select: { sessionVersion: true },
     });
+    await revokeAllTrustedDevices(session.user.id);
 
     // "Şifreniz değiştirildi" via the outbox (notifications subscriber).
     await emitEventAfterCommit(
@@ -113,6 +119,15 @@ export async function changePassword(formData: FormData) {
         email: user.email,
         loginToken: await issueLoginToken(user),
         redirect: false,
+      });
+      await recordLoginEvent({
+        userId: user.id,
+        email: user.email,
+        success: true,
+        method: "reissue",
+        sessionVersion: updated.sessionVersion,
+        detectNewDevice: false,
+        ...(await getRequestMeta()),
       });
     } catch (error) {
       console.error("[Profile] session re-issue after password change failed:", error);

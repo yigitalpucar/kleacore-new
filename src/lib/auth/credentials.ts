@@ -10,6 +10,8 @@ import type { AppRole } from "@/lib/auth/permissions";
 import { userRequiresTwoFactor } from "@/lib/auth/two-factor-settings";
 import { db } from "@/lib/db";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
+import { getRequestMeta, requestMetaFromHeaders, type RequestMeta } from "@/lib/request-meta";
+import { recordLoginEvent, type LoginFailureReason } from "@/lib/security/login-events";
 
 const WINDOW_MS = 15 * 60 * 1000;
 const EMAIL_LIMIT = 10;
@@ -77,6 +79,13 @@ async function completeLogin(user: {
   };
 }
 
+/** IP / UA / country of the sign-in request (the provider's Request, else next/headers). */
+async function loginRequestMeta(request?: Request | null): Promise<RequestMeta> {
+  const fromRequest = requestMetaFromHeaders(request?.headers);
+  if (fromRequest.ip || fromRequest.userAgent) return fromRequest;
+  return getRequestMeta();
+}
+
 /**
  * Credentials provider `authorize`. This is reachable directly via
  * POST /api/auth/callback/credentials, so it must enforce everything itself:
@@ -119,22 +128,46 @@ export async function authorizeCredentials(
   });
   if (!captchaPassed) return null;
 
+  // Password attempts are audited here (also direct POSTs to the callback
+  // route); token logins are recorded by the code that issued the token,
+  // which knows how the second factor was satisfied.
+  const audit = async (userId: string, reason?: LoginFailureReason, sessionVersion?: number) => {
+    const meta = await loginRequestMeta(request);
+    await recordLoginEvent({
+      userId,
+      email,
+      success: !reason,
+      reason,
+      method: "password",
+      ip: meta.ip ?? ip,
+      userAgent: meta.userAgent,
+      country: meta.country,
+      sessionVersion,
+    });
+  };
+
   const user = await findUserByEmail(email);
   if (!user || user.status !== "ACTIVE") {
     await recordFailedLogin(email, ip);
+    // Unknown addresses are not stored (no account to protect).
+    if (user) await audit(user.id, "inactive");
     return null;
   }
 
   const isValid = await compare(password, user.password);
   if (!isValid) {
     await recordFailedLogin(email, ip);
+    await audit(user.id, "bad_password");
     return null;
   }
   await clearFailedLogins(email);
 
   if (await userRequiresTwoFactor(user)) {
+    await audit(user.id, "2fa_required");
     return null;
   }
 
-  return completeLogin(user);
+  const authorized = await completeLogin(user);
+  await audit(user.id, undefined, user.sessionVersion);
+  return authorized;
 }
