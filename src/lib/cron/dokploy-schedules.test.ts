@@ -37,6 +37,7 @@ describe("Dokploy cron schedules", () => {
       "kyc-retention",
       "notifications",
       "overdue-invoices",
+      "privacy-maintenance",
       "retry-provisioning",
       "run-backups",
       "ssl-expiry",

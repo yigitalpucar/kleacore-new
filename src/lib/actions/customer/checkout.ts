@@ -35,8 +35,6 @@ import {
 import type { LegalOrderItem } from "@/lib/legal/render";
 import { getRequestMeta } from "@/lib/request-meta";
 import { evaluateCheckoutOrders } from "@/lib/fraud/evaluate";
-import { resolveIpCountry } from "@/lib/fraud/ip-country";
-import { getCfCountryHeader } from "@/lib/fraud/request";
 import { getFraudConfig } from "@/lib/fraud/settings";
 import { withSavepoint } from "@/lib/payments/follow-ups";
 import { revalidatePath } from "next/cache";
@@ -412,15 +410,9 @@ export async function checkoutCart(input: CheckoutInput) {
       getRequestMeta(),
       getFraudConfig(),
     ]);
-    // Order risk review (docs/fraud-kyc.md): the IP country is resolved before
-    // the transaction (CF-IPCountry header, offline DB fallback).
-    const ipCountry = fraudConfig.enabled
-      ? await resolveIpCountry({
-          ip: requestMeta.ip,
-          cfCountry: await getCfCountryHeader(),
-          trustCfHeader: fraudConfig.trustCfHeader,
-        })
-      : { country: null, source: null };
+    // Order risk review (docs/fraud-kyc.md): the IP country comes from the
+    // shared request helper (trusted CF-IPCountry header, offline DB fallback).
+    const ipCountry = { country: requestMeta.country, source: requestMeta.countrySource };
     if (!legalBuyer) {
       throw new Error("CUSTOMER_NOT_FOUND");
     }

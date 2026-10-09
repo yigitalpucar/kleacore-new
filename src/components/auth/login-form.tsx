@@ -36,6 +36,7 @@ export function LoginForm({
   const [requires2FA, setRequires2FA] = useState(false);
   const [challengeToken, setChallengeToken] = useState("");
   const [totpCode, setTotpCode] = useState("");
+  const [rememberDevice, setRememberDevice] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [requiresCaptcha, setRequiresCaptcha] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
@@ -85,6 +86,7 @@ export function LoginForm({
     const payload = new FormData();
     payload.set("challengeToken", challengeToken);
     payload.set("code", totpCode);
+    if (rememberDevice) payload.set("rememberDevice", "true");
     const result = await verify2FALogin(payload);
 
     if (!result?.success) {
@@ -149,6 +151,23 @@ export function LoginForm({
             disabled={loading}
           />
         </div>
+
+        <label className="flex items-start gap-2.5 text-sm">
+          <input
+            type="checkbox"
+            checked={rememberDevice}
+            onChange={(e) => setRememberDevice(e.target.checked)}
+            disabled={loading}
+            className="mt-0.5 size-4 shrink-0 accent-foreground"
+          />
+          <span>
+            Bu cihazı 30 gün hatırla
+            <span className="block text-xs text-muted-foreground">
+              Bu tarayıcıda 30 gün boyunca doğrulama kodu istenmez; şifreniz her zaman istenir. Ortak kullanılan
+              bilgisayarlarda seçmeyin.
+            </span>
+          </span>
+        </label>
 
         <button
           type="submit"

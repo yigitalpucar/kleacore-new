@@ -16,6 +16,7 @@ import {
   Server,
   Settings,
   Shield,
+  ShieldCheck,
   Store,
   Users,
   Wallet,
@@ -78,6 +79,7 @@ function buildNav({ isReseller, counts }: Pick<CustomerShellProps, "isReseller" 
         ...(isReseller ? [{ title: "Bayilik", href: `${ROOT}/bayilik`, icon: Store }] : []),
         { title: "Kimlik doğrulama", href: `${ROOT}/kimlik-dogrulama`, icon: IdCard },
         { title: "Ayarlar", href: `${ROOT}/ayarlar`, icon: Settings },
+        { title: "Kişisel verilerim", href: `${ROOT}/kvkk`, icon: ShieldCheck },
       ],
     },
   ];

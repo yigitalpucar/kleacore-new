@@ -46,6 +46,7 @@ const staticRoutes: { path: string; changeFrequency: Entry["changeFrequency"]; p
   { path: "/yasal/kullanim-kosullari", changeFrequency: "yearly", priority: 0.3 },
   { path: "/yasal/gizlilik", changeFrequency: "yearly", priority: 0.3 },
   { path: "/yasal/kvkk", changeFrequency: "yearly", priority: 0.3 },
+  { path: "/yasal/kvkk-basvuru", changeFrequency: "yearly", priority: 0.2 },
   { path: "/yasal/cerez", changeFrequency: "yearly", priority: 0.3 },
   { path: "/yasal/iade-kosullari", changeFrequency: "yearly", priority: 0.3 },
 ];

@@ -12,7 +12,6 @@ import {
   EyeOff,
   Key,
   KeyRound,
-  LifeBuoy,
   Lock,
   Mail,
   Plus,
@@ -44,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { updateProfile, changePassword } from "@/lib/actions/customer/profile";
 import { createApiKey, revokeApiKey, deleteApiKey } from "@/lib/actions/customer/api-keys";
 import { disable2FA, enable2FA, verify2FASetup } from "@/lib/actions/customer/two-factor";
+import { SecurityActivity, type SecurityOverviewData } from "./security-activity";
 
 interface ProfileData {
   name: string;
@@ -74,6 +74,10 @@ interface AyarlarContentProps {
   twoFactorGloballyEnabled: boolean;
   /** Staff sent here by require_staff_2fa: open the security tab with a notice. */
   staffTwoFactorRequired?: boolean;
+  /** Tab to open first (?sekme=guvenlik from security mails). */
+  initialTab?: "security";
+  /** Logins, sessions and remembered devices for the security tab. */
+  security: SecurityOverviewData;
 }
 
 interface NewlyCreatedApiKey {
@@ -104,7 +108,7 @@ type TabId = "profile" | "security" | "notifications" | "api";
 
 const tabs: { id: TabId; label: string; description: string; icon: typeof User }[] = [
   { id: "profile", label: "Profil", description: "Kişisel ve fatura bilgileri", icon: User },
-  { id: "security", label: "Güvenlik", description: "Şifre ve iki faktörlü doğrulama", icon: ShieldCheck },
+  { id: "security", label: "Güvenlik", description: "Şifre, 2FA, oturumlar ve cihazlar", icon: ShieldCheck },
   { id: "notifications", label: "Bildirimler", description: "E-posta ve SMS tercihleri", icon: Bell },
   { id: "api", label: "API erişimi", description: "API anahtarları", icon: KeyRound },
 ];
@@ -120,9 +124,11 @@ export function AyarlarContent({
   twoFactorSetupPending,
   twoFactorGloballyEnabled,
   staffTwoFactorRequired = false,
+  initialTab,
+  security,
 }: AyarlarContentProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabId>(staffTwoFactorRequired ? "security" : "profile");
+  const [activeTab, setActiveTab] = useState<TabId>(staffTwoFactorRequired ? "security" : (initialTab ?? "profile"));
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState(
     profile ?? {
@@ -838,21 +844,26 @@ export function AyarlarContent({
                 </div>
               </FormSection>
 
+              <SecurityActivity data={security} />
+
               <FormSection
                 className={sectionCls}
                 title="Hesabı kapat"
-                description="Hesabınız ve ona bağlı tüm veriler kalıcı olarak silinir. Bu işlem geri alınamaz."
+                description="Hesabınız kapatılır ve kişisel verileriniz anonimleştirilir. Bu işlem geri alınamaz."
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-muted-foreground">
-                    Panelden hesap silme henüz yok. Hesabınızı kapatmak için destek talebi oluşturabilirsiniz.
+                    Hesap silme bir KVKK silme başvurusuyla yapılır; başvurunuz incelenip en geç 30 gün içinde sonuçlandırılır.
+                    Faturalar yasal süre boyunca saklanır.
                   </p>
                   <div className="flex shrink-0 flex-wrap gap-2">
-                    <Link href="/musteri/panel/destek/yeni" className={appButton({ variant: "outline" })}>
-                      <LifeBuoy aria-hidden />
-                      Destek talebi
+                    <Link href="/musteri/panel/kvkk?tur=silme" className={appButton({ variant: "outline" })}>
+                      <Trash2 aria-hidden />
+                      Silme başvurusu
                     </Link>
-                    <UnavailableAction icon={<Trash2 aria-hidden />} label="Hesabı sil" />
+                    <Link href="/musteri/panel/kvkk?tur=kopya" className={appButton({ variant: "ghost" })}>
+                      Verilerimin kopyası
+                    </Link>
                   </div>
                 </div>
               </FormSection>

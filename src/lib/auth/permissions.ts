@@ -45,6 +45,8 @@ export const PERMISSIONS = [
   "api_tokens.manage",
   /** Identity (KYC) documents: view, approve, reject. ADMIN only by default (KVKK: least access). */
   "kyc.review",
+  /** KVKK data-subject requests: exports, anonymisation (ADMIN only by default). */
+  "privacy.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -157,6 +159,7 @@ export const ADMIN_ROUTE_PERMISSIONS: Record<string, readonly Permission[] | nul
   "/yonetim/ayarlar": ["settings.manage"],
   "/yonetim/personel": ["staff.manage"],
   "/yonetim/api-tokenlari": ["api_tokens.manage"],
+  "/yonetim/kvkk-talepleri": ["privacy.manage"],
 };
 
 /**

@@ -32,7 +32,8 @@ export type AggregateType =
   | "Ticket"
   | "User"
   | "Refund"
-  | "BankTransferNotice";
+  | "BankTransferNotice"
+  | "DataRequest";
 
 export interface EventDefinition<T extends string = string, S extends z.ZodTypeAny = z.ZodTypeAny> {
   type: T;
@@ -618,6 +619,96 @@ const userLoginFailedLocked = defineEvent({
   }),
 });
 
+const userTwoFactorDisabled = defineEvent({
+  type: "user.two_factor_disabled",
+  label: "İki faktörlü doğrulama kapatıldı",
+  aggregate: "User",
+  aggregateKey: "userId",
+  schema: z.object({ userId: id, disabledAt: isoDate, by: z.enum(["customer", "admin"]).default("customer") }),
+});
+
+const userEmailChanged = defineEvent({
+  type: "user.email_changed",
+  label: "E-posta adresi değişti",
+  aggregate: "User",
+  aggregateKey: "userId",
+  schema: z.object({ userId: id, oldEmail: z.string().email(), newEmail: z.string().email(), changedAt: isoDate }),
+});
+
+// ---------------------------------------------------------------------------
+// Account security (Faz 4) — src/lib/security/login-events.ts
+// ---------------------------------------------------------------------------
+
+const securityNewDeviceLogin = defineEvent({
+  type: "security.new_device_login",
+  label: "Yeni cihazdan giriş",
+  aggregate: "User",
+  aggregateKey: "userId",
+  schema: z.object({
+    userId: id,
+    loginEventId: id,
+    /** "Chrome · macOS" */
+    device: z.string(),
+    ipAddress: z.string().optional(),
+    /** Country code or IP prefix. */
+    network: z.string().optional(),
+    occurredAt: isoDate,
+    twoFactorUsed: z.boolean().default(false),
+  }),
+});
+
+const securityFailedLoginBurst = defineEvent({
+  type: "security.failed_login_burst",
+  label: "Çok sayıda başarısız giriş denemesi",
+  aggregate: "User",
+  aggregateKey: "userId",
+  schema: z.object({
+    userId: id,
+    failedAttempts: z.number().int().positive(),
+    windowMinutes: z.number().int().positive(),
+    lastIpAddress: z.string().optional(),
+    lastAttemptAt: isoDate,
+  }),
+});
+
+// ---------------------------------------------------------------------------
+// KVKK data-subject requests (Faz 4) — src/lib/privacy/*
+// ---------------------------------------------------------------------------
+
+const dataRequestShape = {
+  requestId: id,
+  requestNumber: z.string(),
+  /** DataRequestType */
+  type: z.enum(["INFORMATION", "EXPORT", "RECTIFICATION", "ERASURE", "OBJECTION"]),
+  userId: id.nullable().optional(),
+  email: z.string().email(),
+  name: z.string(),
+};
+
+const privacyRequestReceived = defineEvent({
+  type: "privacy.request_received",
+  label: "KVKK başvurusu alındı",
+  aggregate: "DataRequest",
+  aggregateKey: "requestId",
+  schema: z.object({ ...dataRequestShape, dueAt: isoDate, source: z.enum(["panel", "form"]) }),
+});
+
+const privacyRequestCompleted = defineEvent({
+  type: "privacy.request_completed",
+  label: "KVKK başvurusu sonuçlandı",
+  aggregate: "DataRequest",
+  aggregateKey: "requestId",
+  sensitive: ["downloadUrl"],
+  schema: z.object({
+    ...dataRequestShape,
+    outcome: z.enum(["COMPLETED", "REJECTED"]),
+    responseText: z.string(),
+    /** One-time export download link (EXPORT). */
+    downloadUrl: z.string().url().optional(),
+    downloadExpiresAt: isoDate.optional(),
+  }),
+});
+
 export const eventDefinitions = [
   orderCreated,
   orderPaid,
@@ -660,6 +751,12 @@ export const eventDefinitions = [
   userVerified,
   userPasswordChanged,
   userLoginFailedLocked,
+  userTwoFactorDisabled,
+  userEmailChanged,
+  securityNewDeviceLogin,
+  securityFailedLoginBurst,
+  privacyRequestReceived,
+  privacyRequestCompleted,
 ] as const;
 
 type Definitions = (typeof eventDefinitions)[number];

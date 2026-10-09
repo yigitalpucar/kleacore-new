@@ -31,7 +31,6 @@ const mocks = vi.hoisted(() => {
     getCheckoutLegalDocuments: vi.fn(),
     getFraudConfig: vi.fn(),
     evaluateCheckoutOrders: vi.fn(),
-    resolveIpCountry: vi.fn(),
   };
 });
 
@@ -53,7 +52,7 @@ vi.mock("@/lib/legal/documents", async (importOriginal) => ({
   getLegalBuyer: vi.fn(async () => ({ name: "Ada Lovelace", email: "ada@example.com", phone: "", address: "" })),
 }));
 vi.mock("@/lib/request-meta", () => ({
-  getRequestMeta: vi.fn(async () => ({ ip: "203.0.113.5", userAgent: "vitest-browser" })),
+  getRequestMeta: vi.fn(async () => ({ ip: "203.0.113.5", userAgent: "vitest-browser", country: "DE", countrySource: "cf-header" })),
 }));
 vi.mock("@/lib/utils/number-generators", () => ({
   generateOrderNumber: vi.fn(async () => "ORD"),
@@ -94,8 +93,6 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("@/lib/fraud/settings", () => ({ getFraudConfig: mocks.getFraudConfig }));
 vi.mock("@/lib/fraud/evaluate", () => ({ evaluateCheckoutOrders: mocks.evaluateCheckoutOrders }));
-vi.mock("@/lib/fraud/ip-country", () => ({ resolveIpCountry: mocks.resolveIpCountry }));
-vi.mock("@/lib/fraud/request", () => ({ getCfCountryHeader: vi.fn(async () => "DE") }));
 vi.mock("@/lib/payments/follow-ups", () => ({
   withSavepoint: async (_tx: unknown, fn: () => Promise<unknown>) => ({ ok: true, value: await fn() }),
 }));
@@ -147,7 +144,6 @@ describe("checkoutCart signup guards", () => {
     mocks.getCheckoutLegalDocuments.mockResolvedValue(legalDocuments);
     mocks.getFraudConfig.mockResolvedValue({ enabled: false, trustCfHeader: true });
     mocks.evaluateCheckoutOrders.mockResolvedValue([]);
-    mocks.resolveIpCountry.mockResolvedValue({ country: "DE", source: "cf-header" });
     mocks.tx.user.findUnique.mockResolvedValue({ balance: 0 });
     mocks.tx.domainTld.findMany.mockResolvedValue([
       { ext: ".com", registerPrice: 100, renewPrice: 120, isActive: true },
@@ -238,7 +234,6 @@ describe("checkoutCart signup guards", () => {
     const result = await checkoutCart({ ...cart, consents });
 
     expect(result.success).toBe(true);
-    expect(mocks.resolveIpCountry).toHaveBeenCalledWith({ ip: "203.0.113.5", cfCountry: "DE", trustCfHeader: true });
     expect(mocks.evaluateCheckoutOrders).toHaveBeenCalledOnce();
     const [client, input] = mocks.evaluateCheckoutOrders.mock.calls[0] as [unknown, Record<string, any>];
     expect(client).toBe(mocks.tx);
@@ -267,6 +262,5 @@ describe("checkoutCart signup guards", () => {
     const result = await checkoutCart({ ...cart, consents });
     expect(result.success).toBe(true);
     expect(mocks.evaluateCheckoutOrders).not.toHaveBeenCalled();
-    expect(mocks.resolveIpCountry).not.toHaveBeenCalled();
   });
 });

@@ -22,6 +22,11 @@ import { isTwoFactorGloballyEnabled } from "@/lib/auth/two-factor-settings";
 import { db } from "@/lib/db";
 import { checkRateLimit, normalizeRateLimitKey } from "@/lib/rate-limit";
 import { requireCustomer } from "@/lib/utils/auth-helpers";
+import { cookies } from "next/headers";
+import { createTrustedDevice, revokeAllTrustedDevices } from "@/lib/auth/trusted-device";
+import { emitEvent } from "@/lib/events/emit";
+import { getRequestMeta } from "@/lib/request-meta";
+import { recordLoginEvent } from "@/lib/security/login-events";
 
 const totpCodeSchema = z
   .string()
@@ -211,13 +216,24 @@ export async function disable2FA(formData: FormData) {
       return { success: false, error: "Doğrulama kodu hatalı" };
     }
 
-    await db.user.update({
-      where: { id: session.user.id },
-      data: {
-        twoFactorEnabled: false,
-        twoFactorSecret: null,
-        twoFactorBackupCodes: null,
-      },
+    // Trusted devices only ever skipped the second factor; without one they
+    // are meaningless, and must not come back to life if 2FA is re-enabled.
+    await db.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: session.user.id },
+        data: {
+          twoFactorEnabled: false,
+          twoFactorSecret: null,
+          twoFactorBackupCodes: null,
+        },
+      });
+      await revokeAllTrustedDevices(session.user.id, tx);
+      await emitEvent(
+        tx,
+        "user.two_factor_disabled",
+        { userId: session.user.id, disabledAt: new Date(), by: "customer" },
+        { actorId: session.user.id }
+      );
     });
 
     revalidatePath("/musteri/panel/ayarlar");
@@ -235,6 +251,7 @@ export async function verify2FALogin(formData: FormData) {
   const raw = {
     challengeToken: formData.get("challengeToken") as string,
     code: formData.get("code") as string,
+    rememberDevice: formData.get("rememberDevice") === "true",
   };
 
   if (!raw.challengeToken) {
@@ -279,6 +296,7 @@ export async function verify2FALogin(formData: FormData) {
         id: true,
         email: true,
         status: true,
+        sessionVersion: true,
         twoFactorEnabled: true,
         twoFactorSecret: true,
         twoFactorBackupCodes: true,
@@ -305,7 +323,17 @@ export async function verify2FALogin(formData: FormData) {
       backupResult = verifyBackupCode(user.twoFactorBackupCodes, code);
     }
 
+    const requestMeta = await getRequestMeta();
+
     if (!totpValid && !backupResult.valid) {
+      await recordLoginEvent({
+        userId: user.id,
+        email: user.email,
+        success: false,
+        reason: "bad_2fa",
+        method: "two_factor",
+        ...requestMeta,
+      });
       return { success: false, error: "Doğrulama kodu hatalı" };
     }
 
@@ -333,6 +361,32 @@ export async function verify2FALogin(formData: FormData) {
         return { success: false, error: "Giriş sırasında bir hata oluştu" };
       }
       throw err;
+    }
+
+    await recordLoginEvent({
+      userId: user.id,
+      email: user.email,
+      success: true,
+      method: "two_factor",
+      twoFactorUsed: true,
+      sessionVersion: user.sessionVersion,
+      ...requestMeta,
+    });
+
+    if (raw.rememberDevice) {
+      try {
+        const device = await createTrustedDevice(user, requestMeta);
+        (await cookies()).set(device.cookieName, device.cookieValue, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          expires: device.expiresAt,
+        });
+      } catch (error) {
+        // Signed in already; only the "remember" convenience is lost.
+        console.error("[2FA] trusted device could not be stored:", error);
+      }
     }
 
     return { success: true };

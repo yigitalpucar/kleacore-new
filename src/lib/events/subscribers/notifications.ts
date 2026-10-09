@@ -356,6 +356,88 @@ export const notificationPlanners: PlannerMap = {
       dedupeKey: `password.changed:${event.id}`,
     },
   ],
+
+  "user.two_factor_disabled": (payload, event) => [
+    {
+      template: "auth.two-factor-disabled",
+      userId: payload.userId,
+      data: { disabledAt: payload.disabledAt, by: payload.by },
+      dedupeKey: `two-factor.disabled:${event.id}`,
+    },
+  ],
+
+  // To the OLD address: the account (and so userId's e-mail) already has the new one.
+  "user.email_changed": (payload, event) => [
+    {
+      template: "auth.email-changed",
+      userId: payload.userId,
+      to: payload.oldEmail,
+      channel: "EMAIL",
+      data: { oldEmail: payload.oldEmail, newEmail: payload.newEmail, changedAt: payload.changedAt },
+      dedupeKey: `email.changed:${event.id}`,
+    },
+  ],
+
+  "security.new_device_login": (payload) => [
+    {
+      template: "security.new-device-login",
+      userId: payload.userId,
+      data: {
+        device: payload.device,
+        ipAddress: payload.ipAddress,
+        network: payload.network,
+        occurredAt: payload.occurredAt,
+        twoFactorUsed: payload.twoFactorUsed,
+      },
+      dedupeKey: `security.new-device:${payload.loginEventId}`,
+    },
+  ],
+
+  "security.failed_login_burst": (payload, event) => [
+    {
+      template: "security.failed-login-burst",
+      userId: payload.userId,
+      channel: "EMAIL",
+      data: {
+        failedAttempts: payload.failedAttempts,
+        windowMinutes: payload.windowMinutes,
+        lastIpAddress: payload.lastIpAddress,
+        lastAttemptAt: payload.lastAttemptAt,
+      },
+      dedupeKey: `security.failed-burst:${event.id}`,
+    },
+  ],
+
+  // Requester may have no account: always the address on the request.
+  "privacy.request_received": (payload) => [
+    {
+      template: "privacy.request-received",
+      userId: payload.userId ?? null,
+      to: payload.email,
+      channel: "EMAIL",
+      data: { recipientName: payload.name, requestNumber: payload.requestNumber, type: payload.type, dueAt: payload.dueAt },
+      dedupeKey: `privacy.received:${payload.requestId}`,
+    },
+  ],
+
+  "privacy.request_completed": (payload) => [
+    {
+      template: "privacy.request-completed",
+      userId: payload.userId ?? null,
+      to: payload.email,
+      channel: "EMAIL",
+      data: {
+        recipientName: payload.name,
+        requestNumber: payload.requestNumber,
+        type: payload.type,
+        outcome: payload.outcome,
+        responseText: payload.responseText,
+        downloadUrl: payload.downloadUrl,
+        downloadExpiresAt: payload.downloadExpiresAt,
+      },
+      dedupeKey: `privacy.completed:${payload.requestId}`,
+    },
+  ],
 };
 
 export async function planNotifications(event: DispatchedEvent): Promise<PlannedNotification[]> {

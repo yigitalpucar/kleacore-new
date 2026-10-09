@@ -6,6 +6,7 @@ import {
   Box,
   Download,
   FileCheck,
+  FileLock2,
   FileText,
   Globe,
   HandCoins,
@@ -73,6 +74,7 @@ export function buildAdminNav(counts: AdminCounts, role: StaffRole): AppNavGroup
         { title: "Bayiler", href: `${ADMIN_ROOT}/bayiler`, icon: Store },
         { title: "Affiliate ödemeleri", href: `${ADMIN_ROOT}/affiliate-odemeleri`, icon: HandCoins },
         { title: "Kimlik doğrulama", href: `${ADMIN_ROOT}/kyc`, icon: IdCard },
+        { title: "KVKK talepleri", href: `${ADMIN_ROOT}/kvkk-talepleri`, icon: FileLock2 },
       ],
     },
     {
@@ -313,4 +315,5 @@ export const ADMIN_SEGMENT_LABELS: Record<string, string> = {
   dokumantasyon: "Dokümantasyon",
   inceleme: "İnceleme",
   kyc: "Kimlik doğrulama",
+  "kvkk-talepleri": "KVKK talepleri",
 };

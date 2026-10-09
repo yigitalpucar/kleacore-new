@@ -44,6 +44,8 @@ export const JOBS = [
   { name: "KLEACORE: Otomatik Tahsilat", cron: "30 5 * * *", job: "auto-charge" },
   { name: "KLEACORE: Hizmet Askıya Alma", cron: "0 6 * * *", job: "suspend-services" },
   { name: "KLEACORE: Domain Süre Bildirimleri", cron: "0 10 * * *", job: "domain-notices" },
+  // KVKK: expired verification links / exports, old login events, deadline reminders.
+  { name: "KLEACORE: KVKK ve Güvenlik Bakımı", cron: "30 9 * * *", job: "privacy-maintenance" },
   // TCMB publishes ~15:30 on business days; the 18:15 run catches a late
   // bulletin. Weekends/holidays keep the last rate (idempotent upsert).
   { name: "KLEACORE: TCMB Kurları", cron: "15 16,18 * * *", job: "fx-rates" },

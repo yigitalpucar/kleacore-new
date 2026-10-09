@@ -3,6 +3,7 @@
  * IPv4 and IPv6 (node:net BlockList does the matching).
  */
 import { BlockList, isIP } from "node:net";
+import { clientIpFromHeaders } from "@/lib/request-meta";
 
 /** "::ffff:1.2.3.4" (IPv4-mapped, common behind dual-stack proxies) → "1.2.3.4". */
 export function normalizeIp(ip: string): string {
@@ -62,7 +63,5 @@ export function isIpAllowed(ip: string | null, allowlist: readonly string[]): bo
 
 /** Client IP as the reverse proxy (Traefik / Dokploy) reports it. */
 export function clientIp(request: Request): string | null {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const ip = forwarded || request.headers.get("x-real-ip")?.trim() || null;
-  return ip ? normalizeIp(ip) : null;
+  return clientIpFromHeaders(request.headers);
 }

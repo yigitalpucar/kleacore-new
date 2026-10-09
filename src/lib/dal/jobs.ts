@@ -18,6 +18,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   "support-mail": "Destek e-postaları (IMAP → ticket)",
   "support-autoclose": "Destek talebi otomatik kapatma",
   "kyc-retention": "Reddedilen KYC belgelerinin silinmesi",
+  "privacy-maintenance": "KVKK ve hesap güvenliği bakımı",
   notifications: "Fatura bildirimleri ve bildirim kuyruğu eşitleme",
   "jobs-drain": "İş kuyruğu (drain)",
 };

@@ -1,4 +1,4 @@
-import { headers } from "next/headers";
+import { getRequestIp } from "@/lib/request-meta";
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 
@@ -16,16 +16,7 @@ async function resolveIpAddress(explicit?: string): Promise<string | null> {
     return explicit;
   }
 
-  try {
-    const headersList = await headers();
-    return (
-      headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      headersList.get("x-real-ip") ||
-      null
-    );
-  } catch {
-    return null;
-  }
+  return getRequestIp();
 }
 
 export async function logActivity(params: LogActivityParams) {

@@ -26,6 +26,7 @@ const CRON_JOBS = [
   { id: "support-mail", name: "Destek E-postaları", path: "/api/cron/support-mail" },
   { id: "support-autoclose", name: "Destek Otomatik Kapatma", path: "/api/cron/support-autoclose" },
   { id: "kyc-retention", name: "KYC Belge Saklama", path: "/api/cron/kyc-retention" },
+  { id: "privacy-maintenance", name: "KVKK ve Güvenlik Bakımı", path: "/api/cron/privacy-maintenance" },
   { id: "efatura-status", name: "E-Fatura Durumları", path: "/api/cron/efatura-status" },
   { id: "fx-rates", name: "TCMB Kurları", path: "/api/cron/fx-rates" },
   { id: "notifications", name: "Bildirimler", path: "/api/cron/notifications" },
