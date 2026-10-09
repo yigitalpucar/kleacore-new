@@ -132,6 +132,11 @@ export async function completeOrder(id: string) {
       return { success: false, error: "Sadece onaylanmış veya işlenen siparişler tamamlanabilir" };
     }
 
+    if (order.provisioningHeldAt) {
+      // Fraud review / KYC hold: released from the review queue or the KYC page.
+      return { success: false, error: "Sipariş inceleme veya kimlik doğrulaması bekliyor; önce onu tamamlayın" };
+    }
+
     await db.$transaction(async (tx) => {
       await tx.order.update({
         where: { id },

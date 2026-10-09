@@ -34,6 +34,8 @@ export const JOBS = [
   { name: "KLEACORE: Günlük Faturalama", cron: "0 2 * * *", job: "daily-billing" },
   { name: "KLEACORE: Yedeklemeler", cron: "0 3 * * *", job: "run-backups" },
   { name: "KLEACORE: SSL Süre Kontrolü", cron: "0 4 * * *", job: "ssl-expiry" },
+  // Reddedilen KYC belgelerinin saklama süresi dolunca silinmesi (docs/fraud-kyc.md).
+  { name: "KLEACORE: KYC Belge Saklama", cron: "45 3 * * *", job: "kyc-retention" },
   // Disk / bandwidth of hosting accounts (one queued job per WHM instance).
   { name: "KLEACORE: Hosting Kullanım Senkronu", cron: "30 4 * * *", job: "usage-sync" },
   { name: "KLEACORE: Gecikmiş Faturalar", cron: "0 5 * * *", job: "overdue-invoices" },

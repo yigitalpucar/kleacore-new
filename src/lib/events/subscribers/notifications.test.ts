@@ -44,6 +44,12 @@ const cases: Array<{ type: EventType; payload: Record<string, unknown>; template
   { type: "ticket.replied", payload: { ticketId: "t-1", ticketNumber: "T-1", subject: "Konu", customerId: "cus-1", authorRole: "STAFF", senderName: "Destek", messagePreview: "Merhaba" }, template: "support.ticket-replied", dedupeKey: "ticket.replied:evt-1" },
   { type: "ticket.replied", payload: { ticketId: "t-1", ticketNumber: "T-1", subject: "Konu", customerId: "cus-1", authorRole: "CUSTOMER", senderName: "Ayşe", messagePreview: "Merhaba" }, template: "admin.ticket-customer-reply", dedupeKey: "ticket.replied:evt-1" },
   { type: "user.password_changed", payload: { userId: "cus-1", changedAt: at, method: "reset" }, template: "auth.password-changed", dedupeKey: "password.changed:evt-1" },
+  { type: "order.review_required", payload: { orderId: "ord-1", orderNumber: "S-1", customerId: "cus-1", score: 55, threshold: 50, paymentBlocked: false, stage: "checkout", reasons: ["İlk sipariş sunucu"] }, template: "order.review-pending", dedupeKey: "order.review-pending:ord-1" },
+  { type: "order.review_approved", payload: { orderId: "ord-1", orderNumber: "S-1", customerId: "cus-1", paid: true }, template: "order.review-approved", dedupeKey: "order.review-approved:ord-1" },
+  { type: "order.review_rejected", payload: { orderId: "ord-1", orderNumber: "S-1", customerId: "cus-1", reason: "Doğrulanamadı", paid: false }, template: "order.review-rejected", dedupeKey: "order.review-rejected:ord-1" },
+  { type: "kyc.required", payload: { userId: "cus-1", orderId: "ord-1", orderNumber: "S-1", productName: "VDS" }, template: "kyc.verification-required", dedupeKey: "kyc.required:ord-1" },
+  { type: "kyc.approved", payload: { userId: "cus-1", releasedOrders: 1 }, template: "kyc.approved", dedupeKey: "kyc.approved:evt-1" },
+  { type: "kyc.rejected", payload: { userId: "cus-1", reason: "Okunamıyor" }, template: "kyc.rejected", dedupeKey: "kyc.rejected:evt-1" },
 ];
 
 function event(type: EventType, payload: Record<string, unknown>): DispatchedEvent {

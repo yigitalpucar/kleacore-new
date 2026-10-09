@@ -166,6 +166,38 @@ Uluslararası veri aktarımları için yürürlükteki mevzuata uygun güvencele
 privacy@kleacore.com</p>
 `;
 
+const KYC_CONSENT = `<p>Bu metin, sunucu (VDS, fiziksel sunucu, veri merkezi) hizmetleri için yüklediğiniz kimlik
+belgelerinin işlenmesine ilişkin açık rıza beyanınızdır. Ayrıntılı bilgi: <a href="/yasal/kvkk">KVKK Aydınlatma Metni</a>.</p>
+
+<h2>1. İşlenen veriler</h2>
+<p>Kimlik kartınızın ön ve arka yüzünün görüntüsü (kurumsal müşterilerde vergi levhası), isteğe bağlı olarak
+kimliğinizi elinizde tuttuğunuz bir fotoğraf (selfie), belgelerin yüklendiği tarih, IP adresi ve tarayıcı bilgisi.</p>
+
+<h2>2. Amaç ve hukuki sebep</h2>
+<p>5651 sayılı Kanun ve ilgili yönetmelikler kapsamında, sunucu hizmeti verdiğimiz kişinin tespit edilebilmesi;
+sunucuların kötüye kullanımının (dolandırıcılık, saldırı, spam) önlenmesi ve yetkili makamların taleplerinin
+karşılanması. Hukuki sebepler: kanunlarda açıkça öngörülme ve hukuki yükümlülük (KVKK m.5/2-a, ç), meşru menfaat
+(m.5/2-f) ve verilerin yurt dışında saklanması bakımından açık rızanız (m.9).</p>
+
+<h2>3. Saklama ve erişim</h2>
+<p>Belgeler herkese kapalı, şifreli bağlantıyla erişilen özel bir depolama alanında tutulur ve yalnızca kimlik
+doğrulama yetkisi verilmiş personel tarafından görüntülenebilir; her görüntüleme kayıt altına alınır.
+Reddedilen belgeler, ret tarihinden itibaren ayarlarda belirtilen süre sonunda otomatik olarak silinir.
+Onaylanan belgeler, sunucu hizmetiniz devam ettiği sürece ve hizmetin sona ermesinden sonra yasal yükümlülüklerin
+gerektirdiği süre boyunca saklanır, ardından silinir.</p>
+
+<h2>4. Aktarım</h2>
+<p>Belgeler yalnızca kanunen yetkili kamu kurum ve kuruluşlarına, talep halinde aktarılır. Veri sorumlusu
+KLEAWORK DIGITAL LLC'nin hizmet altyapısı nedeniyle veriler yurt dışında bulunan sunucularda saklanabilir.</p>
+
+<h2>5. Haklarınız</h2>
+<p>KVKK m.11 kapsamındaki haklarınızı privacy@kleacore.com adresine başvurarak kullanabilirsiniz. Açık rızanızı
+geri almanız halinde sunucu hizmetleri için kimlik doğrulaması tamamlanamayacağından bu hizmetler sunulamaz.</p>
+
+<p><strong>Yukarıdaki bilgilendirmeyi okudum; kimlik belgelerimin bu amaçlarla işlenmesine ve saklanmasına açık
+rıza veriyorum.</strong></p>
+`;
+
 export const DEFAULT_LEGAL_DOCUMENTS: Record<LegalDocumentType, DefaultLegalDocument> = {
   DISTANCE_SALES_CONTRACT: {
     type: "DISTANCE_SALES_CONTRACT",
@@ -187,5 +219,12 @@ export const DEFAULT_LEGAL_DOCUMENTS: Record<LegalDocumentType, DefaultLegalDocu
     title: "KVKK Aydınlatma Metni",
     isPlaceholder: false,
     content: KVKK_NOTICE,
+  },
+  KYC_CONSENT: {
+    type: "KYC_CONSENT",
+    version: 1,
+    title: "Kimlik Belgeleri Açık Rıza Metni",
+    isPlaceholder: true,
+    content: KYC_CONSENT,
   },
 };

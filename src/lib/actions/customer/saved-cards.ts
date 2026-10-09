@@ -106,6 +106,9 @@ export async function payInvoiceWithSavedCard(input: { invoiceId: string; cardId
     const { db } = await import("@/lib/db");
     const card = await db.savedCard.findUnique({ where: { id: cardId }, select: { userId: true } });
     if (!card || card.userId !== session.user.id) return { success: false, error: "Kart bulunamadı" };
+    const { getPaymentBlock } = await import("@/lib/fraud/evaluate");
+    const reviewBlock = await getPaymentBlock([invoiceId]);
+    if (reviewBlock) return { success: false, error: reviewBlock };
 
     const result = await chargeInvoiceWithSavedCard({
       invoiceId,

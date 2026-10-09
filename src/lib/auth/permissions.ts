@@ -43,6 +43,8 @@ export const PERMISSIONS = [
   "status.manage",
   /** Own Admin API tokens (/api/admin/v1); scopes never exceed the owner's permissions. */
   "api_tokens.manage",
+  /** Identity (KYC) documents: view, approve, reject. ADMIN only by default (KVKK: least access). */
+  "kyc.review",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -120,6 +122,10 @@ export const ADMIN_ROUTE_PERMISSIONS: Record<string, readonly Permission[] | nul
   "/yonetim/bayiler": ["customers.view"],
   "/yonetim/affiliate-odemeleri": ["invoices.edit"],
   "/yonetim/siparisler": ["orders.view"],
+  /** Order risk review queue (decisions need orders.manage). */
+  "/yonetim/siparisler/inceleme": ["orders.view"],
+  "/yonetim/siparisler/inceleme/ayarlar": ["settings.manage"],
+  "/yonetim/kyc": ["kyc.review"],
   "/yonetim/hizmetler": ["services.view"],
   "/yonetim/hizmet-ekle": ["services.manage"],
   "/yonetim/kurulumlar": ["provisioning.manage"],

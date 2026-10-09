@@ -11,6 +11,7 @@ import {
   HandCoins,
   KeyRound,
   Headphones,
+  IdCard,
   ListChecks,
   LayoutDashboard,
   Mail,
@@ -71,6 +72,7 @@ export function buildAdminNav(counts: AdminCounts, role: StaffRole): AppNavGroup
         { title: "Müşteriler", href: `${ADMIN_ROOT}/musteriler`, icon: Users },
         { title: "Bayiler", href: `${ADMIN_ROOT}/bayiler`, icon: Store },
         { title: "Affiliate ödemeleri", href: `${ADMIN_ROOT}/affiliate-odemeleri`, icon: HandCoins },
+        { title: "Kimlik doğrulama", href: `${ADMIN_ROOT}/kyc`, icon: IdCard },
       ],
     },
     {
@@ -174,6 +176,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { title: "Genel bakış", href: `${ADMIN_ROOT}/siparisler` },
       { title: "Tüm siparişler", href: `${ADMIN_ROOT}/siparisler/tum-siparisler` },
       { title: "Beklemede", href: `${ADMIN_ROOT}/siparisler/beklemede`, countKey: "pendingOrders" },
+      { title: "İnceleme", href: `${ADMIN_ROOT}/siparisler/inceleme` },
       { title: "Aktif", href: `${ADMIN_ROOT}/siparisler/aktif` },
       { title: "Askıda", href: `${ADMIN_ROOT}/siparisler/askida` },
       { title: "İptal edilen", href: `${ADMIN_ROOT}/siparisler/iptal` },
@@ -308,4 +311,6 @@ export const ADMIN_SEGMENT_LABELS: Record<string, string> = {
   personel: "Personel",
   "api-tokenlari": "API token'ları",
   dokumantasyon: "Dokümantasyon",
+  inceleme: "İnceleme",
+  kyc: "Kimlik doğrulama",
 };

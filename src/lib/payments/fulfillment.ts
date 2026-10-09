@@ -13,6 +13,8 @@ import {
   type PreparedProvisioning,
 } from "@/lib/provisioning/internal";
 import { withSavepoint } from "@/lib/payments/follow-ups";
+import { holdOrderProvisioningIfNeeded, type HoldReason } from "@/lib/provisioning/hold";
+import type { PaymentCardSignals } from "@/lib/fraud/evaluate";
 import { createLogger } from "@/lib/logger";
 import { max as maxMoney, toNumber, type MoneyInput } from "@/lib/money";
 
@@ -24,6 +26,8 @@ interface FulfillInvoicePaymentInput {
   performedBy: string;
   paymentReference?: string;
   notes?: string;
+  /** Card data the gateway reported (BIN country, holder): payment-stage fraud rules. */
+  card?: PaymentCardSignals;
 }
 
 type RenewalResult = {
@@ -269,6 +273,8 @@ export interface PaidOrderEffects {
   renewal: RenewalResult | null;
   planChange: PlanChangeResult | null;
   provisioned: PreparedProvisioning | null;
+  /** Provisioning waits for a fraud review and/or KYC (src/lib/provisioning/hold.ts). */
+  held: HoldReason[];
 }
 
 function describeProvisioning(provisioned: PreparedProvisioning) {
@@ -318,6 +324,7 @@ export async function applyPaidOrderEffects(
   const renewal: RenewalResult = await applyServiceRenewalFromOrder(tx, orderId);
   let planChange: PlanChangeResult | null = null;
   let provisioned: PreparedProvisioning | null = null;
+  let held: HoldReason[] = [];
 
   if (renewal.applied) {
     await tx.orderActivity.create({
@@ -338,6 +345,12 @@ export async function applyPaidOrderEffects(
     planChange = await applyPlanChangeFromOrder(tx, orderId, context.performedBy);
 
     if (!planChange.applied) {
+      // A new order under fraud review, or a server product of a customer
+      // without approved KYC: parked (PROCESSING + hold) until released.
+      held = order.serviceId ? [] : await holdOrderProvisioningIfNeeded(tx, orderId, context);
+    }
+
+    if (!planChange.applied && held.length === 0) {
       provisioned = await prepareOrderProvisioning(tx, orderId);
 
       await tx.orderActivity.create({
@@ -362,7 +375,7 @@ export async function applyPaidOrderEffects(
     await unsuspendServiceIfNeeded(tx, order.serviceId, orderId);
   }
 
-  return { renewal: renewal.applied ? renewal : null, planChange, provisioned };
+  return { renewal: renewal.applied ? renewal : null, planChange, provisioned, held };
 }
 
 /**
@@ -489,6 +502,19 @@ export async function fulfillInvoicePayment(
       invoiceId: invoice.id,
       paymentReference: input.paymentReference,
     };
+    if (input.card) {
+      // Payment-stage fraud rules (card BIN country, holder name) before the
+      // hold decision; never allowed to fail the payment.
+      const card = input.card;
+      const rescored = await withSavepoint(tx, async () => {
+        const [{ reevaluateOrderAtPayment }, { getFraudConfig }] = await Promise.all([
+          import("@/lib/fraud/evaluate"),
+          import("@/lib/fraud/settings"),
+        ]);
+        return reevaluateOrderAtPayment(tx, orderId, card, await getFraudConfig());
+      });
+      if (!rescored.ok) log.error("payment-stage fraud check failed", { orderId, error: rescored.error });
+    }
     const effects = await withSavepoint(tx, () => applyPaidOrderEffects(tx, orderId, context));
 
     if (effects.ok) {

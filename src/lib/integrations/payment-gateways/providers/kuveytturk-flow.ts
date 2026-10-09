@@ -241,6 +241,11 @@ export async function beginKuveytTurkPayment(input: {
   if (!isKuveytTurkSessionPayable(session) || session.amountKurus <= 0) {
     return { ok: false, reason: "not_payable" };
   }
+  // Order risk review (docs/fraud-kyc.md): a blocked / rejected order is not
+  // charged; the card holder name feeds the payment-stage rules.
+  const { getPaymentBlock, recordPaymentCardSignals } = await import("@/lib/fraud/evaluate");
+  if (await getPaymentBlock(session.invoiceIds)) return { ok: false, reason: "not_payable" };
+  await recordPaymentCardSignals(session.invoiceIds, { holderName: input.card.holderName });
 
   const config = await getPaymentGatewayConfig();
   if (!config.kuveytturk.enabled || !isKuveytTurkConfigured(config)) {

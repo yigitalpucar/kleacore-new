@@ -14,6 +14,7 @@ import {
   payInvoicesWithBalance,
 } from "@/lib/payments/balance-payment";
 import { createLogger } from "@/lib/logger";
+import { getPaymentBlock } from "@/lib/fraud/evaluate";
 import { eq, max, sub } from "@/lib/money";
 
 const log = createLogger("customer.invoices");
@@ -88,6 +89,12 @@ export async function payInvoice(input: PayInvoiceInput) {
         success: false,
         error: invoice.status === "CANCELLED" ? "İptal edilmiş fatura ödenemez" : "Bu fatura zaten ödenmiş",
       };
+    }
+
+    // Order risk review (docs/fraud-kyc.md): blocked / rejected orders are not charged.
+    const reviewBlock = await getPaymentBlock([invoice.id]);
+    if (reviewBlock) {
+      return { success: false, error: reviewBlock };
     }
 
     const remainingAmount = roundMoney(max(0, sub(invoice.totalAmount, invoice.paidAmount)));

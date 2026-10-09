@@ -36,6 +36,7 @@ export const ADMIN_API_OPERATIONS: AnyOperation[] = [
   orders.listOrders,
   orders.getOrder,
   orders.approveOrder,
+  orders.approveOrderReview,
   tickets.listTickets,
   tickets.getTicket,
   tickets.replyToTicket,

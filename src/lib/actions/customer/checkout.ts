@@ -34,6 +34,11 @@ import {
 } from "@/lib/legal/documents";
 import type { LegalOrderItem } from "@/lib/legal/render";
 import { getRequestMeta } from "@/lib/request-meta";
+import { evaluateCheckoutOrders } from "@/lib/fraud/evaluate";
+import { resolveIpCountry } from "@/lib/fraud/ip-country";
+import { getCfCountryHeader } from "@/lib/fraud/request";
+import { getFraudConfig } from "@/lib/fraud/settings";
+import { withSavepoint } from "@/lib/payments/follow-ups";
 import { revalidatePath } from "next/cache";
 import type { BillingPeriod, Prisma } from "@prisma/client";
 import { resolveCustomerPaymentMethod } from "@/lib/payments/payment-options";
@@ -401,11 +406,21 @@ export async function checkoutCart(input: CheckoutInput) {
   try {
     const legalDocuments = await getCheckoutLegalDocuments();
     assertCheckoutConsents(legalDocuments, input.consents);
-    const [legalSeller, legalBuyer, requestMeta] = await Promise.all([
+    const [legalSeller, legalBuyer, requestMeta, fraudConfig] = await Promise.all([
       getLegalSeller(),
       getLegalBuyer(customerId),
       getRequestMeta(),
+      getFraudConfig(),
     ]);
+    // Order risk review (docs/fraud-kyc.md): the IP country is resolved before
+    // the transaction (CF-IPCountry header, offline DB fallback).
+    const ipCountry = fraudConfig.enabled
+      ? await resolveIpCountry({
+          ip: requestMeta.ip,
+          cfCountry: await getCfCountryHeader(),
+          trustCfHeader: fraudConfig.trustCfHeader,
+        })
+      : { country: null, source: null };
     if (!legalBuyer) {
       throw new Error("CUSTOMER_NOT_FOUND");
     }
@@ -530,6 +545,7 @@ export async function checkoutCart(input: CheckoutInput) {
 
       const orderIds: string[] = [];
       const invoiceIds: string[] = [];
+      const fraudOrders: Array<{ id: string; orderNumber: string; categorySlug: string }> = [];
       let checkoutTotalAmount = money(0);
       let checkoutTaxAmount = money(0);
       let checkoutLineTotal = money(0);
@@ -704,6 +720,7 @@ export async function checkoutCart(input: CheckoutInput) {
 
         orderIds.push(order.id);
         invoiceIds.push(invoice.id);
+        fraudOrders.push({ id: order.id, orderNumber: order.orderNumber, categorySlug: item.categorySlug });
       }
 
       // Checked before anything is committed: an order paid by balance is
@@ -715,6 +732,27 @@ export async function checkoutCart(input: CheckoutInput) {
       if (promotion) {
         await claimPromotionUse(tx, promotion);
       }
+
+      // Risk score per order; a failure here never blocks the sale (savepoint).
+      const fraud = fraudConfig.enabled
+        ? await withSavepoint(tx, () =>
+            evaluateCheckoutOrders(
+              tx,
+              {
+                customerId,
+                ipAddress: requestMeta.ip,
+                ipCountry: ipCountry.country,
+                ipCountrySource: ipCountry.source,
+                orders: fraudOrders,
+              },
+              fraudConfig
+            )
+          )
+        : ({ ok: true, value: [] } as const);
+      if (!fraud.ok) {
+        console.error("[Checkout] Risk değerlendirmesi yapılamadı:", fraud.error);
+      }
+      const fraudOutcomes = fraud.ok ? fraud.value : [];
 
       const orderNumbers = await tx.order.findMany({
         where: { id: { in: orderIds } },
@@ -751,6 +789,8 @@ export async function checkoutCart(input: CheckoutInput) {
         resellerDiscountAmount: toNumber(totalResellerDiscount),
         promoCode: promotion?.code,
         orderNumbers: orderNumbers.map((order) => order.orderNumber),
+        reviewRequired: fraudOutcomes.some((outcome) => outcome.status === "REVIEW"),
+        paymentBlocked: fraudOutcomes.some((outcome) => outcome.paymentBlocked),
       };
     });
 
@@ -769,6 +809,13 @@ export async function checkoutCart(input: CheckoutInput) {
         promoCode: result.promoCode,
       });
     });
+
+    if (result.paymentBlocked) {
+      // Score over the block threshold: the orders wait for a reviewer and
+      // no payment session is opened (order.review_required told the customer).
+      revalidatePath("/yonetim/siparisler");
+      return { success: true, data: { ...result, paymentMethod: methodId, paidWithBalance: false } };
+    }
 
     if (cardProvider && !stripeClient) {
       const baseUrl = getAppBaseUrl();

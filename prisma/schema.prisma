@@ -431,6 +431,15 @@ model User {
   autoPayConsentAt DateTime?
   autoPayConsentIp String?
 
+  // KYC (Faz 4, docs/fraud-kyc.md): identity verification required before
+  // server products (5651) are provisioned. Documents in KycDocument.
+  kycStatus          KycStatus     @default(NONE)
+  kycSubmittedAt     DateTime?
+  kycReviewedAt      DateTime?
+  kycReviewedBy      String?
+  kycRejectionReason String?
+  kycDocuments       KycDocument[]
+
   // Timestamps
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
@@ -677,6 +686,12 @@ model Order {
   provisioningJob      ProvisioningJob?
   planChanges          ServicePlanChange[]
   consentRecords       ConsentRecord[]
+  fraudCheck           FraudCheck?
+
+  // Paid but provisioning waits (fraud review and/or KYC, docs/fraud-kyc.md).
+  // Cleared exactly once when the order is released or rejected.
+  provisioningHeldAt      DateTime?
+  provisioningHoldReasons String[]  @default([])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1932,28 +1947,28 @@ model ProductAddon {
 // =====================
 
 model DomainTld {
-  id            String   @id @default(cuid())
-  ext           String   @unique
+  id            String  @id @default(cuid())
+  ext           String  @unique
   category      String
-  registerPrice Decimal  @db.Decimal(14, 2)
-  renewPrice    Decimal  @db.Decimal(14, 2)
-  transferPrice Decimal  @db.Decimal(14, 2)
-  isActive      Boolean  @default(true)
-  displayOrder  Int      @default(0)
+  registerPrice Decimal @db.Decimal(14, 2)
+  renewPrice    Decimal @db.Decimal(14, 2)
+  transferPrice Decimal @db.Decimal(14, 2)
+  isActive      Boolean @default(true)
+  displayOrder  Int     @default(0)
 
   /// Registrar cost per year in `costCurrency` (Gri price list or entered by
   /// an admin). Sale prices above are TRY and KDV-exclusive; the suggested
   /// sale price is cost × TCMB rate + margin (src/lib/fx/tld-pricing.ts).
   /// NULL = cost unknown, no suggestion.
-  costRegister  Decimal? @db.Decimal(14, 4)
-  costRenew     Decimal? @db.Decimal(14, 4)
-  costTransfer  Decimal? @db.Decimal(14, 4)
+  costRegister  Decimal?  @db.Decimal(14, 4)
+  costRenew     Decimal?  @db.Decimal(14, 4)
+  costTransfer  Decimal?  @db.Decimal(14, 4)
   /// ISO 4217 code (USD, EUR, GBP or TRY).
-  costCurrency  String   @default("USD")
+  costCurrency  String    @default("USD")
   costUpdatedAt DateTime?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("domain_tlds")
 }
@@ -2063,6 +2078,8 @@ enum LegalDocumentType {
   DISTANCE_SALES_CONTRACT
   PRELIMINARY_INFORMATION
   KVKK_NOTICE
+  /// KVKK açık rıza for identity documents (KYC upload).
+  KYC_CONSENT
 }
 
 /// Versioned legal text. `content` is an HTML template; `{{...}}` variables are
@@ -2540,4 +2557,101 @@ model PaymentAttempt {
   @@index([invoiceId, kind, status])
   @@index([userId, createdAt])
   @@map("payment_attempts")
+}
+
+// =====================
+// FRAUD REVIEW + KYC (Faz 4) — docs/fraud-kyc.md
+// =====================
+
+enum FraudCheckStatus {
+  /// Score below the review threshold.
+  PASSED
+  /// Waiting for staff (İnceleme bekliyor).
+  REVIEW
+  APPROVED
+  REJECTED
+}
+
+/// Risk evaluation of one order: evaluated at checkout, re-evaluated with the
+/// card data the gateway reports at payment. `rules` is the score breakdown.
+model FraudCheck {
+  id              String           @id @default(cuid())
+  orderId         String           @unique
+  order           Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customerId      String
+  score           Int
+  threshold       Int
+  status          FraudCheckStatus
+  /// Score reached the block threshold: no payment is taken until approved.
+  paymentBlocked  Boolean          @default(false)
+  /// [{ rule, label, weight, matched, detail? }]
+  rules           Json
+  ipAddress       String?
+  ipCountry       String?
+  /// "cf-header" | "db" | null (unknown)
+  ipCountrySource String?
+  cardCountry     String?
+  /// Last evaluation: "checkout" | "payment"
+  stage           String           @default("checkout")
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  reviewNote      String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([status, createdAt])
+  @@index([ipAddress, createdAt])
+  @@index([customerId])
+  @@map("fraud_checks")
+}
+
+/// Offline IP → country table (db-ip.com "IP to Country Lite", CC BY 4.0),
+/// loaded by scripts/load-ip-country-db.mjs. Addresses as integers.
+model IpCountryRange {
+  /// 4 or 6
+  version Int
+  ipFrom  Decimal @db.Decimal(39, 0)
+  ipTo    Decimal @db.Decimal(39, 0)
+  country String  @db.Char(2)
+
+  @@id([version, ipFrom])
+  @@map("ip_country_ranges")
+}
+
+enum KycStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum KycDocumentType {
+  IDENTITY_FRONT
+  IDENTITY_BACK
+  TAX_CERTIFICATE
+  SELFIE
+}
+
+/// Identity document uploaded for KYC. Private storage object; only the owner
+/// and staff with kyc.review can read it. After a rejection the file is
+/// deleted `kyc_rejected_retention_days` later (row kept, `deletedAt` set).
+model KycDocument {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          KycDocumentType
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  sha256        String
+  storageDriver String
+  storageKey    String
+  uploadedAt    DateTime        @default(now())
+  /// Set on rejection: the retention job deletes the file after this date.
+  deleteAfter   DateTime?
+  deletedAt     DateTime?
+
+  @@index([userId, uploadedAt])
+  @@index([deleteAfter])
+  @@map("kyc_documents")
 }

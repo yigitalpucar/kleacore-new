@@ -2,6 +2,8 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod/v4";
 import { db } from "@/lib/db";
 import { approveOrderAs } from "@/lib/orders/approve";
+import { FraudReviewError, approveFraudReview } from "@/lib/fraud/review";
+import { HOLD_REASONS } from "@/lib/provisioning/hold";
 import { ApiError, failure } from "../errors";
 import { defineOperation } from "../operation";
 import { keyset, pageOf, paginationQuery } from "../pagination";
@@ -28,6 +30,9 @@ const orderSelect = {
   serviceId: true,
   customerNotes: true,
   createdAt: true,
+  provisioningHeldAt: true,
+  provisioningHoldReasons: true,
+  fraudCheck: { select: { status: true, score: true } },
   product: { select: { name: true } },
   customer: { select: { email: true, name: true, surname: true } },
   invoice: { select: { id: true, invoiceNumber: true, status: true } },
@@ -56,6 +61,13 @@ export const orderSchema = z.object({
   invoice: z.object({ id: z.string(), invoiceNumber: z.string(), status: z.string() }).nullable(),
   customerNotes: z.string().nullable(),
   createdAt: dateTimeSchema,
+  provisioningHold: z
+    .object({ since: dateTimeSchema, reasons: z.array(z.enum(HOLD_REASONS)) })
+    .nullable()
+    .describe("Ödeme alındı ama kurulum bekletiliyor (risk incelemesi / kimlik doğrulaması)"),
+  fraudCheck: z
+    .object({ status: z.enum(["PASSED", "REVIEW", "APPROVED", "REJECTED"]), score: z.number().int() })
+    .nullable(),
 });
 
 function serializeOrder(row: OrderRow): z.infer<typeof orderSchema> {
@@ -80,6 +92,15 @@ function serializeOrder(row: OrderRow): z.infer<typeof orderSchema> {
     invoice: row.invoice,
     customerNotes: row.customerNotes,
     createdAt: row.createdAt.toISOString(),
+    provisioningHold: row.provisioningHeldAt
+      ? {
+          since: row.provisioningHeldAt.toISOString(),
+          reasons: row.provisioningHoldReasons.filter((reason): reason is (typeof HOLD_REASONS)[number] =>
+            (HOLD_REASONS as readonly string[]).includes(reason)
+          ),
+        }
+      : null,
+    fraudCheck: row.fraudCheck,
   };
 }
 
@@ -170,5 +191,42 @@ export const approveOrder = defineOperation({
     const result = await approveOrderAs(context.owner.id, params.id);
     if (!result.success) throw failure(result);
     return { data: { order: await loadOrderDetail(params.id), invoiceId: result.data.invoiceId } };
+  },
+});
+
+export const approveOrderReview = defineOperation({
+  id: "approveOrderReview",
+  method: "POST",
+  path: "/orders/{id}/review/approve",
+  tag: TAG,
+  summary: "Risk incelemesindeki siparişi onayla",
+  description:
+    "İnceleme kuyruğundaki (FraudCheck REVIEW) siparişi onaylar; panelde \"İnceleme → Onayla\" ile aynı yol. Ödenmiş ve bekletilen sipariş kurulum kuyruğuna bir kez alınır; kimlik doğrulaması hâlâ gerekiyorsa beklemede kalır. Tekrar denemelerde `Idempotency-Key` kullanın.",
+  permission: "orders.manage",
+  params: idParams,
+  body: z.object({ note: z.string().trim().max(1000).optional() }).optional(),
+  response: z.object({
+    order: orderDetailSchema,
+    paid: z.boolean(),
+    released: z.boolean().describe("Kurulum bu istekle başlatıldıysa true"),
+    stillHeldFor: z.array(z.enum(HOLD_REASONS)),
+  }),
+  handler: async ({ params, body, context }) => {
+    let outcome: Awaited<ReturnType<typeof approveFraudReview>>;
+    try {
+      outcome = await approveFraudReview({ orderId: params.id, reviewerId: context.owner.id, note: body?.note });
+    } catch (error) {
+      if (error instanceof FraudReviewError) throw new ApiError(409, "conflict", error.message);
+      throw error;
+    }
+    const release = outcome.release;
+    return {
+      data: {
+        order: await loadOrderDetail(params.id),
+        paid: outcome.paid,
+        released: release?.released === true,
+        stillHeldFor: release && !release.released ? release.reasons : [],
+      },
+    };
   },
 });

@@ -7,6 +7,7 @@ import {
   type FulfillInvoicePaymentResult,
 } from "@/lib/payments/fulfillment";
 import { sum, toFixed2, toKurus, type MoneyInput } from "@/lib/money";
+import type { PaymentCardSignals } from "@/lib/fraud/evaluate";
 
 /** What the gateway says was charged for a session, as reported in its callback. */
 export interface GatewayPaymentConfirmation {
@@ -16,6 +17,8 @@ export interface GatewayPaymentConfirmation {
   requestedAmount?: number;
   /** Currency code reported by the gateway (TRY / TL). */
   currency?: string;
+  /** Card data when the gateway reports it (payment-stage fraud rules, docs/fraud-kyc.md). */
+  card?: PaymentCardSignals;
 }
 
 const ACCEPTED_CURRENCIES = new Set(["TRY", "TL"]);
@@ -146,6 +149,7 @@ export async function fulfillPaymentsByGatewayReference(
       performedBy: customerId,
       paymentReference: reference,
       notes,
+      card: confirmation?.card,
     });
     results.push(result);
 

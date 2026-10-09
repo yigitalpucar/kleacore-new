@@ -74,6 +74,7 @@ interface ServiceDetailData {
     email: string;
     phone: string | null;
     companyName: string | null;
+    kycStatus?: string;
   };
   product: {
     id: string;
@@ -398,6 +399,10 @@ export function ServiceDetailContent({
                 { label: "Firma", value: service.customer.companyName },
                 { label: "E-posta", value: service.customer.email, copy: service.customer.email },
                 { label: "Telefon", value: service.customer.phone },
+                {
+                  label: "Kimlik doğrulama",
+                  value: service.customer.kycStatus ? <StatusBadge kind="kyc" status={service.customer.kycStatus} /> : null,
+                },
               ]}
             />
           </SectionCard>

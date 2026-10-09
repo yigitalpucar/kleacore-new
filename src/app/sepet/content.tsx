@@ -150,6 +150,11 @@ export function SepetContent({
       }
 
       clearCart();
+      if (result.data && "paymentBlocked" in result.data && result.data.paymentBlocked) {
+        toast.info("Siparişiniz oluşturuldu ve kısa bir güvenlik incelemesine alındı. Onaylandığında ödemeyi panelden tamamlayabilirsiniz.");
+        router.push("/musteri/panel");
+        return;
+      }
       if (
         result.data &&
         handleCreditCardCheckoutRedirect(
