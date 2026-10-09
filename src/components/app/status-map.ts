@@ -37,7 +37,9 @@ export type StatusKind =
   | "promo"
   | "refund"
   | "bankTransferNotice"
-  | "dnsZone";
+  | "dnsZone"
+  | "kyc"
+  | "fraudCheck";
 
 export type StatusAudience = "customer" | "admin";
 
@@ -250,6 +252,20 @@ const dnsZone: Map = {
   ERROR: { label: "Hata", tone: "danger" },
 };
 
+const kyc: Map = {
+  NONE: { label: "Doğrulanmadı", tone: "muted" },
+  PENDING: { label: "İnceleniyor", tone: "warning" },
+  APPROVED: { label: "Doğrulandı", tone: "success" },
+  REJECTED: { label: "Reddedildi", tone: "danger" },
+};
+
+const fraudCheck: Map = {
+  PASSED: { label: "Risk düşük", tone: "success" },
+  REVIEW: { label: "İnceleme bekliyor", tone: "warning" },
+  APPROVED: { label: "Onaylandı", tone: "success" },
+  REJECTED: { label: "Reddedildi", tone: "danger" },
+};
+
 const MAPS: Record<StatusKind, Map> = {
   service,
   invoice,
@@ -279,6 +295,8 @@ const MAPS: Record<StatusKind, Map> = {
   refund,
   bankTransferNotice,
   dnsZone,
+  kyc,
+  fraudCheck,
 };
 
 /** Label + tone for a status. Unknown values fall back to the raw value. */

@@ -90,6 +90,7 @@ export async function getServiceById(id: string) {
           email: true,
           phone: true,
           companyName: true,
+          kycStatus: true,
         },
       },
       product: {

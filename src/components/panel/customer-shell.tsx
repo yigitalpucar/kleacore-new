@@ -8,6 +8,7 @@ import {
   Globe,
   HardDrive,
   Headphones,
+  IdCard,
   Home,
   LayoutDashboard,
   Mail,
@@ -75,6 +76,7 @@ function buildNav({ isReseller, counts }: Pick<CustomerShellProps, "isReseller" 
       items: [
         { title: "Satış ortaklığı", href: `${ROOT}/satis-ortakligi`, icon: Users },
         ...(isReseller ? [{ title: "Bayilik", href: `${ROOT}/bayilik`, icon: Store }] : []),
+        { title: "Kimlik doğrulama", href: `${ROOT}/kimlik-dogrulama`, icon: IdCard },
         { title: "Ayarlar", href: `${ROOT}/ayarlar`, icon: Settings },
       ],
     },

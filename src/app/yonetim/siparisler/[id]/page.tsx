@@ -17,6 +17,7 @@ import { getOrderConsentRecords } from "@/lib/legal/documents";
 import { formatTRY } from "@/lib/format/price";
 import { billingPeriodLabel, formatDate, formatDateTime } from "@/lib/format/date";
 import { OrderDetailActions } from "./content";
+import { OrderReviewCard } from "./review-card";
 import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export default async function OrderDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requirePermission("orders.view");
+  const session = await requirePermission("orders.view");
   const { id } = await params;
   const [order, consents] = await Promise.all([getOrderById(id), getOrderConsentRecords(id)]);
 
@@ -59,6 +60,8 @@ export default async function OrderDetailPage({
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
+          <OrderReviewCard orderId={order.id} role={session.user.role} />
+
           <SectionCard title="Ürün" description={order.product.category?.name ?? undefined}>
             <div className="flex items-start gap-3">
               <IconTile>

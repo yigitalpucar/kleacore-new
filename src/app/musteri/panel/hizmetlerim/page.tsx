@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { getServicesByCustomer } from "@/lib/dal/services";
 import { HizmetlerimContent } from "./content";
+import { WaitingOrdersNotice } from "@/components/panel/waiting-orders-notice";
 
 export const dynamic = "force-dynamic";
 
@@ -32,5 +33,10 @@ export default async function HizmetlerimPage() {
     },
   }));
 
-  return <HizmetlerimContent services={serializedServices} />;
+  return (
+    <>
+      <WaitingOrdersNotice userId={session!.user.id} />
+      <HizmetlerimContent services={serializedServices} />
+    </>
+  );
 }
