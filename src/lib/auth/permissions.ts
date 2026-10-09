@@ -25,6 +25,8 @@ export const PERMISSIONS = [
   "services.view",
   "services.manage",
   "provisioning.manage",
+  /** VDS backups on the admin side: restore, delete, extra slots, final backup (incl. skipping it on termination). */
+  "backups.manage",
   "products.manage",
   "content.manage",
   "settings.manage",

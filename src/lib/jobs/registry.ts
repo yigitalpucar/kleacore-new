@@ -11,8 +11,10 @@ import type { z } from "zod";
  * pg-boss queue policies we use. `exclusive` allows at most one queued
  * (created/retry) or active job per `singletonKey`, which is what makes
  * `enqueue(..., { singletonKey })` idempotent. `standard` has no dedupe.
+ * `singleton` allows one *active* job per `singletonKey` and any number
+ * queued: a concurrency limit (e.g. one vzdump per Proxmox node), not dedupe.
  */
-export type JobPolicy = "standard" | "exclusive";
+export type JobPolicy = "standard" | "exclusive" | "singleton";
 
 export interface JobQueueOptions {
   policy?: JobPolicy;

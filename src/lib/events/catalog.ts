@@ -353,6 +353,56 @@ const serviceProvisioningFailed = defineEvent({
 });
 
 // ---------------------------------------------------------------------------
+// Backups (VDS, src/lib/backups)
+// ---------------------------------------------------------------------------
+
+const backupTrigger = z.enum(["MANUAL", "SCHEDULED", "FINAL"]);
+
+const backupCompleted = defineEvent({
+  type: "backup.completed",
+  label: "Yedek alındı",
+  aggregate: "Service",
+  aggregateKey: "serviceId",
+  schema: z.object({
+    ...serviceShape,
+    backupId: id,
+    trigger: backupTrigger,
+    sizeMB: z.number().optional(),
+    completedAt: isoDate,
+    /** Instance setting "Yedek bildirimleri müşteriye" (never for final backups). */
+    notifyCustomer: z.boolean().default(false),
+  }),
+});
+
+const backupFailed = defineEvent({
+  type: "backup.failed",
+  label: "Yedek / geri yükleme başarısız",
+  aggregate: "Service",
+  aggregateKey: "serviceId",
+  schema: z.object({
+    ...serviceShape,
+    backupId: id,
+    trigger: backupTrigger,
+    operation: z.enum(["backup", "restore"]),
+    error: z.string(),
+    notifyCustomer: z.boolean().default(false),
+  }),
+});
+
+const backupRestored = defineEvent({
+  type: "backup.restored",
+  label: "Yedek geri yüklendi",
+  aggregate: "Service",
+  aggregateKey: "serviceId",
+  schema: z.object({
+    ...serviceShape,
+    backupId: id,
+    backupCreatedAt: isoDate,
+    notifyCustomer: z.boolean().default(true),
+  }),
+});
+
+// ---------------------------------------------------------------------------
 // Domains
 // ---------------------------------------------------------------------------
 
@@ -554,6 +604,9 @@ export const eventDefinitions = [
   serviceRenewed,
   servicePlanChanged,
   serviceProvisioningFailed,
+  backupCompleted,
+  backupFailed,
+  backupRestored,
   domainRegistered,
   domainTransferred,
   domainRenewed,

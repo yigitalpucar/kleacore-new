@@ -94,6 +94,35 @@ describe("admin-alert subscriber", () => {
     );
   });
 
+  it("alerts admins about a failed backup / final backup (VM kept)", async () => {
+    mocks.getAdminNotificationRecipients.mockResolvedValue({ email: "ops@kleacore.test" });
+    mocks.sendNotification.mockResolvedValue({ ok: true, logIds: ["log-1"], deduplicated: false });
+
+    await adminAlertSubscriber.handle(
+      event("backup.failed", {
+        backupId: "bk-1",
+        serviceId: "svc-1",
+        customerId: "cus-1",
+        serviceLabel: "VDS Pro",
+        trigger: "FINAL",
+        operation: "backup",
+        error: "PROXMOX_BACKUP: no space left",
+      })
+    );
+
+    expect(subscribersFor("backup.failed").map((s) => s.name)).toContain("admin-alert");
+    expect(mocks.sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template: "admin.event-alert",
+        data: expect.objectContaining({
+          title: "Fesih öncesi son yedek başarısız: VDS Pro",
+          path: "/yonetim/hizmetler/svc-1",
+          message: expect.stringContaining("VM silinmedi"),
+        }),
+      })
+    );
+  });
+
   it("skips customer-initiated failed payments", async () => {
     const result = await adminAlertSubscriber.handle(event("payment.failed", { invoiceId: "inv-1", customerId: "cus-1" }));
     expect(result).toEqual({ skipped: "NOT_ALERTABLE" });

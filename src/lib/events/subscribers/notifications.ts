@@ -248,6 +248,48 @@ export const notificationPlanners: PlannerMap = {
         ]
       : [],
 
+  "backup.completed": (payload) =>
+    payload.notifyCustomer && payload.trigger !== "FINAL"
+      ? [
+          {
+            template: "service.backup-completed",
+            userId: payload.customerId,
+            data: {
+              serviceId: payload.serviceId,
+              serviceLabel: payload.serviceLabel,
+              trigger: payload.trigger,
+              sizeMB: payload.sizeMB,
+              completedAt: payload.completedAt,
+            },
+            dedupeKey: `backup.completed:${payload.backupId}`,
+          },
+        ]
+      : [],
+
+  "backup.failed": (payload, event) =>
+    payload.notifyCustomer && payload.trigger !== "FINAL"
+      ? [
+          {
+            template: "service.backup-failed",
+            userId: payload.customerId,
+            data: { serviceId: payload.serviceId, serviceLabel: payload.serviceLabel, operation: payload.operation },
+            dedupeKey: `backup.failed:${payload.backupId}:${payload.operation}:${event.id}`,
+          },
+        ]
+      : [],
+
+  "backup.restored": (payload, event) =>
+    payload.notifyCustomer
+      ? [
+          {
+            template: "service.backup-restored",
+            userId: payload.customerId,
+            data: { serviceId: payload.serviceId, serviceLabel: payload.serviceLabel, backupCreatedAt: payload.backupCreatedAt },
+            dedupeKey: `backup.restored:${event.id}`,
+          },
+        ]
+      : [],
+
   "domain.registered": (payload, event) => domainRegistered(payload, event, false),
   "domain.transferred": (payload, event) => domainRegistered(payload, event, true),
 

@@ -49,6 +49,19 @@ export function buildAdminAlert(event: DispatchedEvent): Alert | null {
       path: p.provisioningJobId ? `/yonetim/provisioning` : p.serviceId ? `/yonetim/hizmetler/${p.serviceId}` : undefined,
     };
   }
+  if (isEvent(event, "backup.failed")) {
+    const p = event.payload;
+    const what = p.operation === "restore" ? "Geri yükleme" : p.trigger === "FINAL" ? "Fesih öncesi son yedek" : "Yedek";
+    return {
+      title: `${what} başarısız: ${p.serviceLabel}`,
+      message:
+        p.trigger === "FINAL" && p.operation === "backup"
+          ? "Fesih öncesi son yedek alınamadı; VM silinmedi. Hizmet sayfasından yeniden deneyin veya yedeksiz silin."
+          : `${what} tüm denemelerden sonra başarısız oldu.`,
+      details: [{ label: "Hata", value: p.error.slice(0, 500) }],
+      path: `/yonetim/hizmetler/${p.serviceId}`,
+    };
+  }
   if (isEvent(event, "payment.failed")) {
     const p = event.payload;
     if (!p.automatic) return null; // customer retries at checkout are not staff work
@@ -81,6 +94,7 @@ export const ADMIN_ALERT_EVENTS: readonly EventType[] = [
   "ticket.opened",
   "bank_transfer.submitted",
   "service.provisioning_failed",
+  "backup.failed",
   "payment.failed",
   "user.login_failed_locked",
 ];

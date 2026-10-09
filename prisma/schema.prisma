@@ -259,6 +259,14 @@ enum BackupType {
   FILES
 }
 
+/// Why a backup exists: customer "Şimdi yedek al", the service's schedule, or
+/// the final backup taken before a VDS is destroyed on termination.
+enum BackupTrigger {
+  MANUAL
+  SCHEDULED
+  FINAL
+}
+
 enum TransactionType {
   DEPOSIT
   PAYMENT
@@ -1489,6 +1497,34 @@ model Backup {
   completedAt DateTime?
   createdAt   DateTime        @default(now())
 
+  // VDS (Proxmox vzdump) backups — src/lib/backups, docs/modules/proxmox.md §9.
+  trigger            BackupTrigger @default(MANUAL)
+  /// Module / provider that holds the archive ("proxmox", "cpanel-backup").
+  provider           String?
+  moduleInstanceId   String?
+  node               String?
+  storage            String?
+  vmid               Int?
+  /// Storage volume id of the archive (local:backup/vzdump-qemu-…, pbs:backup/vm/…).
+  volid              String?
+  /// UPID of the running vzdump task (a retried job resumes it).
+  upid               String?
+  error              String?
+  /// FINAL backups: deleted by the cleanup after this date.
+  expiresAt          DateTime?
+  /// The archive was deleted on the storage; the row stays for history.
+  deletedAt          DateTime?
+  /// Schedule idempotency: "<scheduleId>:<slot ISO>" — one backup per slot.
+  slotKey            String?       @unique
+  /// queued | running | done | failed (customer restore of this archive).
+  restoreStatus      String?
+  restoreUpid        String?
+  restoreTargetId    String?
+  restoreRequestedAt DateTime?
+  restoreError       String?
+
+  @@index([serviceId, status])
+  @@index([trigger, expiresAt])
   @@map("backups")
 }
 
@@ -1500,10 +1536,15 @@ model BackupSchedule {
   isActive  Boolean   @default(true)
   lastRunAt DateTime?
   nextRunAt DateTime?
+  /// VDS schedules: start hour of the run window (CRON_TIMEZONE, 0–23).
+  hour      Int       @default(3)
+  /// Weekly schedules: day of week (0 = Sunday … 6 = Saturday).
+  weekday   Int?
   backups   Backup[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  @@index([serviceId])
   @@map("backup_schedules")
 }
 
@@ -1878,28 +1919,28 @@ model ProductAddon {
 // =====================
 
 model DomainTld {
-  id            String   @id @default(cuid())
-  ext           String   @unique
+  id            String  @id @default(cuid())
+  ext           String  @unique
   category      String
-  registerPrice Decimal  @db.Decimal(14, 2)
-  renewPrice    Decimal  @db.Decimal(14, 2)
-  transferPrice Decimal  @db.Decimal(14, 2)
-  isActive      Boolean  @default(true)
-  displayOrder  Int      @default(0)
+  registerPrice Decimal @db.Decimal(14, 2)
+  renewPrice    Decimal @db.Decimal(14, 2)
+  transferPrice Decimal @db.Decimal(14, 2)
+  isActive      Boolean @default(true)
+  displayOrder  Int     @default(0)
 
   /// Registrar cost per year in `costCurrency` (Gri price list or entered by
   /// an admin). Sale prices above are TRY and KDV-exclusive; the suggested
   /// sale price is cost × TCMB rate + margin (src/lib/fx/tld-pricing.ts).
   /// NULL = cost unknown, no suggestion.
-  costRegister  Decimal? @db.Decimal(14, 4)
-  costRenew     Decimal? @db.Decimal(14, 4)
-  costTransfer  Decimal? @db.Decimal(14, 4)
+  costRegister  Decimal?  @db.Decimal(14, 4)
+  costRenew     Decimal?  @db.Decimal(14, 4)
+  costTransfer  Decimal?  @db.Decimal(14, 4)
   /// ISO 4217 code (USD, EUR, GBP or TRY).
-  costCurrency  String   @default("USD")
+  costCurrency  String    @default("USD")
   costUpdatedAt DateTime?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("domain_tlds")
 }

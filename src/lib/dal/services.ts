@@ -96,6 +96,7 @@ export async function getServiceById(id: string) {
         include: { category: true },
       },
       backups: {
+        where: { deletedAt: null },
         orderBy: { createdAt: "desc" },
         take: 10,
       },

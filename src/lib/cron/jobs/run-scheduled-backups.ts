@@ -38,8 +38,16 @@ async function enforceRetention(scheduleId: string, retention: number) {
   return staleIds.length;
 }
 
-export async function runScheduledBackups(): Promise<CronJobResult> {
+/**
+ * Hourly (`run-backups`): due schedules, then VDS housekeeping (lost jobs
+ * re-queued, expired final backups deleted). VDS schedules (module with the
+ * "backups" capability) go through src/lib/backups/vds.ts: per-slot
+ * idempotent, queued per Proxmox node, pruned after success. Others keep the
+ * legacy provider path (cPanel) below.
+ */
+export async function runScheduledBackups(): Promise<CronJobResult & { vds?: Record<string, number>; maintenance?: unknown }> {
   const now = new Date();
+  const { isVdsBackupService, runVdsBackupMaintenance, runVdsSchedule } = await import("@/lib/backups/vds");
 
   const schedules = await db.backupSchedule.findMany({
     where: {
@@ -49,14 +57,19 @@ export async function runScheduledBackups(): Promise<CronJobResult> {
     orderBy: { nextRunAt: "asc" },
   });
 
-  if (schedules.length === 0) {
-    return { processed: 0, ids: [] };
-  }
-
   const processedIds: string[] = [];
   let skipped = 0;
+  const vds: Record<string, number> = {};
 
   for (const schedule of schedules) {
+    if (await isVdsBackupService(schedule.serviceId)) {
+      const outcome = await runVdsSchedule(schedule, now);
+      vds[outcome] = (vds[outcome] ?? 0) + 1;
+      if (outcome === "queued") processedIds.push(schedule.id);
+      else skipped += 1;
+      continue;
+    }
+
     const result = await runServiceBackup(schedule.serviceId, {
       scheduleId: schedule.id,
       type: "FULL",
@@ -83,9 +96,13 @@ export async function runScheduledBackups(): Promise<CronJobResult> {
     }
   }
 
+  const maintenance = await runVdsBackupMaintenance(now);
+
   return {
     processed: processedIds.length,
     skipped,
     ids: processedIds,
+    vds,
+    maintenance,
   };
 }

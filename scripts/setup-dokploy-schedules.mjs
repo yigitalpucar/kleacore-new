@@ -32,7 +32,8 @@ export const JOBS = [
   { name: "KLEACORE: Domain Senkronu (Gri)", cron: "0 1 * * *", job: "domain-sync" },
   { name: "KLEACORE: Domain Yenileme Faturaları", cron: "30 1 * * *", job: "domain-renewals" },
   { name: "KLEACORE: Günlük Faturalama", cron: "0 2 * * *", job: "daily-billing" },
-  { name: "KLEACORE: Yedeklemeler", cron: "0 3 * * *", job: "run-backups" },
+  // Hourly: VDS schedules run in their own hour window (BackupSchedule.hour).
+  { name: "KLEACORE: Yedeklemeler", cron: "15 * * * *", job: "run-backups" },
   { name: "KLEACORE: SSL Süre Kontrolü", cron: "0 4 * * *", job: "ssl-expiry" },
   // Disk / bandwidth of hosting accounts (one queued job per WHM instance).
   { name: "KLEACORE: Hosting Kullanım Senkronu", cron: "30 4 * * *", job: "usage-sync" },

@@ -44,6 +44,9 @@ const cases: Array<{ type: EventType; payload: Record<string, unknown>; template
   { type: "ticket.replied", payload: { ticketId: "t-1", ticketNumber: "T-1", subject: "Konu", customerId: "cus-1", authorRole: "STAFF", senderName: "Destek", messagePreview: "Merhaba" }, template: "support.ticket-replied", dedupeKey: "ticket.replied:evt-1" },
   { type: "ticket.replied", payload: { ticketId: "t-1", ticketNumber: "T-1", subject: "Konu", customerId: "cus-1", authorRole: "CUSTOMER", senderName: "Ayşe", messagePreview: "Merhaba" }, template: "admin.ticket-customer-reply", dedupeKey: "ticket.replied:evt-1" },
   { type: "user.password_changed", payload: { userId: "cus-1", changedAt: at, method: "reset" }, template: "auth.password-changed", dedupeKey: "password.changed:evt-1" },
+  { type: "backup.completed", payload: { backupId: "bk-1", serviceId: "svc-1", customerId: "cus-1", serviceLabel: "VDS", trigger: "SCHEDULED", sizeMB: 2048, completedAt: at, notifyCustomer: true }, template: "service.backup-completed", dedupeKey: "backup.completed:bk-1" },
+  { type: "backup.failed", payload: { backupId: "bk-1", serviceId: "svc-1", customerId: "cus-1", serviceLabel: "VDS", trigger: "MANUAL", operation: "backup", error: "x", notifyCustomer: true }, template: "service.backup-failed", dedupeKey: "backup.failed:bk-1:backup:evt-1" },
+  { type: "backup.restored", payload: { backupId: "bk-1", serviceId: "svc-1", customerId: "cus-1", serviceLabel: "VDS", backupCreatedAt: at }, template: "service.backup-restored", dedupeKey: "backup.restored:evt-1" },
 ];
 
 function event(type: EventType, payload: Record<string, unknown>): DispatchedEvent {
@@ -75,6 +78,15 @@ describe("notifications subscriber", () => {
       await planNotifications(
         event("service.suspended", { serviceId: "s", customerId: "c", serviceLabel: "x", reason: "r", suspendedAt: at, notify: false })
       )
+    ).toEqual([]);
+  });
+
+  it("sends backup notices only when the instance enables them, never for final backups", async () => {
+    const base = { backupId: "bk-1", serviceId: "s", customerId: "c", serviceLabel: "VDS", completedAt: at };
+    expect(await planNotifications(event("backup.completed", { ...base, trigger: "MANUAL" }))).toEqual([]);
+    expect(await planNotifications(event("backup.completed", { ...base, trigger: "FINAL", notifyCustomer: true }))).toEqual([]);
+    expect(
+      await planNotifications(event("backup.failed", { ...base, trigger: "SCHEDULED", operation: "backup", error: "x", notifyCustomer: false }))
     ).toEqual([]);
   });
 

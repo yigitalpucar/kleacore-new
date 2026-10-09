@@ -6,8 +6,9 @@ export interface EnqueueOptions {
   /**
    * Idempotency key. On an `exclusive` queue a second enqueue with the same
    * key is dropped while a job with that key is queued, waiting for a retry
-   * or running. Rejected on `standard` queues, where it would silently not
-   * deduplicate.
+   * or running. On a `singleton` queue it is a concurrency group (one active
+   * job per key, the rest wait). Rejected on `standard` queues, where it
+   * would silently not deduplicate.
    */
   singletonKey?: string;
   /** Run no earlier than this date, or this many seconds from now. */
@@ -39,7 +40,7 @@ export async function enqueue<N extends JobName>(
   const definition = jobRegistry.get(name);
   const data = jobRegistry.parse(name, payload) as object;
 
-  if (options.singletonKey && definition.queue.policy !== "exclusive") {
+  if (options.singletonKey && definition.queue.policy !== "exclusive" && definition.queue.policy !== "singleton") {
     throw new Error(`Job "${name}" uses the ${definition.queue.policy} policy; singletonKey would not deduplicate`);
   }
 
