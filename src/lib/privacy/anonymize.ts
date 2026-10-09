@@ -6,7 +6,7 @@ import { createLogger } from "@/lib/logger";
 import { isPositive } from "@/lib/money";
 import { getStorageDriver } from "@/lib/storage";
 import { getKycConfig } from "@/lib/kyc/settings";
-import { KYC_APPROVED_RETENTION_YEARS, planKycErasure } from "@/lib/kyc/retention";
+import { planKycErasure } from "@/lib/kyc/retention";
 import { LOGIN_EVENT_RETENTION_DAYS } from "./maintenance";
 import { DataRequestError } from "./requests";
 
@@ -26,8 +26,9 @@ const log = createLogger("privacy.anonymize");
  *    company, tax number/office, address) stays on the user row as well;
  *  - legal consent records (distance-sales / KVKK acceptance proof);
  *  - the KVKK request itself (proof that it was answered);
- *  - approved KYC documents while the 5651 retention runs (last server
- *    service ended < KYC_APPROVED_RETENTION_YEARS ago, src/lib/kyc/retention.ts);
+ *  - approved KYC documents while the 5651 retention runs
+ *    (kyc_approved_retention_days_after_service_end after the last server
+ *    service ended, same rule as the kyc-retention job);
  *  - sign-in history (security log) until the normal LOGIN_EVENT_RETENTION_DAYS
  *    purge; its e-mail column is anonymised.
  * Staff API tokens the account still owns are revoked.
@@ -160,7 +161,7 @@ export function buildAnonymizationPlan(snapshot: AnonymizationSnapshot): Anonymi
     retained.push({
       label: "Onaylı kimlik belgeleri (KYC)",
       count: c.kycDocumentsRetained,
-      detail: `5651 sayılı Kanun: sunucu hizmetinin bitişinden itibaren ${KYC_APPROVED_RETENTION_YEARS} yıl saklanır${until}; sonra silinir.`,
+      detail: `5651 sayılı Kanun: son sunucu hizmetinin bitişinden sonraki saklama süresi boyunca tutulur${until}; sonra dosyalar otomatik silinir.`,
     });
   }
 
@@ -183,7 +184,7 @@ export async function loadAnonymizationSnapshot(userId: string, client: Client =
   if (!user) throw new DataRequestError("NO_USER", "Hesap bulunamadı");
 
   const ticketWhere = { customerId: userId };
-  const kyc = await planKycErasure(client, userId, (await getKycConfig()).requiredCategories, now);
+  const kyc = await planKycErasure(client, userId, await getKycConfig(), now);
   const [
     openServices,
     unpaidInvoices,
@@ -349,7 +350,7 @@ export async function applyAnonymization(
         })) ?? []
       ).slice();
       // KYC: files of the deletable documents go with the attachments (after commit).
-      const kyc = await planKycErasure(tx, userId, kycConfig.requiredCategories, now);
+      const kyc = await planKycErasure(tx, userId, kycConfig, now);
       for (const doc of kyc.deletable) {
         if (!doc.deletedAt) attachments.push({ storageKey: doc.storageKey, storageDriver: doc.storageDriver });
       }

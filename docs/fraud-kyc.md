@@ -18,8 +18,8 @@ kullanır: ödeme alınabilir, ama kurulum onaya kadar bekler.
 
 - Puanlar toplanır. Toplam ≥ `fraud_review_threshold` (50) → **İnceleme bekliyor** (`FraudCheck.status = REVIEW`).
   Örnek: ilk VDS siparişi + yabancı IP = 55 → inceleme (yol haritasındaki "ilk sipariş VDS + yabancı IP/kart → manuel onay").
-- Toplam ≥ `fraud_block_threshold` (varsayılan 0 = kapalı) → onaya kadar **ödeme alınmaz**: sepet ödeme oturumu açmaz,
-  `payInvoice`, kayıtlı kartla ödeme ve Kuveyt Türk kart formu reddeder (`getPaymentBlock`). Reddedilen siparişin de ödemesi alınmaz.
+- Toplam ≥ `fraud_block_threshold` (varsayılan **80**, sahip kararı; 0 = kapalı) → onaya kadar **ödeme alınmaz**: sepet ödeme oturumu açmaz,
+  `payInvoice`, kayıtlı kartla ödeme, Kuveyt Türk kart formu, havale bildirimi ve havale onayı reddeder (`getPaymentBlock`). Reddedilen siparişin de ödemesi alınmaz.
 - Değerlendirme zamanları:
   1. **Sipariş (checkout)**: `checkoutCart` transaction'ında sipariş başına bir `FraudCheck` satırı (savepoint içinde; hata satışı durdurmaz).
   2. **Ödeme**: kart verisi bilindiğinde kart kuralları yeniden puanlanır (`reevaluateOrderAtPayment`). PASSED → REVIEW olabilir;
@@ -98,17 +98,17 @@ Sekmeler: İnceleme bekleyen (REVIEW), Kimlik bekleyen (KYC nedeniyle bekletilen
 - Yönetim: `/yonetim/kyc` (kuyruk) ve `/yonetim/kyc/:userId` (belgeler, hesap bilgileri, bekleyen siparişler, açık rıza kaydı,
   onay/ret). Onay → bekleyen siparişler serbest, `kyc.approved` e-postası. Ret (neden zorunlu, müşteriye iletilir) →
   `kyc.rejected` e-postası, belgelere `deleteAfter = ret + kyc_rejected_retention_days` yazılır; müşteri yeniden yükleyebilir.
-- Yetki: `kyc.review` yalnızca ADMIN rolünde (KVKK: en az erişim). Destek ekibine verilecekse `permissions.ts`'te SUPPORT listesine eklenmeli.
+- Yetki: `kyc.review` ADMIN ve SUPPORT rollerinde (sahip kararı).
 
 ### Saklama (retention) kararı
 
 - **Reddedilen belgeler**: ret tarihinden `kyc_rejected_retention_days` (varsayılan 30) gün sonra günlük `kyc-retention`
   cron'u dosyayı depolamadan siler, satır `deletedAt` ile denetim kaydı olarak kalır. İş idempotent (tekrar/üst üste çalışma güvenli).
-- **Onaylanan belgeler otomatik silinmez.** Gerekçe: 5651 kapsamında sunucu hizmeti verilen kişinin tespiti hizmet süresince
-  gerekir; yer sağlayıcı trafik/kimlik kayıtları için yönetmelikteki saklama (1–2 yıl) ve olası adli talepler hizmet bittikten
-  sonra da bir süre saklamayı gerektirir. Öneri: **son sunucu hizmetinin bitişinden itibaren 2 yıl** sonra silme — bu süre
-  sahip/hukuk onayı bekliyor; onaylanınca aynı cron'a "APPROVED + son sunucu hizmeti bitişi + N yıl" kuralı eklenebilir.
-  O zamana kadar silme talepleri (KVKK m.11) manuel değerlendirilir.
+- **Onaylanan belgeler** (sahip kararı): müşterinin son sunucu kategorisi hizmeti (vds/server/datacenter) sona erdikten
+  `kyc_approved_retention_days_after_service_end` (varsayılan 730) gün sonra aynı `kyc-retention` cron'u **dosyaları** siler;
+  doğrulama kararı (kycStatus, kycReviewedAt/By) ve belge satırları (`deletedAt`) kalır. Aktif sunucu hizmeti olan müşteriye
+  dokunulmaz; hiç sunucu hizmeti olmamışsa sayaç onay tarihinden başlar. KVKK silme talebinde (anonimleştirme) aynı kural
+  uygulanır: süre dolmamışsa onaylı belgeler "korunacak" listesinde gösterilir, diğer belgeler dosya + satır olarak silinir.
 
 ## 5. Olaylar ve şablonlar
 

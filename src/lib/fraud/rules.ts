@@ -59,7 +59,9 @@ export interface FraudConfig {
 export const DEFAULT_FRAUD_CONFIG: FraudConfig = {
   enabled: true,
   reviewThreshold: 50,
-  blockThreshold: 0,
+  // Owner decision (Faz 4): orders scoring ≥ 80 cannot be paid until a staff
+  // member approves the review. 0 turns blocking off.
+  blockThreshold: 80,
   weights: DEFAULT_RULE_WEIGHTS,
   sameIpLimit: 3,
   trustCfHeader: true,

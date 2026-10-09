@@ -58,8 +58,9 @@ export default async function KimlikDogrulamaPage() {
           <p>
             <strong className="text-foreground">KVKK:</strong> Belgeleriniz herkese kapalı bir alanda saklanır ve yalnızca kimlik
             doğrulama yetkisi olan personelimiz tarafından görüntülenir; her görüntüleme kayıt altına alınır. Reddedilen belgeler{" "}
-            {config.rejectedRetentionDays} gün sonra otomatik olarak silinir. Onaylanan belgeler, sunucu hizmetiniz sürdüğü ve
-            yasal saklama yükümlülüğü devam ettiği sürece saklanır. Belgelerinizi yalnızca bu amaçla kullanırız.
+            {config.rejectedRetentionDays} gün sonra otomatik olarak silinir. Onaylanan belgeler sunucu hizmetiniz sürdüğü
+            sürece saklanır; son sunucu hizmetiniz sona erdikten {config.approvedRetentionDaysAfterServiceEnd} gün sonra
+            dosyalar otomatik olarak silinir (yalnızca doğrulama kararının kaydı kalır). Belgelerinizi yalnızca bu amaçla kullanırız.
           </p>
           <p>
             Bireysel hesaplarda kimlik kartınızın <strong className="text-foreground">ön ve arka yüzünü</strong>, kurumsal

@@ -50,7 +50,7 @@ const fx = vi.hoisted(() => {
 
 vi.mock("@/lib/db", () => ({ db: fx.client }));
 vi.mock("@/lib/kyc/settings", () => ({
-  getKycConfig: async () => ({ requiredCategories: ["vds", "server", "datacenter"], rejectedRetentionDays: 30 }),
+  getKycConfig: async () => ({ requiredCategories: ["vds", "server", "datacenter"], rejectedRetentionDays: 30, approvedRetentionDaysAfterServiceEnd: 730 }),
 }));
 vi.mock("@/lib/storage", () => ({
   getStorageDriver: () => ({ delete: async (key: string) => void fx.deleted.push(key) }),
@@ -247,7 +247,7 @@ describe("KYC documents on erasure", () => {
     { id: "kyc-4", storageDriver: "local", storageKey: "kyc/2026/07/gone", deletedAt: new Date("2026-08-01"), deleteAfter: new Date("2026-08-01") },
   ];
 
-  it("retains approved documents for 2 years after the last server service; deletes the rest (files + rows)", async () => {
+  it("retains approved documents for 730 days after the last server service; deletes the rest (files + rows)", async () => {
     fx.state.user = { ...fx.state.user, kycStatus: "APPROVED" };
     fx.state.kycDocuments = docs;
     fx.state.serverServices = [{ status: "CANCELLED", cancelledAt: new Date("2026-04-01"), expiresAt: null, updatedAt: new Date("2026-04-01") }];
@@ -255,7 +255,7 @@ describe("KYC documents on erasure", () => {
     const preview = await previewAnonymizationForRequest("dr-1", new Date("2026-10-09"));
     expect(preview.retained.find((l) => l.label.startsWith("Onaylı kimlik"))).toMatchObject({
       count: 2,
-      detail: expect.stringContaining("2028-04-01"),
+      detail: expect.stringContaining("2028-03-31"),
     });
     expect(preview.changes.find((l) => l.label.startsWith("Kimlik doğrulama"))?.count).toBe(2);
 

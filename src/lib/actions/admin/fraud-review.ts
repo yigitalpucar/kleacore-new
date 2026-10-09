@@ -93,6 +93,7 @@ export async function saveFraudSettingsAction(formData: FormData): Promise<Actio
     [FRAUD_SETTING_KEYS.blockThreshold, "blockThreshold", 0, 1000],
     [FRAUD_SETTING_KEYS.sameIpLimit, "sameIpLimit", 0, 100],
     [KYC_SETTING_KEYS.rejectedRetentionDays, "rejectedRetentionDays", 0, 3650],
+    [KYC_SETTING_KEYS.approvedRetentionDaysAfterServiceEnd, "approvedRetentionDays", 0, 3650],
     ...FRAUD_RULE_IDS.map((rule) => [ruleWeightSettingKey(rule), `weight_${rule}`, 0, 100] as [string, string, number, number]),
   ];
   for (const [key, field, min, max] of numeric) {

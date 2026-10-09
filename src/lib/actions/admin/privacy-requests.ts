@@ -81,7 +81,8 @@ export async function previewAnonymizationAction(requestId: string) {
 }
 
 export async function applyAnonymizationAction(requestId: string, confirmEmail: string) {
-  const session = await requirePermission("privacy.manage");
+  // Irreversible: ADMIN only (privacy.anonymize); SUPPORT may run the dry run.
+  const session = await requirePermission("privacy.anonymize");
   try {
     const plan = await applyAnonymization(requestId, { id: session.user.id }, String(confirmEmail ?? ""));
     refresh(requestId);

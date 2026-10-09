@@ -183,8 +183,8 @@ karşılanması. Hukuki sebepler: kanunlarda açıkça öngörülme ve hukuki y�
 <p>Belgeler herkese kapalı, şifreli bağlantıyla erişilen özel bir depolama alanında tutulur ve yalnızca kimlik
 doğrulama yetkisi verilmiş personel tarafından görüntülenebilir; her görüntüleme kayıt altına alınır.
 Reddedilen belgeler, ret tarihinden itibaren ayarlarda belirtilen süre sonunda otomatik olarak silinir.
-Onaylanan belgeler, sunucu hizmetiniz devam ettiği sürece ve hizmetin sona ermesinden sonra yasal yükümlülüklerin
-gerektirdiği süre boyunca saklanır, ardından silinir.</p>
+Onaylanan belgeler, sunucu hizmetiniz devam ettiği sürece ve son sunucu hizmetinizin sona ermesinden itibaren
+2 yıl (730 gün) saklanır, ardından dosyalar otomatik olarak silinir; yalnızca doğrulama kararının kaydı kalır.</p>
 
 <h2>4. Aktarım</h2>
 <p>Belgeler yalnızca kanunen yetkili kamu kurum ve kuruluşlarına, talep halinde aktarılır. Veri sorumlusu

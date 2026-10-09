@@ -55,7 +55,7 @@ const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(
 beforeEach(() => {
   mocks.db.kycDocument.findUnique.mockResolvedValue({ ...storedDoc });
   mocks.storageGet.mockResolvedValue(Buffer.from("image-bytes"));
-  mocks.getKycConfig.mockResolvedValue({ requiredCategories: ["vds"], rejectedRetentionDays: 30 });
+  mocks.getKycConfig.mockResolvedValue({ requiredCategories: ["vds"], rejectedRetentionDays: 30, approvedRetentionDaysAfterServiceEnd: 730 });
   mocks.releaseHeldOrdersForCustomer.mockResolvedValue({ held: 1, released: 1 });
   mocks.tx.user.updateMany.mockResolvedValue({ count: 1 });
   mocks.db.user.updateMany.mockResolvedValue({ count: 1 });
@@ -67,7 +67,7 @@ describe("KYC document access control", () => {
     expect(canViewKycDocument({ id: "cus-1", role: "CUSTOMER" }, doc)).toBe(true);
     expect(canViewKycDocument({ id: "adm-1", role: "ADMIN" }, doc)).toBe(true);
     expect(canViewKycDocument({ id: "cus-2", role: "CUSTOMER" }, doc)).toBe(false);
-    expect(canViewKycDocument({ id: "sup-1", role: "SUPPORT" }, doc)).toBe(false);
+    expect(canViewKycDocument({ id: "sup-1", role: "SUPPORT" }, doc)).toBe(true);
     expect(canViewKycDocument({ id: "bil-1", role: "BILLING" }, doc)).toBe(false);
     expect(canViewKycDocument(null, doc)).toBe(false);
   });
@@ -87,7 +87,7 @@ describe("KYC document access control", () => {
 
   it("answers 404 to other customers and staff without kyc.review (no id probing), 401 without session", async () => {
     expect(await loadKycDocumentForViewer({ id: "cus-2", role: "CUSTOMER" }, DOC_ID)).toEqual({ ok: false, status: 404 });
-    expect(await loadKycDocumentForViewer({ id: "sup-1", role: "SUPPORT" }, DOC_ID)).toEqual({ ok: false, status: 404 });
+    expect(await loadKycDocumentForViewer({ id: "bil-1", role: "BILLING" }, DOC_ID)).toEqual({ ok: false, status: 404 });
     expect(await loadKycDocumentForViewer(null, DOC_ID)).toEqual({ ok: false, status: 401 });
     expect(await loadKycDocumentForViewer({ id: "adm-1", role: "ADMIN" }, "../etc/passwd")).toEqual({ ok: false, status: 404 });
     expect(mocks.storageGet).not.toHaveBeenCalled();

@@ -148,7 +148,7 @@ export default async function FaturaDetayPage(props: FaturaDetayPageProps) {
 
   return (
     <>
-      {invoice.status === "PAID" ? <WaitingOrdersNotice userId={invoice.customerId} /> : null}
+      <WaitingOrdersNotice userId={invoice.customerId} />
       <FaturaDetayContent
         invoice={serializedInvoice}
         paymentNotice={paymentNotice}

@@ -32,6 +32,7 @@ export default async function FraudSettingsPage() {
           weights: config.weights,
           kycCategories: kyc.requiredCategories.join(", "),
           rejectedRetentionDays: kyc.rejectedRetentionDays,
+          approvedRetentionDays: kyc.approvedRetentionDaysAfterServiceEnd,
         }}
         rules={FRAUD_RULE_IDS.map((rule) => ({ id: rule, label: FRAUD_RULE_LABELS[rule], defaultWeight: DEFAULT_RULE_WEIGHTS[rule] }))}
       />

@@ -16,6 +16,7 @@ interface Initial {
   weights: Record<string, number>;
   kycCategories: string;
   rejectedRetentionDays: number;
+  approvedRetentionDays: number;
 }
 
 function Toggle({ name, label, hint, defaultChecked }: { name: string; label: string; hint: string; defaultChecked: boolean }) {
@@ -107,6 +108,13 @@ export function FraudSettingsForm({
           </FormField>
           <FormField label="Reddedilen belgelerin silinmesi (gün)" htmlFor="rejectedRetentionDays" hint="Ret tarihinden bu kadar gün sonra dosyalar silinir">
             <Input id="rejectedRetentionDays" name="rejectedRetentionDays" type="number" min={0} max={3650} defaultValue={initial.rejectedRetentionDays} />
+          </FormField>
+          <FormField
+            label="Onaylı belgelerin silinmesi (gün)"
+            htmlFor="approvedRetentionDays"
+            hint="Müşterinin son sunucu hizmeti bittikten bu kadar gün sonra onaylı belge dosyaları silinir (karar kaydı kalır). Aktif sunucu hizmeti olan müşteriye dokunulmaz."
+          >
+            <Input id="approvedRetentionDays" name="approvedRetentionDays" type="number" min={0} max={3650} defaultValue={initial.approvedRetentionDays} />
           </FormField>
         </div>
       </FormSection>

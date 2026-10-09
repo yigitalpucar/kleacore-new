@@ -151,7 +151,7 @@ export function SepetContent({
 
       clearCart();
       if (result.data && "paymentBlocked" in result.data && result.data.paymentBlocked) {
-        toast.info("Siparişiniz oluşturuldu ve kısa bir güvenlik incelemesine alındı. Onaylandığında ödemeyi panelden tamamlayabilirsiniz.");
+        toast.info("Siparişiniz güvenlik incelemesinde, onaylandığında ödeme yapabilirsiniz. Sonucu e-posta ile bildireceğiz.");
         router.push("/musteri/panel");
         return;
       }

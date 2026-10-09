@@ -21,7 +21,7 @@ describe("admin nav filtering", () => {
     expect(nav).toContain("/yonetim/personel");
   });
 
-  it("SUPPORT sees tickets, customers, services, domains, activity — no billing or system pages", () => {
+  it("SUPPORT sees tickets, customers, services, domains, activity, KYC, KVKK — no billing or system pages", () => {
     expect(hrefs("SUPPORT").sort()).toEqual(
       [
         "/yonetim",
@@ -32,6 +32,8 @@ describe("admin nav filtering", () => {
         "/yonetim/destek",
         "/yonetim/aktivite",
         "/yonetim/api-tokenlari",
+        "/yonetim/kyc",
+        "/yonetim/kvkk-talepleri",
       ].sort()
     );
   });
@@ -41,7 +43,7 @@ describe("admin nav filtering", () => {
     for (const href of ["/yonetim/faturalar", "/yonetim/efatura", "/yonetim/raporlar", "/yonetim/siparisler", "/yonetim/musteriler"]) {
       expect(nav).toContain(href);
     }
-    for (const href of ["/yonetim/destek", "/yonetim/ayarlar", "/yonetim/personel", "/yonetim/urunler", "/yonetim/hizmetler"]) {
+    for (const href of ["/yonetim/destek", "/yonetim/ayarlar", "/yonetim/personel", "/yonetim/urunler", "/yonetim/hizmetler", "/yonetim/kyc", "/yonetim/kvkk-talepleri"]) {
       expect(nav).not.toContain(href);
     }
   });

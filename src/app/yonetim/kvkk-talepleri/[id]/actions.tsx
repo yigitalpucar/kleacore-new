@@ -45,7 +45,16 @@ function kb(bytes: number | null) {
   return bytes ? `${Math.max(1, Math.round(bytes / 1024)).toLocaleString("tr-TR")} KB` : "";
 }
 
-export function DataRequestActions({ request, notes }: { request: RequestState; notes: NoteRow[] }) {
+export function DataRequestActions({
+  request,
+  notes,
+  canAnonymize = false,
+}: {
+  request: RequestState;
+  notes: NoteRow[];
+  /** privacy.anonymize (ADMIN): may apply; others see the dry run only. */
+  canAnonymize?: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<"COMPLETED" | "REJECTED">("COMPLETED");
@@ -222,7 +231,12 @@ export function DataRequestActions({ request, notes }: { request: RequestState; 
                       ))}
                     </ul>
                   </div>
-                  {plan.canApply ? (
+                  {plan.canApply && !canAnonymize ? (
+                    <p className="border-t border-dashed pt-3 text-sm text-muted-foreground">
+                      Anonimleştirmeyi yalnızca yönetici uygulayabilir.
+                    </p>
+                  ) : null}
+                  {plan.canApply && canAnonymize ? (
                     <div className="space-y-3 border-t border-dashed pt-3">
                       <FormField label={`Onaylamak için hesabın e-postasını yazın (${plan.email})`} htmlFor="confirm-email">
                         <Input

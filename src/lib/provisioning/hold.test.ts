@@ -15,7 +15,7 @@ vi.mock("./internal", () => ({ prepareOrderProvisioning: mocks.prepareOrderProvi
 import type { Prisma } from "@prisma/client";
 import { holdOrderProvisioningIfNeeded, holdReasonsFor, releaseHeldOrder, releaseHeldOrdersForCustomer } from "./hold";
 
-const KYC = { requiredCategories: ["vds", "server", "datacenter"], rejectedRetentionDays: 30 };
+const KYC = { requiredCategories: ["vds", "server", "datacenter"], rejectedRetentionDays: 30, approvedRetentionDaysAfterServiceEnd: 730 };
 
 type FakeOrder = {
   id: string;

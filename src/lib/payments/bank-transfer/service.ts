@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { finalizeFulfilledInvoices, fulfillInvoicePayment } from "@/lib/payments/fulfillment";
 import { emitEvent } from "@/lib/events/emit";
 import { isPositive, parseMoney, roundHalfUp, toFixed2, toNumber } from "@/lib/money";
+import { getPaymentBlock } from "@/lib/fraud/evaluate";
 
 export class BankTransferError extends Error {}
 
@@ -63,6 +64,11 @@ export async function submitBankTransferNotice(input: SubmitNoticeInput) {
     if (!OPEN_STATUSES.has(invoice.status)) {
       throw new BankTransferError("Bu fatura ödemeye açık değil.");
     }
+
+    // Fraud review block (docs/fraud-kyc.md): no havale notice while the
+    // order waits for a reviewer or was rejected — same rule as card/balance.
+    const reviewBlock = await getPaymentBlock([invoice.id], tx);
+    if (reviewBlock) throw new BankTransferError(reviewBlock);
 
     const pending = await tx.bankTransferNotice.count({
       where: { invoiceId: invoice.id, status: "PENDING" },
@@ -175,6 +181,13 @@ export async function approveBankTransferNotice(noticeId: string, adminId: strin
         claimed.invoice.status === "CANCELLED"
           ? "Fatura iptal edilmiş; bildirimi reddedin."
           : "Fatura zaten ödenmiş; bildirimi reddedin veya iade edin."
+      );
+    }
+
+    // A notice sent before the order was blocked must not pay it either.
+    if (await getPaymentBlock([claimed.invoiceId], tx)) {
+      throw new BankTransferError(
+        "Sipariş güvenlik incelemesinde; önce Siparişler → İnceleme'den onaylayın, sonra bildirimi onaylayın."
       );
     }
 

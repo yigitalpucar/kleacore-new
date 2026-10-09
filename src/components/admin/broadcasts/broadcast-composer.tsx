@@ -299,6 +299,11 @@ export function BroadcastComposer({
             description="İndirim, yeni ürün, tanıtım. Yalnızca ticari ileti onayı verenlere gider; e-postada abonelikten çıkma bağlantısı olur."
           />
         </div>
+        {kind === "MARKETING" ? (
+          <p role="note" className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+            Kampanya içerikli ileti göndermeden önce İYS kaydı ve alıcı onaylarının İYS&apos;de olması gerekir.
+          </p>
+        ) : null}
       </FormSection>
 
       <FormSection

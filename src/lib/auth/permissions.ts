@@ -45,10 +45,12 @@ export const PERMISSIONS = [
   "status.manage",
   /** Own Admin API tokens (/api/admin/v1); scopes never exceed the owner's permissions. */
   "api_tokens.manage",
-  /** Identity (KYC) documents: view, approve, reject. ADMIN only by default (KVKK: least access). */
+  /** Identity (KYC) documents: view, approve, reject. ADMIN + SUPPORT (owner decision, Faz 4). */
   "kyc.review",
-  /** KVKK data-subject requests: exports, anonymisation (ADMIN only by default). */
+  /** KVKK data-subject requests: status, notes, replies, exports, anonymisation dry run. ADMIN + SUPPORT. */
   "privacy.manage",
+  /** Applying a reviewed KVKK anonymisation (irreversible). ADMIN only. */
+  "privacy.anonymize",
   /** Bulk announcements (e-mail / SMS) to customers — ADMIN only by default. */
   "broadcast.send",
 ] as const;
@@ -68,7 +70,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<StaffRole, string> = {
   ADMIN: "Tüm yetkiler.",
-  SUPPORT: "Destek talepleri, müşteri/hizmet/alan adı görüntüleme, kendi aktivite kayıtları.",
+  SUPPORT: "Destek talepleri, müşteri/hizmet/alan adı görüntüleme, kimlik doğrulama (KYC) ve KVKK başvuruları, kendi aktivite kayıtları.",
   BILLING: "Faturalar, iade, havale onayı, e-fatura, raporlar; müşteri ve sipariş görüntüleme.",
 };
 
@@ -81,6 +83,8 @@ const ROLE_PERMISSIONS: Record<Exclude<StaffRole, "ADMIN">, readonly Permission[
     "domains.view",
     "activity.view_own",
     "api_tokens.manage",
+    "kyc.review",
+    "privacy.manage",
   ],
   BILLING: [
     "customers.view",

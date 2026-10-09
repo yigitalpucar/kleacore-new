@@ -31,6 +31,8 @@ function createFakeDb() {
     notices: [] as Row[],
     payments: [] as Row[],
     accounts: [{ id: "acc-1", isActive: true }] as Row[],
+    /** Fraud checks of the invoice's order (getPaymentBlock). */
+    fraudChecks: [] as Array<{ invoiceId: string; status: string; paymentBlocked: boolean }>,
   };
   let seq = 0;
   let chain: Promise<unknown> = Promise.resolve();
@@ -40,6 +42,13 @@ function createFakeDb() {
       const run = chain.then(() => fn(db));
       chain = run.catch(() => undefined);
       return run;
+    },
+    fraudCheck: {
+      findMany: async ({ where }: { where: { order: { invoice: { id: { in: string[] } } } } }) =>
+        state.fraudChecks
+          .filter((check) => where.order.invoice.id.in.includes(check.invoiceId))
+          .filter((check) => (check.status === "REVIEW" && check.paymentBlocked) || check.status === "REJECTED")
+          .map((check) => ({ status: check.status })),
     },
     invoice: {
       findUnique: async ({ where }: { where: { id: string } }) => state.invoices.get(where.id) ?? null,
@@ -153,6 +162,32 @@ describe("submitBankTransferNotice", () => {
     await expect(submitBankTransferNotice({ ...notice, customerId: "cus-2" })).rejects.toThrow(/bulunamadı/);
     store.state.invoices.get("inv-1")!.status = "PAID";
     await expect(submitBankTransferNotice(notice)).rejects.toThrow(/ödemeye açık değil/);
+  });
+});
+
+describe("fraud review block (havale must not bypass it)", () => {
+  it("refuses a havale notice while the order's review blocks payment, or after a rejection", async () => {
+    store.state.fraudChecks.push({ invoiceId: "inv-1", status: "REVIEW", paymentBlocked: true });
+    await expect(submitBankTransferNotice(notice)).rejects.toThrow(/güvenlik incelemesinde, onaylandığında ödeme yapabilirsiniz/);
+    store.state.fraudChecks[0].status = "REJECTED";
+    await expect(submitBankTransferNotice(notice)).rejects.toThrow(/onaylanmadı/);
+    expect(store.state.notices).toHaveLength(0);
+    expect(store.state.payments).toHaveLength(0);
+  });
+
+  it("allows a notice when the review only holds provisioning (no payment block)", async () => {
+    store.state.fraudChecks.push({ invoiceId: "inv-1", status: "REVIEW", paymentBlocked: false });
+    await submitBankTransferNotice(notice);
+    expect(store.state.notices).toHaveLength(1);
+  });
+
+  it("staff cannot approve a notice whose order got blocked after it was sent", async () => {
+    await submitBankTransferNotice(notice);
+    store.state.fraudChecks.push({ invoiceId: "inv-1", status: "REVIEW", paymentBlocked: true });
+    await expect(approveBankTransferNotice(store.state.notices[0].id, "admin-1")).rejects.toThrow(/güvenlik incelemesinde/);
+    expect(mocks.fulfillInvoicePayment).not.toHaveBeenCalled();
+    // In Postgres the throw rolls the claim back (same transaction), so the
+    // notice stays pending for after the review; the fake db has no rollback.
   });
 });
 

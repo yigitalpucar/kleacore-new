@@ -14,6 +14,7 @@ import {
   type DataRequestTypeValue,
 } from "@/lib/privacy/labels";
 import { requirePermission } from "@/lib/utils/auth-helpers";
+import { hasPermission } from "@/lib/auth/permissions";
 import { DataRequestActions } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,8 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "KVKK başvurusu" };
 
 export default async function KvkkTalebiPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePermission("privacy.manage");
+  const session = await requirePermission("privacy.manage");
+  const canAnonymize = hasPermission(session.user.role, "privacy.anonymize");
   const { id } = await params;
   const request = await getDataRequestDetail(id);
   if (!request) notFound();
@@ -86,6 +88,7 @@ export default async function KvkkTalebiPage({ params }: { params: Promise<{ id:
         </div>
 
         <DataRequestActions
+          canAnonymize={canAnonymize}
           request={{
             id: request.id,
             type: request.type as DataRequestTypeValue,

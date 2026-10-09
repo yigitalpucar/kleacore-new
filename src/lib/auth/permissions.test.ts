@@ -16,10 +16,28 @@ describe("permission matrix", () => {
     expect(permissionsForRole("ADMIN")).toEqual(PERMISSIONS);
   });
 
-  it("SUPPORT: tickets + read-only customers/services/domains + own activity", () => {
+  it("SUPPORT: tickets + read-only customers/services/domains + KYC + KVKK requests + own activity", () => {
     expect([...permissionsForRole("SUPPORT")].sort()).toEqual(
-      ["activity.view_own", "api_tokens.manage", "customers.view", "domains.view", "services.view", "tickets.reply", "tickets.view"].sort()
+      [
+        "activity.view_own",
+        "api_tokens.manage",
+        "customers.view",
+        "domains.view",
+        "kyc.review",
+        "privacy.manage",
+        "services.view",
+        "tickets.reply",
+        "tickets.view",
+      ].sort()
     );
+    // Owner decision: SUPPORT handles KYC and KVKK requests, but the
+    // irreversible anonymisation stays ADMIN-only.
+    expect(hasPermission("SUPPORT", "privacy.anonymize")).toBe(false);
+    expect(hasPermission("BILLING", "privacy.anonymize")).toBe(false);
+    expect(hasPermission("ADMIN", "privacy.anonymize")).toBe(true);
+    expect(canAccessRoute("SUPPORT", "/yonetim/kyc")).toBe(true);
+    expect(canAccessRoute("SUPPORT", "/yonetim/kvkk-talepleri/abc")).toBe(true);
+    expect(canAccessRoute("BILLING", "/yonetim/kyc")).toBe(false);
     expect(hasPermission("SUPPORT", "invoices.view")).toBe(false);
     expect(hasPermission("SUPPORT", "customers.edit")).toBe(false);
     expect(hasPermission("SUPPORT", "activity.view")).toBe(false);

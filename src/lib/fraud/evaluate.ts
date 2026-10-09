@@ -233,7 +233,7 @@ export async function reevaluateOrderAtPayment(
 }
 
 export const PAYMENT_BLOCKED_MESSAGE =
-  "Siparişiniz güvenlik incelemesinde. İnceleme tamamlanana kadar ödeme alınamıyor; onaylandığında e-posta ile bilgilendirileceksiniz.";
+  "Siparişiniz güvenlik incelemesinde, onaylandığında ödeme yapabilirsiniz. İnceleme tamamlanınca e-posta ile bilgilendirileceksiniz.";
 export const ORDER_REJECTED_MESSAGE = "Bu sipariş inceleme sonucunda onaylanmadı; ödeme alınamaz.";
 
 /**

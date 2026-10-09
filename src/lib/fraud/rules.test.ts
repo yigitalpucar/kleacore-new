@@ -62,6 +62,11 @@ describe("fraud rule scoring", () => {
     expect(scoreSignals({ ...clean, ipCountry: "NL" }).review).toBe(false);
   });
 
+  it("defaults: review at 50, payment block at 80 (owner decision)", () => {
+    expect(DEFAULT_FRAUD_CONFIG.reviewThreshold).toBe(50);
+    expect(DEFAULT_FRAUD_CONFIG.blockThreshold).toBe(80);
+  });
+
   it("applies the review threshold inclusively and the block threshold only when set", () => {
     const config: FraudConfig = { ...DEFAULT_FRAUD_CONFIG, reviewThreshold: 40, blockThreshold: 0 };
     expect(scoreSignals({ ...clean, disposableEmail: true }, config)).toMatchObject({ score: 40, review: true, block: false });

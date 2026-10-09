@@ -6,7 +6,13 @@ import { parseKycConfig } from "./settings";
 
 describe("KYC settings", () => {
   it("defaults to vds, server, datacenter and 30 days", () => {
-    expect(parseKycConfig({})).toEqual({ requiredCategories: ["vds", "server", "datacenter"], rejectedRetentionDays: 30 });
+    expect(parseKycConfig({})).toEqual({
+      requiredCategories: ["vds", "server", "datacenter"],
+      rejectedRetentionDays: 30,
+      approvedRetentionDaysAfterServiceEnd: 730,
+    });
+    expect(parseKycConfig({ kyc_approved_retention_days_after_service_end: "365" }).approvedRetentionDaysAfterServiceEnd).toBe(365);
+    expect(parseKycConfig({ kyc_approved_retention_days_after_service_end: "x" }).approvedRetentionDaysAfterServiceEnd).toBe(730);
   });
 
   it("parses a custom list, an explicit empty list and invalid retention", () => {
