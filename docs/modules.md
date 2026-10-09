@@ -74,7 +74,7 @@ export const memoryDnsModule = defineModule({
 - `secretFields`: şifreli saklanır, yönetim ekranında `********` gösterilir; boş/maske bırakılırsa mevcut değer korunur. Gizli alanı log'a, `ActivityLog`'a, hata mesajına yazmayın.
 - `configFields` / `productOptionsFields`: Türkçe etiket, ipucu, `placeholder`, `optionLabels` (z.enum), `multiline` (SSH anahtarı gibi). Form bunlardan **otomatik** üretilir (`schema-form.ts` → `components/admin/modules/schema-fields.tsx`). Desteklenen tipler: string (url/email), number (int/min/max), boolean, enum, `z.array(z.string())` (satır/virgül listesi).
 - `capabilities`: isteğe bağlı her metot için yetenek bildirilmeli, bildirilen her yeteneğin metodu olmalı (sözleşme testi kontrol eder):
-  - server: `usage→getUsage`, `bulkUsage→listUsage`, `sso→getSsoUrl`, `password→resetPassword`, `packages→listPackages + resolvePackageName`, `console→getConsoleUrl`, `power→powerAction`, `reinstall→reinstall`, `listAccounts→listAccounts`; `provision`, `changePackage`, `ipam` bilgi amaçlı.
+  - server: `usage→getUsage`, `bulkUsage→listUsage`, `sso→getSsoUrl`, `password→resetPassword`, `packages→listPackages + resolvePackageName`, `console→getConsoleUrl`, `power→powerAction`, `reinstall→reinstall`, `listAccounts→listAccounts`, `backups→createBackup + listBackups + restoreBackup + deleteBackup`; `provision`, `changePackage`, `ipam` bilgi amaçlı.
   - registrar: `bulkAvailability→checkDomainsAvailability`, `tldPricing→fetchTldPricing`, `listDomains`, `eppCode→getEppCode`, `lock→setLock`.
 - `healthCheck(instance)`: "Bağlantıyı test et". Hata → `{ ok: false, message }`; 15 sn zaman aşımı kayıt katmanında. Sonuç `lastHealthAt/lastHealthStatus/lastHealthError` olarak saklanır.
 - `hidden: true`: dondurulmuş modül (Virtualizor, Stripe) — yeni örnek açılamaz, mevcut örnekler çalışır.
@@ -93,7 +93,7 @@ Genel: uzak çağrılar **asla throw etmez**, `IntegrationResult` döner (`{ ok,
 | `suspend(ctx, reason?)`, `unsuspend(ctx)` | `ctx.service.remoteId` üzerinden. |
 | `terminate(ctx)` | Geri alınamaz. Başarıdan sonra köprü hizmetin IP'lerini `releaseIp` ile havuza bırakır. |
 | `changePackage(ctx)` | `ctx.options` **yeni** ürünün seçenekleri. Farklı modül tipine geçiş köprüde reddedilir (`MODULE_MISMATCH`). |
-| `getUsage?`, `getSsoUrl?(ctx, "panel"\|"webmail", { app? })`, `getConsoleUrl?`, `powerAction?(ctx, "start"\|"stop"\|"restart"\|"shutdown")`, `reinstall?(ctx, { templateId?, password?, sshKeys? })`, `listAccounts?()` | Yetenek bildirerek. |
+| `getUsage?`, `getSsoUrl?(ctx, "panel"\|"webmail", { app? })`, `getConsoleUrl?`, `powerAction?(ctx, "start"\|"stop"\|"restart"\|"shutdown")`, `reinstall?(ctx, { templateId?, password?, sshKeys? })`, `listAccounts?()`, `createBackup? / listBackups? / restoreBackup? / deleteBackup?` (yedekler, `docs/modules/proxmox.md` §9) | Yetenek bildirerek. |
 | `listUsage?()` | Örnekteki tüm hesapların kullanımı (günlük senkron). `ServerUsage` MB; limit `undefined` = bilinmiyor, `null` = sınırsız. |
 | `resetPassword?(ctx, password)` | Panel şifresi. Şifreyi log'a/hata mesajına yazmayın. |
 | `listPackages?()`, `resolvePackageName?(options, { sku })` | Salt okunur paket listesi + ürünün kurulumda kullanacağı paket adı (ürün Otomasyon formu doğrular). |

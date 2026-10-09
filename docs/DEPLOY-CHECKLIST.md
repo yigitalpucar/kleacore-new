@@ -95,7 +95,7 @@ pnpm build        # next build başarılı
 | `/api/cron/daily-billing` | 02:00 | Yenileme faturaları |
 | `/api/cron/overdue-invoices` | 05:00 | Gecikmiş faturalar |
 | `/api/cron/suspend-services` | 06:00 | Askıya alma |
-| `/api/cron/run-backups` | 03:00 | Zamanlanmış yedek |
+| `/api/cron/run-backups` | saatlik (:15) | Zamanlanmış yedek (VDS saat penceresi), süresi dolan fesih yedeklerinin silinmesi |
 | `/api/cron/ssl-expiry` | 04:00 | SSL süre kontrolü |
 | `/api/cron/retry-provisioning` | */15 dk | Provisioning retry |
 
