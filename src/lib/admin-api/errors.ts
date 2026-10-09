@@ -22,6 +22,7 @@ export const ERROR_CODES = {
   token_revoked: "Token iptal edilmiş",
   token_expired: "Token süresi dolmuş",
   owner_inactive: "Token sahibinin personel hesabı aktif değil",
+  owner_not_allowed: "Token sahibinin rolü Admin API kullanımına izin vermiyor",
   owner_two_factor_required: "Token sahibinin iki adımlı doğrulamayı açması gerekiyor",
   ip_not_allowed: "Bu IP adresinden erişime izin verilmiyor",
   insufficient_scope: "Token bu işlem için gereken yetkiye sahip değil",

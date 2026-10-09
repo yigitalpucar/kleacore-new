@@ -41,6 +41,8 @@ export const PERMISSIONS = [
   "dns.manage",
   "jobs.manage",
   "status.manage",
+  /** Own Admin API tokens (/api/admin/v1); scopes never exceed the owner's permissions. */
+  "api_tokens.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -70,6 +72,7 @@ const ROLE_PERMISSIONS: Record<Exclude<StaffRole, "ADMIN">, readonly Permission[
     "services.view",
     "domains.view",
     "activity.view_own",
+    "api_tokens.manage",
   ],
   BILLING: [
     "customers.view",
@@ -80,6 +83,7 @@ const ROLE_PERMISSIONS: Record<Exclude<StaffRole, "ADMIN">, readonly Permission[
     "efatura.manage",
     "reports.view",
     "orders.view",
+    "api_tokens.manage",
   ],
 };
 
@@ -146,6 +150,7 @@ export const ADMIN_ROUTE_PERMISSIONS: Record<string, readonly Permission[] | nul
   "/yonetim/entegrasyonlar": ["settings.manage"],
   "/yonetim/ayarlar": ["settings.manage"],
   "/yonetim/personel": ["staff.manage"],
+  "/yonetim/api-tokenlari": ["api_tokens.manage"],
 };
 
 /**

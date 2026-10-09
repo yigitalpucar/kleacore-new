@@ -277,6 +277,16 @@ describe("authentication", () => {
     expect(await errorCode(await call(listThings))).toBe("owner_inactive");
   });
 
+  it("stops working when the owner's role no longer allows API tokens", async () => {
+    seed();
+    const permissions = await import("@/lib/auth/permissions");
+    const spy = vi.spyOn(permissions, "hasPermission").mockImplementation((_role, permission) => permission !== "api_tokens.manage");
+    const response = await call(listThings);
+    spy.mockRestore();
+    expect(response.status).toBe(403);
+    expect(await errorCode(response)).toBe("owner_not_allowed");
+  });
+
   it("requires the owner's 2FA when staff 2FA is mandatory", async () => {
     seed();
     state.twoFactorMissing = true;

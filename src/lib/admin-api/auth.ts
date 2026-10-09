@@ -7,7 +7,7 @@
  * client IP must match the token's allowlist. The effective scopes are the
  * token's scopes ∩ the owner's current role permissions.
  */
-import { isStaffRole, type Permission, type StaffRole } from "@/lib/auth/permissions";
+import { hasPermission, isStaffRole, type Permission, type StaffRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { verifyApiKeyHash } from "@/lib/secrets/api-keys";
 import { staffTwoFactorMissing } from "@/lib/utils/auth-helpers";
@@ -72,6 +72,9 @@ export async function authenticateAdminApiRequest(request: Request, ip: string |
   const owner = token.user;
   if (owner.status !== "ACTIVE" || !isStaffRole(owner.role)) {
     return fail(401, "owner_inactive", "Token sahibinin personel hesabı aktif değil", ref);
+  }
+  if (!hasPermission(owner.role, "api_tokens.manage")) {
+    return fail(403, "owner_not_allowed", "Token sahibinin rolü Admin API kullanımına izin vermiyor", ref);
   }
   if (await staffTwoFactorMissing(owner.id)) {
     return fail(403, "owner_two_factor_required", "Token sahibinin iki adımlı doğrulamayı açması gerekiyor", ref);

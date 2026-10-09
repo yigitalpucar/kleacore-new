@@ -86,6 +86,10 @@ const actionLabels: Record<string, string> = {
   INVOICE_PAID: "Fatura ödemesi",
   CREATE_CUSTOMER: "Müşteri oluşturma",
   ORDER_STATUS_CHANGE: "Sipariş durum değişikliği",
+  ADMIN_API_REQUEST: "Admin API isteği",
+  STAFF_API_TOKEN_CREATE: "API token'ı oluşturma",
+  STAFF_API_TOKEN_REVOKE: "API token'ı iptali",
+  TERMINATE_SERVICE: "Hizmet sonlandırma",
 };
 
 const entityLabels: Record<string, string> = {
@@ -96,6 +100,7 @@ const entityLabels: Record<string, string> = {
   SupportTicket: "Destek talebi",
   Service: "Hizmet",
   Invoice: "Fatura",
+  StaffApiToken: "Admin API token'ı",
 };
 
 function formatAction(action: string) {
