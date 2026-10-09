@@ -123,6 +123,61 @@ export interface RemoteAccount {
 
 export type OperationResult = IntegrationResult<{ reference?: string }>;
 
+/** One backup archive of a VM on the hypervisor's backup storage (capability "backups"). */
+export interface ServerBackupArchive {
+  /** Storage volume id ("local:backup/vzdump-qemu-1000-….vma.zst", "pbs:backup/vm/1000/…"). */
+  volid: string;
+  storage: string;
+  node: string;
+  sizeBytes: number | null;
+  createdAt: Date | null;
+  notes?: string | null;
+  format?: string | null;
+}
+
+/** A long remote task the caller should persist so a retry resumes it instead of starting over. */
+export interface ServerTaskStarted {
+  upid: string;
+  node: string;
+  storage?: string;
+}
+
+export interface ServerBackupInput {
+  mode?: "snapshot" | "suspend" | "stop";
+  /** Target storage; defaults to the instance's backup storage (PBS when configured). */
+  storage?: string;
+  /** Unique marker written into the archive notes; used to find the archive afterwards. */
+  tag: string;
+  /** Free text appended to the notes. */
+  notes?: string;
+  /** Shut the VM down (graceful, forced after 60 s) before backing it up (final backup before termination). */
+  shutdownFirst?: boolean;
+  /** UPID of a backup task started by an earlier attempt: poll it instead of starting a second one. */
+  resumeUpid?: string;
+  /** Called right after the task was started (persist the UPID). */
+  onStarted?(task: ServerTaskStarted): Promise<void>;
+}
+
+export interface ServerRestoreInput {
+  volid: string;
+  /**
+   * The archive belongs to another service's VM (admin restore of a final
+   * backup into a new service): skip the "archive is this VM's" check and
+   * re-apply this service's ownership marker and network afterwards.
+   */
+  foreign?: boolean;
+  resumeUpid?: string;
+  onStarted?(task: ServerTaskStarted): Promise<void>;
+}
+
+export interface ServerBackupDeleteInput {
+  volid: string;
+  storage?: string;
+  node?: string;
+  /** VMID the archive must belong to (refused otherwise). */
+  vmid: number;
+}
+
 export interface ServerModule<TOptions = Record<string, unknown>> {
   readonly moduleId: string;
   createAccount(ctx: ServerAccountContext<TOptions>): Promise<IntegrationResult<ServerAccountCreated>>;
@@ -173,6 +228,21 @@ export interface ServerModule<TOptions = Record<string, unknown>> {
    * remote resources. Without it the bridge just releases the service's IPs.
    */
   abandonProvisioning?(ctx: ServerAccountContext<TOptions>): Promise<OperationResult>;
+  /**
+   * Capability "backups" (hypervisors). createBackup waits for the task up
+   * to the module's task timeout; a timeout is an error with code
+   * "…_RUNNING" and the caller retries with `resumeUpid`.
+   */
+  createBackup?(
+    ctx: ServerAccountContext<TOptions>,
+    input: ServerBackupInput
+  ): Promise<IntegrationResult<ServerBackupArchive & { upid: string | null }>>;
+  /** Archives of the service's VM on the backup storage. */
+  listBackups?(ctx: ServerAccountContext<TOptions>, options?: { storage?: string }): Promise<IntegrationResult<ServerBackupArchive[]>>;
+  /** Overwrites the service's VM with the archive (stops it first, starts it after). Destructive: callers confirm. */
+  restoreBackup?(ctx: ServerAccountContext<TOptions>, input: ServerRestoreInput): Promise<OperationResult>;
+  /** Deletes an archive; a missing archive counts as deleted. Works after the VM is gone. */
+  deleteBackup?(ctx: ServerAccountContext<TOptions>, input: ServerBackupDeleteInput): Promise<OperationResult>;
 }
 
 // ---------------------------------------------------------------------------

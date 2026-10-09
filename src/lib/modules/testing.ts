@@ -202,6 +202,10 @@ const OPTIONAL_METHOD_CAPABILITIES: Partial<Record<ModuleKind, Record<string, st
     powerAction: "power",
     reinstall: "reinstall",
     listAccounts: "listAccounts",
+    createBackup: "backups",
+    listBackups: "backups",
+    restoreBackup: "backups",
+    deleteBackup: "backups",
   },
   registrar: {
     checkDomainsAvailability: "bulkAvailability",
@@ -373,6 +377,16 @@ export function describeModuleContract(manifest: AnyModuleManifest, options: Mod
           if (subject.powerAction) await expectGracefulFailure("powerAction", () => subject.powerAction!(ctx, "restart"));
           if (subject.reinstall) await expectGracefulFailure("reinstall", () => subject.reinstall!(ctx, {}));
           if (subject.listAccounts) await expectGracefulFailure("listAccounts", () => subject.listAccounts!());
+          if (subject.createBackup) await expectGracefulFailure("createBackup", () => subject.createBackup!(ctx, { tag: "t" }));
+          if (subject.listBackups) await expectGracefulFailure("listBackups", () => subject.listBackups!(ctx));
+          if (subject.restoreBackup) {
+            await expectGracefulFailure("restoreBackup", () => subject.restoreBackup!(ctx, { volid: "local:backup/vzdump-qemu-1000-x.vma.zst" }));
+          }
+          if (subject.deleteBackup) {
+            await expectGracefulFailure("deleteBackup", () =>
+              subject.deleteBackup!(ctx, { volid: "local:backup/vzdump-qemu-1000-x.vma.zst", vmid: 1000 })
+            );
+          }
         });
       }
 
