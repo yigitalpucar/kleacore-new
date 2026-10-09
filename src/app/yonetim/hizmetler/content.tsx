@@ -236,7 +236,7 @@ export function ServicesContent({ rows, stats, pagination, view }: ServicesConte
         title={view.title}
         description={view.description}
         actions={
-          <Link href="/yonetim/hizmet-ekle" className={appButton()}>
+          <Link href="/yonetim/hizmet-ekle" prefetch={false} className={appButton()}>
             <Plus aria-hidden />
             Hizmet ekle
           </Link>
@@ -317,7 +317,7 @@ export function ServicesContent({ rows, stats, pagination, view }: ServicesConte
             title={view.status ? "Bu durumda hizmet yok" : "Henüz hizmet yok"}
             description="Siparişler tamamlandığında veya elle hizmet eklediğinizde burada listelenir."
             action={
-              <Link href="/yonetim/hizmet-ekle" className={appButton({ variant: "outline", size: "sm" })}>
+              <Link href="/yonetim/hizmet-ekle" prefetch={false} className={appButton({ variant: "outline", size: "sm" })}>
                 <Plus aria-hidden />
                 Hizmet ekle
               </Link>

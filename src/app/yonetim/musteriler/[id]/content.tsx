@@ -124,7 +124,7 @@ const serviceColumns: ColumnDef<ServiceRow>[] = [
     header: "Hizmet",
     cell: ({ row }) => (
       <div className="min-w-0 max-w-[240px]">
-        <Link href={`/yonetim/hizmetler/${row.original.id}`} className="font-medium hover:underline">
+        <Link href={`/yonetim/hizmetler/${row.original.id}`} prefetch={false} className="font-medium hover:underline">
           {row.original.productName}
         </Link>
         <p className="truncate text-xs text-muted-foreground">{row.original.domain || row.original.label || "—"}</p>
@@ -398,7 +398,7 @@ export function CustomerDetailContent({ customer, role }: { customer: CustomerDe
             description={`${customer.services.length} hizmet`}
             flush
             actions={
-              <Link href="/yonetim/hizmet-ekle" className={appButton({ variant: "outline", size: "sm" })}>
+              <Link href="/yonetim/hizmet-ekle" prefetch={false} className={appButton({ variant: "outline", size: "sm" })}>
                 <PackagePlus aria-hidden />
                 Hizmet ekle
               </Link>
@@ -410,7 +410,7 @@ export function CustomerDetailContent({ customer, role }: { customer: CustomerDe
               columns={serviceColumns}
               data={customer.services}
               pageSize={5}
-              rowHref={(s) => `/yonetim/hizmetler/${s.id}`}
+              rowHref={canAccessRoute(role, "/yonetim/hizmetler") ? (s) => `/yonetim/hizmetler/${s.id}` : undefined}
               mobileCard={(s) => (
                 <ListRow
                   title={s.productName}

@@ -41,7 +41,7 @@ export default async function BankTransferNoticesPage({
         title="Havale bildirimleri"
         description="Müşterilerin gönderdiği havale/EFT ödeme bildirimleri. Banka hesabınızda tutarı gördükten sonra onaylayın; fatura ödendi olarak kapanır."
         actions={
-          <Link href="/yonetim/entegrasyonlar?tab=payment" className={appButton({ variant: "outline" })}>
+          <Link href="/yonetim/entegrasyonlar?tab=payment" prefetch={false} className={appButton({ variant: "outline" })}>
             Banka hesapları
           </Link>
         }

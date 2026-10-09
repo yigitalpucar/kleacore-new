@@ -119,7 +119,7 @@ export default async function AdminDashboard() {
         actions={
           <>
             {can("customers.edit") && (
-              <Link href="/yonetim/musteri-ekle" className={appButton({ variant: "outline" })}>
+              <Link href="/yonetim/musteri-ekle" prefetch={false} className={appButton({ variant: "outline" })}>
                 <UserPlus aria-hidden />
                 Müşteri ekle
               </Link>

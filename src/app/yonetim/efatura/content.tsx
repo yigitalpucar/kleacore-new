@@ -317,7 +317,7 @@ export function EfaturaContent({ records, stats, statusFilter, configProblem, te
         actions={
           <>
             <SyncStatusesButton />
-            <Link href="/yonetim/entegrasyonlar?tab=efatura" className={appButton({ variant: "outline" })}>
+            <Link href="/yonetim/entegrasyonlar?tab=efatura" prefetch={false} className={appButton({ variant: "outline" })}>
               <Plug aria-hidden />
               Entegrasyon ayarları
             </Link>

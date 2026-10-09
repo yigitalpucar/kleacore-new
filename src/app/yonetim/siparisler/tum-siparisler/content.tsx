@@ -22,7 +22,7 @@ export function AllOrdersContent({ orders, total, page, totalPages, stats }: All
         title="Tüm siparişler"
         description="Sistemdeki bütün siparişler; duruma göre filtreleyin veya arayın."
         actions={
-          <Link href="/yonetim/hizmet-ekle" className={appButton()}>
+          <Link href="/yonetim/hizmet-ekle" prefetch={false} className={appButton()}>
             <Plus aria-hidden />
             Yeni sipariş
           </Link>

@@ -38,7 +38,7 @@ export default async function CustomersPage({
         title="Müşteriler"
         description="Müşteri hesaplarını görüntüleyin, askıya alın veya yeniden etkinleştirin."
         actions={
-          <Link href="/yonetim/musteri-ekle" className={appButton()}>
+          <Link href="/yonetim/musteri-ekle" prefetch={false} className={appButton()}>
             <UserPlus aria-hidden />
             Müşteri ekle
           </Link>
@@ -82,7 +82,7 @@ export default async function CustomersPage({
         rows={result.data.map(toCustomerRow)}
         typeFilter
         emptyAction={
-          <Link href="/yonetim/musteri-ekle" className={appButton({ variant: "outline", size: "sm" })}>
+          <Link href="/yonetim/musteri-ekle" prefetch={false} className={appButton({ variant: "outline", size: "sm" })}>
             <UserPlus aria-hidden />
             Müşteri ekle
           </Link>

@@ -44,7 +44,7 @@ export function CustomerSegmentPage({
         title={title}
         description={description}
         actions={
-          <Link href="/yonetim/musteri-ekle" className={appButton({ variant: "outline" })}>
+          <Link href="/yonetim/musteri-ekle" prefetch={false} className={appButton({ variant: "outline" })}>
             <UserPlus aria-hidden />
             Müşteri ekle
           </Link>

@@ -30,7 +30,7 @@ export default async function OrdersDashboardPage() {
         title="Siparişler"
         description="Siparişleri onaylayın, durumlarını takip edin ve iptal taleplerini yönetin."
         actions={
-          <Link href="/yonetim/hizmet-ekle" className={appButton()}>
+          <Link href="/yonetim/hizmet-ekle" prefetch={false} className={appButton()}>
             <Plus aria-hidden />
             Yeni sipariş
           </Link>

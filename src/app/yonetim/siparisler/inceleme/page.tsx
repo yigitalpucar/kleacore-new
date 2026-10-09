@@ -8,6 +8,7 @@ import { formatDateTime } from "@/lib/format/date";
 import { formatTRY } from "@/lib/format/price";
 import { parseRuleResults } from "@/lib/fraud/rules";
 import { HOLD_REASON_LABELS, type HoldReason } from "@/lib/provisioning/hold";
+import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/utils/auth-helpers";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,8 @@ export default async function OrderReviewQueuePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requirePermission("orders.view");
+  const session = await requirePermission("orders.view");
+  const canEditSettings = hasPermission(session.user.role, "settings.manage");
   const sp = await searchParams;
   const tab = TABS.find((value) => value === sp.tab) ?? "review";
   const [rows, counts] = await Promise.all([getReviewQueue(tab), getReviewCounts()]);
@@ -33,10 +35,12 @@ export default async function OrderReviewQueuePage({
         title="Sipariş incelemesi"
         description="Risk puanı eşiği aşan siparişler ve kimlik doğrulaması bekleyen sunucu siparişleri. Ödenmiş siparişlerde kurulum, onaya kadar bekler."
         actions={
-          <Link href="/yonetim/siparisler/inceleme/ayarlar" className={appButton({ variant: "outline" })}>
-            <Settings aria-hidden />
-            Kurallar ve ayarlar
-          </Link>
+          canEditSettings ? (
+            <Link href="/yonetim/siparisler/inceleme/ayarlar" className={appButton({ variant: "outline" })}>
+              <Settings aria-hidden />
+              Kurallar ve ayarlar
+            </Link>
+          ) : undefined
         }
       />
 
