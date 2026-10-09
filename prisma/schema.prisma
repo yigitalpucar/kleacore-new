@@ -404,6 +404,7 @@ model User {
   notifications           Notification[]
   activityLogs            ActivityLog[]
   apiKeys                 ApiKey[]
+  staffApiTokens          StaffApiToken[]
   sessions                Session[]
   passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
@@ -1727,6 +1728,59 @@ model ApiKey {
 
   @@index([keyPrefix])
   @@map("api_keys")
+}
+
+/// Admin API token (Faz 4, /api/admin/v1) owned by a staff member. The
+/// effective permissions are `scopes` ∩ the owner's CURRENT role permissions,
+/// re-checked on every request, so demoting/deactivating the owner shrinks or
+/// kills the token. The secret is shown once; only its SHA-256 is stored.
+model StaffApiToken {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  /// First characters of the secret ("kc_admin_xxxxxxxx"), for lookup and display.
+  tokenPrefix        String
+  tokenHash          String
+  /// Permission names (src/lib/auth/permissions.ts).
+  scopes             String[]
+  /// IPs / CIDR ranges; empty = any address.
+  ipAllowlist        String[]  @default([])
+  rateLimitPerMinute Int       @default(120)
+  expiresAt          DateTime?
+  lastUsedAt         DateTime?
+  lastUsedIp         String?
+  revokedAt          DateTime?
+  revokedById        String?
+  createdAt          DateTime  @default(now())
+
+  idempotencyKeys AdminApiIdempotencyKey[]
+
+  @@index([tokenPrefix])
+  @@index([userId])
+  @@map("staff_api_tokens")
+}
+
+/// Idempotency-Key of a POST to the admin API: the first response is stored
+/// and replayed for the same key + body (24 h).
+model AdminApiIdempotencyKey {
+  id             String        @id @default(cuid())
+  tokenId        String
+  token          StaffApiToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  key            String
+  method         String
+  path           String
+  /// SHA-256 of method + path + body: the same key with another request is rejected.
+  requestHash    String
+  responseStatus Int?
+  responseBody   Json?
+  completedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  expiresAt      DateTime
+
+  @@unique([tokenId, key])
+  @@index([tokenId, expiresAt])
+  @@map("admin_api_idempotency_keys")
 }
 
 model RateLimitBucket {

@@ -171,7 +171,8 @@ describe("inline server actions and admin route handlers", () => {
   });
 
   it("every /api/admin route handler checks a permission", () => {
-    const files = walk(path.join(ROOT, "src/app/api/admin"), (f) => path.basename(f) === "route.ts");
+    // /api/admin/v1 (token API) is covered below and in src/lib/admin-api/route-coverage.test.ts.
+    const files = walk(path.join(ROOT, "src/app/api/admin"), (f) => path.basename(f) === "route.ts" && !f.includes(`${path.sep}v1${path.sep}`));
     expect(files.length).toBeGreaterThan(0);
     const missing: string[] = [];
     for (const file of files) {
@@ -183,6 +184,39 @@ describe("inline server actions and admin route handlers", () => {
       }
     }
     expect(missing).toEqual([]);
+  });
+});
+
+describe("admin API (/api/admin/v1) route handlers", () => {
+  // Each handler must be `export const METHOD = adminApiRoute(operation)`: the
+  // wrapper checks the operation's permission against the token's effective
+  // scopes. route-coverage.test.ts checks the operations themselves.
+  it("every exported method is built with adminApiRoute(operation)", () => {
+    const files = walk(path.join(ROOT, "src/app/api/admin/v1"), (f) => path.basename(f) === "route.ts");
+    expect(files.length).toBeGreaterThan(20);
+    const problems: string[] = [];
+    for (const file of files) {
+      const sf = parse(file);
+      for (const stmt of sf.statements) {
+        if (ts.isFunctionDeclaration(stmt) && isExported(stmt) && stmt.name && /^(GET|POST|PUT|PATCH|DELETE)$/.test(stmt.name.text)) {
+          problems.push(`${rel(file)} → ${stmt.name.text}: plain function (use adminApiRoute)`);
+        }
+        if (!ts.isVariableStatement(stmt) || !isExported(stmt)) continue;
+        for (const decl of stmt.declarationList.declarations) {
+          if (!ts.isIdentifier(decl.name) || !/^(GET|POST|PUT|PATCH|DELETE)$/.test(decl.name.text)) continue;
+          const init = decl.initializer;
+          const ok =
+            init &&
+            ts.isCallExpression(init) &&
+            ts.isIdentifier(init.expression) &&
+            init.expression.text === "adminApiRoute" &&
+            init.arguments.length === 1 &&
+            ts.isIdentifier(init.arguments[0]);
+          if (!ok) problems.push(`${rel(file)} → ${decl.name.text}: not adminApiRoute(operation)`);
+        }
+      }
+    }
+    expect(problems).toEqual([]);
   });
 });
 
