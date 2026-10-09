@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getServiceById } from "@/lib/dal/services";
 import { getManualEtaText } from "@/lib/provisioning/manual";
 import { getVdsPanelView, refreshServiceUsage } from "@/lib/modules/server-panel";
+import { getVdsBackupsView } from "@/lib/backups/vds";
 import { activationKindForCategory } from "@/lib/provisioning/activation-notice";
 import { getPanelCapabilities } from "@/lib/services/panel-access";
 import { HizmetDetayContent } from "./content";
@@ -43,6 +44,8 @@ export default async function HizmetDetayPage(props: Props) {
       }
     }
   }
+
+  const vdsBackups = vds ? await getVdsBackupsView(service) : null;
 
   const pendingCancellation = await db.cancellationRequest.findFirst({
     where: {
@@ -124,6 +127,7 @@ export default async function HizmetDetayPage(props: Props) {
     provisioningEta: service.status === "PENDING" ? await getManualEtaText() : null,
     suspendReason: service.suspendReason ?? null,
     vds,
+    vdsBackups,
   };
 
   return <HizmetDetayContent service={serialized} />;

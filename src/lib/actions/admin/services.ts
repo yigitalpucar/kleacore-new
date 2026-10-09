@@ -251,8 +251,10 @@ export async function activateService(id: string) {
   }
 }
 
-export async function cancelService(id: string) {
+export async function cancelService(id: string, options: { skipFinalBackup?: boolean } = {}) {
   const session = await requirePermission("services.manage");
+  // Destroying a VDS without its final backup is a backup decision too.
+  if (options.skipFinalBackup) await requirePermission("backups.manage");
 
   try {
     const service = await db.service.findUnique({
@@ -294,11 +296,22 @@ export async function cancelService(id: string) {
       );
       return row;
     });
-    const integration = await terminateRemoteService({
-      ...updatedService,
-      product: service.product,
-      customer: service.customer,
-    });
+    const integration = await terminateRemoteService(
+      {
+        ...updatedService,
+        product: service.product,
+        customer: service.customer,
+      },
+      { skipFinalBackup: options.skipFinalBackup === true, actorId: session.user.id }
+    );
+    if (options.skipFinalBackup) {
+      await logActivity({
+        userId: session.user.id,
+        action: "SERVICE_TERMINATED_WITHOUT_FINAL_BACKUP",
+        entity: "Service",
+        entityId: id,
+      });
+    }
 
     revalidatePath("/yonetim/hizmetler");
     return { success: true, integration };

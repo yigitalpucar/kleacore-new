@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Cloud, Database, Download, FileArchive, HardDrive, Loader2, Plus, RefreshCcw, RotateCcw, Server, Trash2 } from "lucide-react";
 import {
   DataTable,
@@ -53,6 +54,8 @@ interface BackupItem {
   completedAt: string | null;
   createdAt: string;
   scheduleId: string | null;
+  trigger: "MANUAL" | "SCHEDULED" | "FINAL";
+  vds: boolean;
 }
 
 interface ScheduleItem {
@@ -121,6 +124,7 @@ function ServiceIcon({ type }: { type: string }) {
 }
 
 export function YedeklemeContent({ backups, schedules, stats }: YedeklemeContentProps) {
+  const router = useRouter();
   const [localBackups, setLocalBackups] = useState(backups);
   const [localSchedules, setLocalSchedules] = useState(schedules);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
@@ -164,6 +168,11 @@ export function YedeklemeContent({ backups, schedules, stats }: YedeklemeContent
   };
 
   const handleRestoreBackup = async (backup: BackupItem) => {
+    if (backup.vds) {
+      // A server restore overwrites the whole VM: confirmed on the server page by typing its name.
+      router.push(`/musteri/panel/hizmetlerim/${backup.serviceId}#yedekler`);
+      return;
+    }
     if (
       !window.confirm(
         `${backup.serviceName} hizmeti ${formatDateTime(backup.createdAt)} tarihli yedeğe geri döndürülecek. Bu tarihten sonraki değişiklikler kaybolabilir. Devam edilsin mi?`
@@ -263,7 +272,7 @@ export function YedeklemeContent({ backups, schedules, stats }: YedeklemeContent
               <p className="truncate font-medium">{b.serviceName}</p>
               <p className="text-xs text-muted-foreground">
                 {enumLabel("backupType", b.type)} yedek
-                {b.scheduleId ? " · otomatik" : " · manuel"}
+                {b.trigger === "SCHEDULED" || b.scheduleId ? " · otomatik" : " · manuel"}
               </p>
             </div>
           </div>

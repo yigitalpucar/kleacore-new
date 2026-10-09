@@ -40,6 +40,8 @@ import { billingPeriodLabel, billingPeriodUnit, formatDate, formatDateTime } fro
 import { toast } from "@/lib/toast";
 import { ServiceModuleCard, type ServiceModuleView } from "@/components/admin/modules/service-module-card";
 import { ProxmoxServiceCard } from "@/components/admin/modules/proxmox-service-card";
+import { VdsBackupsAdminCard } from "@/components/admin/modules/vds-backups-card";
+import type { AdminVdsBackupsView } from "@/lib/backups/vds";
 import type { ProxmoxAdminView } from "@/lib/modules/server-panel";
 import { AdminPanelLoginButtons } from "@/components/admin/modules/admin-panel-login";
 
@@ -52,6 +54,7 @@ interface ServiceDetailData {
   username: string | null;
   ipAddress: string | null;
   serverName: string | null;
+  remoteId?: string | null;
   status: string;
   billingPeriod: string;
   amount: number;
@@ -98,6 +101,10 @@ interface ServiceDetailContentProps {
   service: ServiceDetailData;
   moduleView: ServiceModuleView;
   proxmoxView?: ProxmoxAdminView | null;
+  /** VDS backups (module with the "backups" capability). */
+  vdsBackups?: AdminVdsBackupsView | null;
+  /** backups.manage: restore / delete / slots / final backup actions. */
+  canManageBackups?: boolean;
   /** Show "cPanel'e giriş (müşteri olarak)" (bound to an SSO-capable module, active/suspended). */
   panelLogin?: boolean;
   /** services.manage: suspend/activate/cancel and quick actions (view-only roles such as SUPPORT get false). */
@@ -147,6 +154,8 @@ export function ServiceDetailContent({
   service,
   moduleView,
   proxmoxView,
+  vdsBackups,
+  canManageBackups = false,
   panelLogin = false,
   canManage = true,
   canCreateInvoice = true,
@@ -180,9 +189,11 @@ export function ServiceDetailContent({
 
   const handleCancelService = async () => {
     const confirmed = window.confirm(
-      proxmoxView?.vmid
-        ? `Hizmet iptal edilecek ve Proxmox'taki VM ${proxmoxView.vmid} diskleriyle birlikte KALICI olarak silinecek. Geri alınamaz. Devam edilsin mi?`
-        : "Bu hizmeti iptal etmek istediğinize emin misiniz?"
+      proxmoxView?.vmid && vdsBackups
+        ? `Hizmet iptal edilecek. Önce VM ${proxmoxView.vmid} kapatılıp son yedeği alınır (${vdsBackups.finalKeepDays} gün saklanır); yedek tamamlanınca VM diskleriyle birlikte KALICI olarak silinir. Devam edilsin mi?`
+        : proxmoxView?.vmid
+          ? `Hizmet iptal edilecek ve Proxmox'taki VM ${proxmoxView.vmid} diskleriyle birlikte KALICI olarak silinecek. Geri alınamaz. Devam edilsin mi?`
+          : "Bu hizmeti iptal etmek istediğinize emin misiniz?"
     );
     if (!confirmed) return;
 
@@ -193,6 +204,11 @@ export function ServiceDetailContent({
     }
 
     const integration = (result as { integration?: { ok: boolean; skipped?: boolean; error?: string } }).integration;
+    if (integration?.error === "FINAL_BACKUP_PENDING") {
+      toast.success("Hizmet iptal edildi. Son yedek alınıyor; tamamlanınca VM otomatik silinecek.");
+      router.refresh();
+      return;
+    }
     if (integration && !integration.ok && !integration.skipped) {
       toast.error(`Hizmet iptal edildi ancak uzak sunucuda kapatılamadı: ${integration.error ?? "bilinmeyen hata"}`);
       router.refresh();
@@ -346,6 +362,15 @@ export function ServiceDetailContent({
 
           {proxmoxView ? <ProxmoxServiceCard serviceId={service.id} view={proxmoxView} /> : null}
 
+          {vdsBackups ? (
+            <VdsBackupsAdminCard
+              serviceId={service.id}
+              serviceStatus={service.status}
+              vmPending={service.status === "CANCELLED" && Boolean(service.remoteId)}
+              view={vdsBackups}
+              canManage={canManageBackups}
+            />
+          ) : (
           <SectionCard
             title="Yedekler"
             description={service.backups.length ? `Son ${service.backups.length} yedek` : undefined}
@@ -377,6 +402,7 @@ export function ServiceDetailContent({
               }
             />
           </SectionCard>
+          )}
         </div>
 
         <div className="space-y-6">
