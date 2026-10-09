@@ -4,28 +4,20 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { logActivity } from "@/lib/activity-log";
 import { db } from "@/lib/db";
-import { cancelQueueJob, findQueueJob, retryQueueJob } from "@/lib/jobs/admin";
+import { cancelQueueJob, findQueueJob } from "@/lib/jobs/admin";
+import { QUEUE_JOB_ERRORS, retryFailedQueueJob } from "@/lib/jobs/admin-retry";
 import { jobRegistry, PROVISIONING_RUN_JOB } from "@/lib/jobs/definitions";
-import { drainJobs } from "@/lib/jobs/worker";
 import { createLogger } from "@/lib/logger";
 import { requirePermission } from "@/lib/utils/auth-helpers";
 
 const log = createLogger("admin.jobs");
-
-/** How long "Yeniden dene" waits for the retried job to run in-request. */
-const RETRY_INLINE_BUDGET_MS = 25_000;
 
 const inputSchema = z.object({
   name: z.string().refine((name) => jobRegistry.has(name), "Bilinmeyen iş türü"),
   id: z.string().uuid(),
 });
 
-const errorMessages: Record<string, string> = {
-  JOB_NOT_FOUND: "İş bulunamadı (silinmiş veya saklama süresi dolmuş olabilir)",
-  JOB_NOT_FAILED: "Yalnızca başarısız işler yeniden denenebilir",
-  JOB_ACTIVE: "Çalışmakta olan bir iş iptal edilemez",
-  JOB_FINISHED: "Bu iş zaten sonuçlanmış",
-};
+const errorMessages = QUEUE_JOB_ERRORS;
 
 type ActionResult = { success: true; message: string } | { success: false; error: string };
 
@@ -34,42 +26,15 @@ function revalidate() {
   revalidatePath("/yonetim/provisioning");
 }
 
-/**
- * Puts a failed queue job back in the queue and immediately runs that queue
- * in this request (bounded), so the admin sees the outcome without waiting
- * for the next drain / worker poll.
- */
 export async function retryQueueJobAction(name: string, id: string): Promise<ActionResult> {
   const session = await requirePermission("jobs.manage");
   const parsed = inputSchema.safeParse({ name, id });
   if (!parsed.success) return { success: false, error: "Geçersiz iş" };
 
   try {
-    const retried = await retryQueueJob(name, id);
-    if (!retried.ok) {
-      return { success: false, error: errorMessages[retried.error] ?? "İş yeniden denenemedi" };
-    }
-
-    await drainJobs({ names: [name], budgetMs: RETRY_INLINE_BUDGET_MS, maxJobs: 10 });
-    const after = await findQueueJob(name, id);
-
-    await logActivity({
-      userId: session.user.id,
-      action: "QUEUE_JOB_RETRY",
-      entity: "QueueJob",
-      entityId: id,
-      details: { name, state: after?.state ?? null },
-    });
-    revalidate();
-
-    if (after?.state === "completed") {
-      return { success: true, message: "İş yeniden denendi ve tamamlandı" };
-    }
-    if (after?.state === "failed") {
-      const output = after.output as { message?: string } | null;
-      return { success: false, error: `Yeniden deneme başarısız: ${output?.message ?? "bilinmeyen hata"}` };
-    }
-    return { success: true, message: "İş kuyruğa alındı; birazdan işlenecek" };
+    const result = await retryFailedQueueJob(session.user.id, name, id);
+    if (result.success || result.code === "RETRY_FAILED") revalidate();
+    return result.success ? { success: true, message: result.message } : { success: false, error: result.error };
   } catch (error) {
     log.error("queue job retry failed", { name, id, error });
     return { success: false, error: "İş yeniden denenirken bir hata oluştu" };

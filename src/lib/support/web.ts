@@ -1,3 +1,4 @@
+import type { TicketSource } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { createLogger } from "@/lib/logger";
@@ -6,6 +7,8 @@ import { validateAttachments, type AttachmentInput } from "./attachments";
 import { canReplyToTickets } from "./access";
 import {
   appendTicketMessage,
+  emitTicketClosed,
+  statusChange,
   createTicketRecord,
   MAX_MESSAGE_LENGTH,
   STAFF_REPLY_STATUSES,
@@ -155,7 +158,8 @@ export async function addStaffReply(
   ticketId: string,
   rawMessage: string,
   rawStatus: string | undefined,
-  uploads: AttachmentInput[]
+  uploads: AttachmentInput[],
+  source: TicketSource = "WEB"
 ): Promise<WebResult> {
   if (!canReplyToTickets(actor.role)) return fail("Yetkisiz erişim", 403);
   const message = rawMessage.trim();
@@ -181,7 +185,7 @@ export async function addStaffReply(
           ticketId,
           author: { senderId: actor.id, senderName, senderRole: "ADMIN" },
           message,
-          source: "WEB",
+          source,
           nextStatus: status,
         },
         stored
@@ -191,6 +195,25 @@ export async function addStaffReply(
     log.error("staff reply failed", { ticketId, error });
     return fail("Yanıt gönderilirken bir hata oluştu", 500);
   }
+
+  revalidateTicket(ticketId);
+  return { success: true };
+}
+
+/** Staff "Kapat" (admin action and admin API); emits ticket.closed. */
+export async function closeTicketByStaff(ticketId: string): Promise<WebResult> {
+  const ticket = await db.supportTicket.findUnique({ where: { id: ticketId }, select: { status: true } });
+  if (!ticket) return fail("Destek talebi bulunamadı", 404);
+  if (ticket.status === "CLOSED") return fail("Bu talep zaten kapalı", 409);
+
+  await db.$transaction(async (tx) => {
+    const closed = await tx.supportTicket.update({
+      where: { id: ticketId },
+      data: statusChange("CLOSED"),
+      select: { id: true, ticketNumber: true, subject: true, customerId: true },
+    });
+    await emitTicketClosed(tx, closed, "staff");
+  });
 
   revalidateTicket(ticketId);
   return { success: true };

@@ -1,81 +1,34 @@
 "use server";
 
-import { generateUniqueAffiliateCode } from "@/lib/affiliate";
-import { findUserByEmail, normalizeEmail } from "@/lib/auth/email";
+import { createCustomerAccount, updateCustomerProfile, type CustomerType } from "@/lib/customers/admin";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/utils/auth-helpers";
 import { logActivity } from "@/lib/activity-log";
-import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 
 export async function createCustomer(formData: FormData) {
   const session = await requirePermission("customers.edit");
 
   try {
-    const email = normalizeEmail((formData.get("email") as string | null) ?? "");
-    const password = formData.get("password") as string;
-    const name = formData.get("name") as string;
-    const surname = formData.get("surname") as string;
-    const phone = (formData.get("phone") as string) || null;
-    const customerType = (formData.get("customerType") as "INDIVIDUAL" | "CORPORATE") || "INDIVIDUAL";
-    const companyName = (formData.get("companyName") as string) || null;
-    const taxNumber = (formData.get("taxNumber") as string) || null;
-    const taxOffice = (formData.get("taxOffice") as string) || null;
-    const address = (formData.get("address") as string) || null;
-    const city = (formData.get("city") as string) || null;
-
-    if (!email || !password || !name) {
-      return { success: false, error: "E-posta, şifre ve ad zorunludur" };
-    }
-
-    const existing = await findUserByEmail(email);
-    if (existing) {
-      return { success: false, error: "Bu e-posta adresi zaten kayıtlı" };
-    }
-
-    const hashedPassword = await hash(password, 12);
-
-    const user = await db.$transaction(async (tx) => {
-      const affiliateCode = await generateUniqueAffiliateCode(tx, name);
-
-      return tx.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          name,
-          surname: surname || "",
-          phone,
-          customerType,
-          companyName,
-          taxNumber,
-          taxOffice,
-          address,
-          city,
-          role: "CUSTOMER",
-          status: "ACTIVE",
-          affiliateCode,
-          // Created by an admin: the address is vouched for, no verification mail.
-          emailVerifiedAt: new Date(),
-        },
-      });
+    const optional = (key: string) => (formData.get(key) as string) || null;
+    const result = await createCustomerAccount(session.user.id, {
+      email: (formData.get("email") as string | null) ?? "",
+      password: formData.get("password") as string,
+      name: formData.get("name") as string,
+      surname: formData.get("surname") as string,
+      phone: optional("phone"),
+      customerType: (formData.get("customerType") as CustomerType) || "INDIVIDUAL",
+      companyName: optional("companyName"),
+      taxNumber: optional("taxNumber"),
+      taxOffice: optional("taxOffice"),
+      address: optional("address"),
+      city: optional("city"),
     });
-
-    await logActivity({
-      userId: session.user.id,
-      action: "CREATE_CUSTOMER",
-      entity: "User",
-      entityId: user.id,
-      details: {
-        email: user.email,
-        name: user.name,
-        surname: user.surname,
-        customerType: user.customerType,
-      },
-    });
+    if (!result.success) return result;
 
     revalidatePath("/yonetim/musteriler");
     revalidatePath("/yonetim/aktivite");
-    return { success: true, data: { id: user.id } };
+    return result;
   } catch {
     return { success: false, error: "Müşteri oluşturulurken bir hata oluştu" };
   }
@@ -85,35 +38,19 @@ export async function updateCustomer(id: string, formData: FormData) {
   await requirePermission("customers.edit");
 
   try {
-    const name = formData.get("name") as string;
-    const surname = formData.get("surname") as string;
-    const phone = (formData.get("phone") as string) || null;
-    const customerType = (formData.get("customerType") as "INDIVIDUAL" | "CORPORATE") || undefined;
-    const companyName = (formData.get("companyName") as string) || null;
-    const taxNumber = (formData.get("taxNumber") as string) || null;
-    const taxOffice = (formData.get("taxOffice") as string) || null;
-    const address = (formData.get("address") as string) || null;
-    const city = (formData.get("city") as string) || null;
-
-    const user = await db.user.findUnique({ where: { id } });
-    if (!user) {
-      return { success: false, error: "Müşteri bulunamadı" };
-    }
-
-    await db.user.update({
-      where: { id },
-      data: {
-        ...(name && { name }),
-        ...(surname && { surname }),
-        phone,
-        ...(customerType && { customerType }),
-        companyName,
-        taxNumber,
-        taxOffice,
-        address,
-        city,
-      },
+    const optional = (key: string) => (formData.get(key) as string) || null;
+    const result = await updateCustomerProfile(id, {
+      name: formData.get("name") as string,
+      surname: formData.get("surname") as string,
+      phone: optional("phone"),
+      customerType: (formData.get("customerType") as CustomerType) || undefined,
+      companyName: optional("companyName"),
+      taxNumber: optional("taxNumber"),
+      taxOffice: optional("taxOffice"),
+      address: optional("address"),
+      city: optional("city"),
     });
+    if (!result.success) return result;
 
     revalidatePath("/yonetim/musteriler");
     return { success: true };

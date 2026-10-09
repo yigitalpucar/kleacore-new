@@ -2,9 +2,10 @@
 
 import type { TicketStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { emitTicketClosed, statusChange } from "@/lib/support/tickets";
+import { statusChange } from "@/lib/support/tickets";
 import { STAFF_ROLES } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/utils/auth-helpers";
+import { closeTicketByStaff } from "@/lib/support/web";
 import { revalidatePath } from "next/cache";
 
 // Staff replies (with attachments) go through POST
@@ -52,28 +53,7 @@ export async function closeTicket(ticketId: string) {
   await requirePermission("tickets.reply");
 
   try {
-    const ticket = await db.supportTicket.findUnique({
-      where: { id: ticketId },
-    });
-    if (!ticket) {
-      return { success: false, error: "Destek talebi bulunamadı" };
-    }
-
-    if (ticket.status === "CLOSED") {
-      return { success: false, error: "Bu talep zaten kapalı" };
-    }
-
-    await db.$transaction(async (tx) => {
-      const closed = await tx.supportTicket.update({
-        where: { id: ticketId },
-        data: statusChange("CLOSED"),
-        select: { id: true, ticketNumber: true, subject: true, customerId: true },
-      });
-      await emitTicketClosed(tx, closed, "staff");
-    });
-
-    revalidateTicket(ticketId);
-    return { success: true };
+    return await closeTicketByStaff(ticketId);
   } catch {
     return { success: false, error: "Talep kapatılırken bir hata oluştu" };
   }

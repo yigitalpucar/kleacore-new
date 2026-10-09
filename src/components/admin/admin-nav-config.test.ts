@@ -31,6 +31,7 @@ describe("admin nav filtering", () => {
         "/yonetim/domainler",
         "/yonetim/destek",
         "/yonetim/aktivite",
+        "/yonetim/api-tokenlari",
       ].sort()
     );
   });

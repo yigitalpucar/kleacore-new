@@ -3,6 +3,7 @@
 import {
   FilePlus,
   Home,
+  KeyRound,
   LayoutDashboard,
   PackagePlus,
   Settings,
@@ -61,6 +62,7 @@ export function AdminShell({ user, role, counts, notifications, children }: Admi
           email={user.email}
           links={allowed([
             { label: "Genel bakış", href: ADMIN_ROOT, icon: LayoutDashboard },
+            { label: "API token'larım", href: `${ADMIN_ROOT}/api-tokenlari`, icon: KeyRound },
             { label: "Ayarlar", href: `${ADMIN_ROOT}/ayarlar`, icon: Settings },
             { label: "kleacore.com", href: "/", icon: Home },
           ])}

@@ -2,123 +2,35 @@
 
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/utils/auth-helpers";
-import { generateInvoiceNumber } from "@/lib/utils/number-generators";
 import { sendNotification } from "@/lib/notifications/send";
 import { emitEvent } from "@/lib/events/emit";
 import {
-  loadCustomerRecipient,
-  sendInvoiceOverdueEmail,
-  sendInvoicePaymentReminderEmail,
-} from "@/lib/notifications/email";
-import { finalizeFulfilledInvoices, fulfillInvoicePayment } from "@/lib/payments/fulfillment";
+  createInvoiceAs,
+  fulfillInvoiceAsAdmin as fulfillInvoiceAsStaff,
+  sendInvoiceReminderFor,
+  type InvoiceInput,
+} from "@/lib/billing/admin-invoices";
 import { approveBankTransferNotice } from "@/lib/payments/bank-transfer/service";
-import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import { createLogger } from "@/lib/logger";
-import { calculateInvoiceTotals } from "@/lib/billing/invoice-totals";
-import { max as maxMoney, money, toNumber } from "@/lib/money";
+import { max as maxMoney, toNumber } from "@/lib/money";
 
 const log = createLogger("admin.invoices");
-
-interface InvoiceItemInput {
-  description: string;
-  quantity: number;
-  unitPrice: number | string;
-  /** Ignored: recomputed on the server as round(quantity × unitPrice). */
-  totalPrice?: number;
-}
-
-interface InvoiceInput {
-  customerId: string;
-  orderId?: string;
-  taxRate?: number;
-  /** Ignored: subtotal / KDV / total are recomputed on the server from the items. */
-  subtotal?: number;
-  taxAmount?: number;
-  totalAmount?: number;
-  dueDate: string;
-  notes?: string;
-  items: InvoiceItemInput[];
-}
 
 export async function createInvoice(data: InvoiceInput) {
   const session = await requirePermission("invoices.edit");
 
   try {
-    const customer = await db.user.findUnique({
-      where: { id: data.customerId },
-    });
-    if (!customer) {
-      return { success: false, error: "Müşteri bulunamadı" };
-    }
-
-    const taxRate = money(data.taxRate ?? 20);
-    const itemsValid =
-      Array.isArray(data.items) &&
-      data.items.length > 0 &&
-      data.items.every(
-        (item) =>
-          Number.isInteger(item.quantity) &&
-          item.quantity > 0 &&
-          money(item.unitPrice).greaterThanOrEqualTo(0)
-      );
-    if (!itemsValid || taxRate.isNegative() || taxRate.greaterThan(100)) {
-      return { success: false, error: "Fatura kalemleri veya KDV oranı geçersiz" };
-    }
-
-    // Totals are computed here, in Decimal, from the lines — never trusted
-    // from the browser — so the invoice always equals the sum of its lines.
-    const totals = calculateInvoiceTotals(data.items, taxRate);
-
-    const invoiceNumber = await generateInvoiceNumber();
-
-    // Invoice + invoice.created ("fatura oluştu" via the outbox) commit together.
-    const invoice = await db.$transaction(async (tx) => {
-      const created = await tx.invoice.create({
-        data: {
-          invoiceNumber,
-          customerId: data.customerId,
-          orderId: data.orderId ?? null,
-          subtotal: totals.subtotal,
-          taxRate: totals.taxRate,
-          taxAmount: totals.taxAmount,
-          totalAmount: totals.totalAmount,
-          status: "PENDING",
-          dueDate: new Date(data.dueDate),
-          notes: data.notes ?? null,
-          items: {
-            create: data.items.map((item, index) => ({
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: totals.lines[index].unitPrice,
-              totalPrice: totals.lines[index].totalPrice,
-            })),
-          },
-        },
-      });
-      await emitEvent(
-        tx,
-        "invoice.created",
-        {
-          invoiceId: created.id,
-          invoiceNumber,
-          customerId: data.customerId,
-          totalAmount: totals.totalAmount,
-          dueDate: new Date(data.dueDate),
-          source: "admin",
-        },
-        { actorId: session.user.id }
-      );
-      return created;
-    });
+    const result = await createInvoiceAs(session.user.id, data);
+    if (!result.success) return result;
 
     revalidatePath("/yonetim/faturalar");
     revalidatePath("/musteri/panel/faturalar");
     revalidatePath("/musteri/panel/e-posta");
-    return { success: true, data: { id: invoice.id, invoiceNumber } };
+    return result;
   } catch (error) {
     log.error("create invoice failed", { error });
-    return { success: false, error: "Fatura oluşturulurken bir hata oluştu" };
+    return { success: false as const, error: "Fatura oluşturulurken bir hata oluştu" };
   }
 }
 
@@ -127,44 +39,8 @@ async function fulfillInvoiceAsAdmin(
   performedBy: string,
   notes: string
 ) {
-  const invoice = await db.invoice.findUnique({
-    where: { id },
-  });
-
-  if (!invoice) {
-    return { success: false as const, error: "Fatura bulunamadı" };
-  }
-
-  if (invoice.status === "PAID") {
-    return { success: false as const, error: "Bu fatura zaten ödenmiş" };
-  }
-
-  if (invoice.status === "CANCELLED") {
-    return { success: false as const, error: "İptal edilmiş fatura ödenemez" };
-  }
-
-  const result = await db.$transaction(async (tx) =>
-    fulfillInvoicePayment(tx, {
-      invoiceId: id,
-      performedBy,
-      notes,
-    })
-  );
-
-  await logActivity({
-    userId: performedBy,
-    action: "INVOICE_PAID",
-    entity: "Invoice",
-    entityId: id,
-    details: {
-      invoiceNumber: invoice.invoiceNumber,
-      totalAmount: Number(invoice.totalAmount),
-      notes,
-    },
-  });
-
-  // Provisioning, e-invoice and the "ödeme alındı" notification are queued.
-  await finalizeFulfilledInvoices([result]);
+  const result = await fulfillInvoiceAsStaff(id, performedBy, notes);
+  if (!result.success) return result;
 
   revalidatePath("/yonetim/faturalar");
   revalidatePath(`/yonetim/faturalar/${id}`);
@@ -176,12 +52,7 @@ async function fulfillInvoiceAsAdmin(
   revalidatePath("/musteri/panel/domainler");
   revalidatePath("/yonetim/aktivite");
 
-  return {
-    success: true as const,
-    // Payment recorded, but the order's activation needs the admin (see
-    // /yonetim/provisioning).
-    warning: result.fulfilled ? result.fulfilmentError : undefined,
-  };
+  return { success: true as const, warning: result.warning };
 }
 
 export async function markPaid(id: string) {
@@ -292,58 +163,8 @@ export async function sendInvoiceReminder(id: string) {
   await requirePermission("invoices.edit");
 
   try {
-    const invoice = await db.invoice.findUnique({
-      where: { id },
-      include: {
-        customer: {
-          select: {
-            id: true,
-            name: true,
-            surname: true,
-            email: true,
-          },
-        },
-      },
-    });
-
-    if (!invoice) {
-      return { success: false, error: "Fatura bulunamadı" };
-    }
-
-    if (invoice.status === "PAID") {
-      return { success: false, error: "Ödenmiş fatura için hatırlatma gönderilemez" };
-    }
-
-    if (invoice.status === "CANCELLED") {
-      return { success: false, error: "İptal edilmiş fatura için hatırlatma gönderilemez" };
-    }
-
-    const isOverdue =
-      invoice.status === "OVERDUE" || invoice.dueDate.getTime() < Date.now();
-
-    await (isOverdue
-      ? sendInvoiceOverdueEmail({
-          customer: {
-            customerId: invoice.customer.id,
-            email: invoice.customer.email,
-            fullName: `${invoice.customer.name} ${invoice.customer.surname}`.trim(),
-          },
-          invoiceId: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          totalAmount: Number(invoice.totalAmount),
-          dueDate: invoice.dueDate,
-        })
-      : sendInvoicePaymentReminderEmail({
-          customer: {
-            customerId: invoice.customer.id,
-            email: invoice.customer.email,
-            fullName: `${invoice.customer.name} ${invoice.customer.surname}`.trim(),
-          },
-          invoiceId: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          totalAmount: Number(invoice.totalAmount),
-          dueDate: invoice.dueDate,
-        }));
+    const result = await sendInvoiceReminderFor(id);
+    if (!result.success) return result;
 
     revalidatePath("/yonetim/faturalar");
     revalidatePath("/yonetim/faturalar/bekleyen");
@@ -354,10 +175,10 @@ export async function sendInvoiceReminder(id: string) {
     revalidatePath(`/musteri/panel/faturalar/${id}`);
     revalidatePath("/musteri/panel/e-posta");
 
-    return { success: true, message: "Hatırlatma gönderildi" };
+    return result;
   } catch (error) {
     log.error("send invoice reminder failed", { error });
-    return { success: false, error: "Hatırlatma gönderilirken bir hata oluştu" };
+    return { success: false as const, error: "Hatırlatma gönderilirken bir hata oluştu" };
   }
 }
 

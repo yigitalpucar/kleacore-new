@@ -18,7 +18,7 @@ describe("permission matrix", () => {
 
   it("SUPPORT: tickets + read-only customers/services/domains + own activity", () => {
     expect([...permissionsForRole("SUPPORT")].sort()).toEqual(
-      ["activity.view_own", "customers.view", "domains.view", "services.view", "tickets.reply", "tickets.view"].sort()
+      ["activity.view_own", "api_tokens.manage", "customers.view", "domains.view", "services.view", "tickets.reply", "tickets.view"].sort()
     );
     expect(hasPermission("SUPPORT", "invoices.view")).toBe(false);
     expect(hasPermission("SUPPORT", "customers.edit")).toBe(false);
@@ -37,6 +37,7 @@ describe("permission matrix", () => {
         "orders.view",
         "payments.refund",
         "reports.view",
+        "api_tokens.manage",
       ].sort()
     );
     expect(hasPermission("BILLING", "tickets.view")).toBe(false);

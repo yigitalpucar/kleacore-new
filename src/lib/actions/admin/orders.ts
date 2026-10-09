@@ -3,13 +3,10 @@
 import { db } from "@/lib/db";
 import { emitEvent } from "@/lib/events/emit";
 import { requirePermission } from "@/lib/utils/auth-helpers";
-import { generateInvoiceNumber } from "@/lib/utils/number-generators";
+import { approveOrderAs } from "@/lib/orders/approve";
 import { prepareOrderProvisioning } from "@/lib/provisioning/internal";
-import { logActivity } from "@/lib/activity-log";
 import { revalidatePath } from "next/cache";
 import { createLogger } from "@/lib/logger";
-import { sub } from "@/lib/money";
-import { netInvoiceLine, netInvoiceLineFromOrder } from "@/lib/billing/invoice-lines";
 
 const log = createLogger("admin.orders");
 
@@ -17,90 +14,13 @@ export async function approveOrder(id: string) {
   const session = await requirePermission("orders.manage");
 
   try {
-    const order = await db.order.findUnique({
-      where: { id },
-      include: { product: true, items: true },
-    });
-
-    if (!order) {
-      return { success: false, error: "Sipariş bulunamadı" };
-    }
-
-    if (order.status !== "PENDING") {
-      return { success: false, error: "Sadece bekleyen siparişler onaylanabilir" };
-    }
-
-    const invoiceNumber = await generateInvoiceNumber();
-    const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + 7);
-
-    const subtotal = sub(order.totalAmount, order.taxAmount);
-    const description = order.items[0]?.productName ?? order.product.name;
-    const orderLine = netInvoiceLineFromOrder(order, description);
-    // The invoice must equal its lines; an order whose net amounts don't add
-    // up (legacy rows) is billed as one net line of its subtotal.
-    const invoiceLine = orderLine.totalPrice.equals(subtotal)
-      ? orderLine
-      : netInvoiceLine({ description, unitPrice: subtotal });
-
-    const [updatedOrder, invoice] = await db.$transaction([
-      db.order.update({
-        where: { id },
-        data: {
-          status: "APPROVED",
-          approvedAt: new Date(),
-          approvedBy: session.user.id,
-        },
-      }),
-      db.invoice.create({
-        data: {
-          invoiceNumber,
-          customerId: order.customerId,
-          orderId: order.id,
-          subtotal,
-          taxRate: order.taxRate,
-          taxAmount: order.taxAmount,
-          totalAmount: order.totalAmount,
-          status: "PENDING",
-          dueDate,
-          items: {
-            // Net line from the order's own net amounts (OrderItem is net too
-            // since 20261009130000_order_item_net; legacy rows may not be).
-            create: invoiceLine,
-          },
-        },
-      }),
-      db.orderActivity.create({
-        data: {
-          orderId: id,
-          action: "APPROVED",
-          description: "Sipariş onaylandı ve fatura oluşturuldu",
-          performedBy: session.user.id,
-        },
-      }),
-    ]);
-
-    await logActivity({
-      userId: session.user.id,
-      action: "ORDER_STATUS_CHANGE",
-      entity: "Order",
-      entityId: id,
-      details: {
-        orderNumber: order.orderNumber,
-        previousStatus: "PENDING",
-        newStatus: "APPROVED",
-        invoiceId: invoice.id,
-        invoiceNumber,
-      },
-    });
+    const result = await approveOrderAs(session.user.id, id);
+    if (!result.success) return result;
 
     revalidatePath("/yonetim/siparisler");
     revalidatePath("/yonetim/faturalar");
     revalidatePath("/yonetim/aktivite");
-    return {
-      success: true,
-      data: { orderId: updatedOrder.id, invoiceId: invoice.id },
-    };
+    return result;
   } catch (error) {
     log.error("approve order failed", { error });
     return { success: false, error: "Sipariş onaylanırken bir hata oluştu" };

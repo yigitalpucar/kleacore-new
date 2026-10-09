@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, ShieldCheck, ShieldOff, UserCheck, UserPlus, UserX, Users } from "lucide-react";
+import { KeyRound, Mail, ShieldCheck, ShieldOff, Trash2, UserCheck, UserPlus, UserX, Users } from "lucide-react";
 import {
   DataTable,
   EmptyState,
@@ -25,9 +25,26 @@ import {
   setRequireStaffTwoFactorAction,
   setStaffActiveAction,
 } from "@/lib/actions/admin/staff";
+import { revokeStaffApiTokenAction } from "@/lib/actions/admin/staff-api-tokens";
+import { TokenStateBadge } from "../api-tokenlari/content";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS, STAFF_ROLES, type StaffRole } from "@/lib/auth/permissions";
 import { formatDate, formatDateTime } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
+
+export interface StaffTokenRow {
+  id: string;
+  name: string;
+  prefix: string;
+  owner: string;
+  ownerEmail: string;
+  scopes: number;
+  /** Scopes the owner's current role still grants (0 when the owner is inactive). */
+  effectiveScopes: number;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  state: "active" | "expired" | "revoked";
+}
 
 export interface StaffRow {
   id: string;
@@ -47,11 +64,13 @@ type Result = { success: true; message?: string } | { success: false; error: str
 
 export function PersonelContent({
   staff,
+  tokens,
   currentUserId,
   requireTwoFactor,
   twoFactorGloballyEnabled,
 }: {
   staff: StaffRow[];
+  tokens: StaffTokenRow[];
   currentUserId: string;
   requireTwoFactor: boolean;
   twoFactorGloballyEnabled: boolean;
@@ -203,6 +222,76 @@ export function PersonelContent({
     },
   ];
 
+  const revokeToken = (row: StaffTokenRow) => {
+    if (!confirm(`${row.owner} kullanıcısının "${row.name}" token'ı iptal edilsin mi? Bu token'la çalışan otomasyonlar hemen durur.`)) return;
+    run(() => revokeStaffApiTokenAction(row.id));
+  };
+
+  const tokenActions = (row: StaffTokenRow): RowAction[] => [
+    {
+      label: "İptal et",
+      icon: <Trash2 aria-hidden />,
+      destructive: true,
+      disabledReason: row.state === "revoked" ? "İptal edilmiş" : undefined,
+      onSelect: () => revokeToken(row),
+    },
+  ];
+
+  const tokenColumns: ColumnDef<StaffTokenRow>[] = [
+    {
+      accessorKey: "name",
+      header: "Token",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <p className="truncate font-medium">{row.original.name}</p>
+          <p className="font-mono text-xs text-muted-foreground">{row.original.prefix}…</p>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "owner",
+      header: "Sahibi",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <p className="truncate">{row.original.owner}</p>
+          <p className="break-all text-xs text-muted-foreground">{row.original.ownerEmail}</p>
+        </div>
+      ),
+    },
+    {
+      id: "scopes",
+      accessorFn: (r) => r.effectiveScopes,
+      header: "Etkin yetki",
+      cell: ({ row }) => (
+        <span className="tabular-nums text-muted-foreground">
+          {row.original.effectiveScopes} / {row.original.scopes}
+        </span>
+      ),
+    },
+    {
+      id: "state",
+      accessorFn: (r) => r.state,
+      header: "Durum",
+      cell: ({ row }) => <TokenStateBadge state={row.original.state} />,
+    },
+    {
+      id: "lastUsedAt",
+      accessorFn: (r) => r.lastUsedAt ?? "",
+      header: "Son kullanım",
+      cell: ({ row }) => (
+        <span className="tabular-nums text-muted-foreground">
+          {row.original.lastUsedAt ? `${formatDateTime(row.original.lastUsedAt)} · ${row.original.lastUsedIp ?? "?"}` : "Kullanılmadı"}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) => <RowActionsMenu actions={tokenActions(row.original)} />,
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -237,6 +326,39 @@ export function PersonelContent({
             </div>
           )}
           emptyState={<EmptyState compact icon={Users} title="Personel yok" />}
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Admin API token'ları"
+        description="Tüm personelin otomasyon / yapay zekâ ajanı token'ları. Etkin yetki = token'a verilen ve sahibinin rolünün hâlâ tanıdığı yetkiler."
+        flush
+      >
+        <DataTable
+          framed={false}
+          caption="Admin API token'ları"
+          columns={tokenColumns}
+          data={tokens}
+          pageSize={0}
+          searchFn={(r, q) => r.name.toLocaleLowerCase("tr-TR").includes(q) || r.owner.toLocaleLowerCase("tr-TR").includes(q) || r.prefix.includes(q)}
+          searchPlaceholder="Token veya sahip ara…"
+          mobileCard={(r) => (
+            <ListRow
+              title={r.name}
+              subtitle={`${r.owner} · ${r.prefix}…`}
+              trailing={<RowActionsMenu actions={tokenActions(r)} />}
+              meta={
+                <>
+                  <TokenStateBadge state={r.state} />
+                  <span>
+                    {r.effectiveScopes}/{r.scopes} yetki
+                  </span>
+                  <span>{r.lastUsedAt ? `Son kullanım ${formatDate(r.lastUsedAt)}` : "Kullanılmadı"}</span>
+                </>
+              }
+            />
+          )}
+          emptyState={<EmptyState compact icon={KeyRound} title="Token yok" description="Personel kendi token'larını Yönetim → API token'ları sayfasından oluşturur." />}
         />
       </SectionCard>
 

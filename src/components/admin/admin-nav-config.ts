@@ -9,6 +9,7 @@ import {
   FileText,
   Globe,
   HandCoins,
+  KeyRound,
   Headphones,
   ListChecks,
   LayoutDashboard,
@@ -122,6 +123,7 @@ export function buildAdminNav(counts: AdminCounts, role: StaffRole): AppNavGroup
         { title: "Olaylar", href: `${ADMIN_ROOT}/olaylar`, icon: Radio },
         { title: "Aktivite kayıtları", href: `${ADMIN_ROOT}/aktivite`, icon: ScrollText },
         { title: "Personel", href: `${ADMIN_ROOT}/personel`, icon: UserCog },
+        { title: "API token'ları", href: `${ADMIN_ROOT}/api-tokenlari`, icon: KeyRound },
         { title: "Modüller", href: `${ADMIN_ROOT}/moduller`, icon: Blocks },
         { title: "Entegrasyonlar", href: `${ADMIN_ROOT}/entegrasyonlar`, icon: Plug },
         { title: "Ayarlar", href: `${ADMIN_ROOT}/ayarlar`, icon: Settings },
@@ -304,4 +306,6 @@ export const ADMIN_SEGMENT_LABELS: Record<string, string> = {
   sablonlar: "Şablonlar",
   hatirlatmalar: "Hatırlatma takvimi",
   personel: "Personel",
+  "api-tokenlari": "API token'ları",
+  dokumantasyon: "Dokümantasyon",
 };
