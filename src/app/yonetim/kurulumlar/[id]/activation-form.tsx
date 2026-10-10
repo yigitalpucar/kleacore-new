@@ -17,7 +17,18 @@ const DELIVERY_OPTIONS: Array<{ value: Delivery; label: string; hint: string }> 
   { value: "separately", label: "Şifre müşteriye ayrıca iletildi", hint: "E-postada şifre yer almaz (telefon, destek talebi vb.)." },
 ];
 
-export function ActivationForm({ taskId, isServer, defaultUsername }: { taskId: string; isServer: boolean; defaultUsername: string }) {
+export function ActivationForm({
+  taskId,
+  isServer,
+  defaultUsername,
+  defaultHostname = "",
+}: {
+  taskId: string;
+  isServer: boolean;
+  defaultUsername: string;
+  /** Hostname the customer asked for at checkout, if any. */
+  defaultHostname?: string;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [delivery, setDelivery] = useState<Delivery>("included");
@@ -74,7 +85,14 @@ export function ActivationForm({ taskId, isServer, defaultUsername }: { taskId: 
             <Input id="ipAddress" name="ipAddress" inputMode="decimal" autoComplete="off" placeholder="203.0.113.10" className="font-mono" />
           </FormField>
           <FormField label="Sunucu adı (hostname)" htmlFor="hostname" error={fieldError("hostname")}>
-            <Input id="hostname" name="hostname" autoComplete="off" placeholder="vds123.kleacore.com" className="font-mono" />
+            <Input
+              id="hostname"
+              name="hostname"
+              autoComplete="off"
+              placeholder="vds123.kleacore.com"
+              defaultValue={defaultHostname}
+              className="font-mono"
+            />
           </FormField>
           <FormField label="Kullanıcı adı" htmlFor="username" error={fieldError("username")}>
             <Input id="username" name="username" autoComplete="off" defaultValue={defaultUsername} className="font-mono" />

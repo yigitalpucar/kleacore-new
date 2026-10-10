@@ -11,6 +11,7 @@ const taskInclude = {
       createdAt: true,
       completedAt: true,
       customerNotes: true,
+      items: { select: { configuration: true }, take: 1 },
       invoice: { select: { id: true, invoiceNumber: true, paidAt: true } },
       product: { select: { id: true, name: true, category: { select: { slug: true, name: true } } } },
       customer: {

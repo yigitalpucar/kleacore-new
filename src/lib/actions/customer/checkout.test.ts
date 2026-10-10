@@ -264,3 +264,74 @@ describe("checkoutCart signup guards", () => {
     expect(mocks.evaluateCheckoutOrders).not.toHaveBeenCalled();
   });
 });
+
+describe("checkoutCart server configurator items", () => {
+  const vdsProduct = {
+    id: "prod_vds",
+    sku: "VDS-1",
+    name: "VDS-1",
+    status: "ACTIVE",
+    isVisible: true,
+    basePrice: 99.99,
+    category: { slug: "vds" },
+    pricingTiers: [{ period: "monthly", price: 99.99, discountedPrice: null, isActive: true }],
+  };
+  const osOption = {
+    slug: "os",
+    name: "İşletim Sistemi",
+    optionType: "select",
+    choices: [{ value: "ubuntu-24-04", label: "Ubuntu 24.04 LTS", priceMonthly: 0, priceYearly: 0 }],
+  };
+
+  const serverCart = (metadata: Record<string, unknown>) => ({
+    paymentMethod: "bank_transfer" as const,
+    consents,
+    items: [
+      {
+        id: "server:vds:vds-1:monthly:tr",
+        type: "server" as const,
+        quantity: 1,
+        metadata: { category: "vds", planCode: "VDS-1", billingPeriod: "monthly", location: "tr", ...metadata },
+      },
+    ],
+  });
+
+  beforeEach(async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user_1" } });
+    mocks.getPurchaseBlock.mockResolvedValue(null);
+    mocks.getCheckoutLegalDocuments.mockResolvedValue(legalDocuments);
+    mocks.getFraudConfig.mockResolvedValue({ enabled: false, trustCfHeader: true });
+    mocks.tx.user.findUnique.mockResolvedValue({ balance: 0 });
+    mocks.tx.product.findUnique.mockResolvedValue(vdsProduct);
+    const configurator = await import("@/lib/products/configurator");
+    vi.mocked(configurator.validateConfigurationSelections).mockResolvedValue({
+      valid: true,
+      errors: [],
+      options: [osOption],
+    } as never);
+    vi.mocked(configurator.calculateConfigurationPrice).mockReturnValue({
+      total: 0,
+      lines: [{ slug: "os", name: "İşletim Sistemi", optionType: "select", value: "ubuntu-24-04", label: "Ubuntu 24.04 LTS", price: 0 }],
+    });
+  });
+
+  it("stores the normalised hostname and only real config selections, priced from the DB", async () => {
+    const result = await checkoutCart(
+      serverCart({ hostname: " Web01.Ornek.com ", configuration: { os: "ubuntu-24-04", rogue: "x" } }) as never
+    );
+
+    expect(result.success).toBe(true);
+    const orderData = (mocks.tx.order.create.mock.calls as unknown as Array<[{ data: Record<string, any> }]>).at(-1)![0].data;
+    expect(orderData.items.create.configuration).toMatchObject({
+      hostname: "web01.ornek.com",
+      configSelections: { os: "ubuntu-24-04" },
+    });
+    expect(orderData.items.create.configuration.configSelections).not.toHaveProperty("rogue");
+    expect(String(orderData.items.create.unitPrice)).toBe("99.99");
+  });
+
+  it("refuses an invalid hostname with a readable error", async () => {
+    const result = await checkoutCart(serverCart({ hostname: "-bad_host" }) as never);
+    expect(result).toMatchObject({ success: false, error: expect.stringContaining("Sunucu adı geçersiz") });
+  });
+});
