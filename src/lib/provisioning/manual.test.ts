@@ -116,7 +116,15 @@ describe("openManualProvisioningTask", () => {
       })
     );
     expect(mocks.tx.notification.createMany).toHaveBeenCalledWith({
-      data: [expect.objectContaining({ userId: "admin-1", link: "/yonetim/kurulumlar/task-1" })],
+      data: [
+        expect.objectContaining({
+          userId: "admin-1",
+          link: "/yonetim/kurulumlar/task-1",
+          kind: "provisioning.manual_pending",
+          dedupeKey: "manual-provisioning:task-1",
+        }),
+      ],
+      skipDuplicates: true,
     });
   });
 });

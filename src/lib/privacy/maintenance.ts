@@ -7,6 +7,8 @@ import { cancelExpiredVerifications } from "./requests";
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Panel sign-in history kept for one year (data minimisation; see report). */
 export const LOGIN_EVENT_RETENTION_DAYS = 365;
+/** In-app bell notifications (read or not) are kept for 90 days. */
+export const IN_APP_NOTIFICATION_RETENTION_DAYS = 90;
 /** Staff reminder when an open KVKK request is this close to its deadline. */
 export const DEADLINE_WARNING_DAYS = 7;
 
@@ -15,6 +17,7 @@ export const DEADLINE_WARNING_DAYS = 7;
  *  - unverified public requests past their link lifetime → CANCELLED;
  *  - stored exports whose link expired (or never sent within 30 days) → deleted;
  *  - expired / revoked trusted devices and old sign-in events → deleted;
+ *  - in-app (bell) notifications older than 90 days → deleted;
  *  - staff reminder for open requests due within 7 days and when overdue
  *    (once per request and stage, deduplicated in NotificationLog).
  */
@@ -27,12 +30,16 @@ export async function runPrivacyMaintenance(now = new Date()) {
   const logins = await db.loginEvent.deleteMany({
     where: { createdAt: { lt: new Date(now.getTime() - LOGIN_EVENT_RETENTION_DAYS * DAY_MS) } },
   });
+  const notifications = await db.notification.deleteMany({
+    where: { createdAt: { lt: new Date(now.getTime() - IN_APP_NOTIFICATION_RETENTION_DAYS * DAY_MS) } },
+  });
   const reminders = await sendDeadlineReminders(now);
   return {
     cancelledVerifications: cancelled,
     exportsPurged,
     trustedDevicesDeleted: devices.count,
     loginEventsDeleted: logins.count,
+    notificationsDeleted: notifications.count,
     deadlineReminders: reminders,
   };
 }

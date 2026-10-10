@@ -152,7 +152,10 @@ export async function openManualProvisioningTask(
         title: "Manuel kurulum bekliyor",
         message: `${input.productName} — ${input.orderNumber} (${input.customerName})`,
         link: `/yonetim/kurulumlar/${task.id}`,
+        kind: "provisioning.manual_pending",
+        dedupeKey: `manual-provisioning:${task.id}`,
       })),
+      skipDuplicates: true,
     });
   }
 
