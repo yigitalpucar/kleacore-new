@@ -5,6 +5,7 @@ import {
   BookOpen,
   Box,
   Download,
+  FilePlus,
   FileCheck,
   FileLock2,
   FileText,
@@ -21,6 +22,7 @@ import {
   Waypoints,
   Newspaper,
   Package,
+  PackagePlus,
   Plug,
   Radio,
   RefreshCw,
@@ -31,6 +33,7 @@ import {
   ShoppingCart,
   Store,
   UserCog,
+  UserPlus,
   Users,
   Wrench,
   type LucideIcon,
@@ -72,29 +75,34 @@ export function buildAdminNav(counts: AdminCounts, role: StaffRole): AppNavGroup
       label: "Müşteriler",
       collapsible: true,
       items: [
-        { title: "Müşteriler", href: `${ADMIN_ROOT}/musteriler`, icon: Users },
-        { title: "Bayiler", href: `${ADMIN_ROOT}/bayiler`, icon: Store },
-        { title: "Affiliate ödemeleri", href: `${ADMIN_ROOT}/affiliate-odemeleri`, icon: HandCoins },
+        { title: "Müşteriler", href: `${ADMIN_ROOT}/musteriler`, icon: Users, description: "Hesaplar, iletişim ve müşteri geçmişi" },
+        { title: "Bayiler", href: `${ADMIN_ROOT}/bayiler`, icon: Store, description: "Bayi hesapları ve indirim oranları" },
+        { title: "Affiliate ödemeleri", href: `${ADMIN_ROOT}/affiliate-odemeleri`, icon: HandCoins, description: "Satış ortaklığı kazanç talepleri" },
+        { title: "Kimlik doğrulama", href: `${ADMIN_ROOT}/kyc`, icon: IdCard, description: "KYC belgeleri ve onay kuyruğu" },
+        { title: "KVKK talepleri", href: `${ADMIN_ROOT}/kvkk-talepleri`, icon: FileLock2, description: "Veri erişim ve silme başvuruları" },
       ],
     },
     {
-      label: "Satış ve hizmetler",
+      label: "Satış",
       collapsible: true,
       items: [
         {
           title: "Siparişler",
           href: `${ADMIN_ROOT}/siparisler`,
           icon: ShoppingCart,
+          description: "Yeni siparişler, onay ve iptal talepleri",
           badge: counts.pendingOrders + counts.pendingCancellations || null,
         },
-        { title: "Hizmetler", href: `${ADMIN_ROOT}/hizmetler`, icon: Package },
-        { title: "Alan adları", href: `${ADMIN_ROOT}/domainler`, icon: Globe },
+        { title: "Hizmetler", href: `${ADMIN_ROOT}/hizmetler`, icon: Package, description: "Hosting, sunucu ve SSL hizmetleri" },
+        { title: "Alan adları", href: `${ADMIN_ROOT}/domainler`, icon: Globe, description: "Kayıt, yenileme ve transferler" },
         {
           title: "Kurulum görevleri",
           href: `${ADMIN_ROOT}/kurulumlar`,
           icon: Wrench,
+          description: "Elle kurulacak hizmetler",
           badge: counts.pendingManualProvisioning || null,
         },
+        { title: "Ürünler", href: `${ADMIN_ROOT}/urunler`, icon: ShoppingBag, description: "Paketler, fiyatlar, promosyonlar, TLD'ler" },
       ],
     },
     {
@@ -105,72 +113,102 @@ export function buildAdminNav(counts: AdminCounts, role: StaffRole): AppNavGroup
           title: "Faturalar",
           href: `${ADMIN_ROOT}/faturalar`,
           icon: FileText,
+          description: "Tahsilat, gecikmeler ve havale bildirimleri",
           badge: counts.overdueInvoices + counts.pendingBankTransfers || null,
         },
-        { title: "E-Fatura / e-Arşiv", href: `${ADMIN_ROOT}/efatura`, icon: FileCheck },
-        { title: "Raporlar", href: `${ADMIN_ROOT}/raporlar`, icon: BarChart3 },
+        { title: "E-Fatura / e-Arşiv", href: `${ADMIN_ROOT}/efatura`, icon: FileCheck, description: "Uyumsoft gönderimleri ve durumları" },
+        { title: "Raporlar", href: `${ADMIN_ROOT}/raporlar`, icon: BarChart3, description: "Gelir, MRR, KDV ve kayıp oranı" },
       ],
     },
     {
-      label: "Destek ve iletişim",
+      label: "Destek",
       collapsible: true,
       items: [
-        { title: "Destek talepleri", href: `${ADMIN_ROOT}/destek`, icon: Headphones, badge: counts.openTickets || null },
-        { title: "Duyurular", href: `${ADMIN_ROOT}/duyurular`, icon: Megaphone },
-        { title: "Sistem durumu", href: `${ADMIN_ROOT}/durum`, icon: Activity },
-        { title: "Bildirimler", href: `${ADMIN_ROOT}/bildirimler`, icon: Mail },
+        {
+          title: "Destek talepleri",
+          href: `${ADMIN_ROOT}/destek`,
+          icon: Headphones,
+          description: "Açık talepler ve hazır yanıtlar",
+          badge: counts.openTickets || null,
+        },
+        { title: "Duyurular", href: `${ADMIN_ROOT}/duyurular`, icon: Megaphone, description: "Müşterilere toplu e-posta" },
+        { title: "Sistem durumu", href: `${ADMIN_ROOT}/durum`, icon: Activity, description: "Durum sayfası ve olay kayıtları" },
+        { title: "Bildirimler", href: `${ADMIN_ROOT}/bildirimler`, icon: Mail, description: "Gönderilen e-postalar ve şablonlar" },
+        { title: "Blog", href: `${ADMIN_ROOT}/icerik/blog`, icon: Newspaper, description: "Yazılar ve taslaklar" },
+        { title: "Bilgi bankası", href: `${ADMIN_ROOT}/icerik/bilgi-bankasi`, icon: BookOpen, description: "Yardım makaleleri" },
       ],
-    },
-    {
-      label: "Güvenlik ve uyum",
-      collapsible: true,
-      items: [
-        { title: "Kimlik doğrulama", href: `${ADMIN_ROOT}/kyc`, icon: IdCard },
-        { title: "KVKK talepleri", href: `${ADMIN_ROOT}/kvkk-talepleri`, icon: FileLock2 },
-        { title: "Aktivite kayıtları", href: `${ADMIN_ROOT}/aktivite`, icon: ScrollText },
-      ],
-    },
-    {
-      label: "Katalog",
-      collapsible: true,
-      items: [{ title: "Ürünler", href: `${ADMIN_ROOT}/urunler`, icon: ShoppingBag }],
     },
     {
       label: "Altyapı",
       collapsible: true,
       items: [
-        { title: "Sunucular", href: `${ADMIN_ROOT}/sunucular`, icon: Server },
-        { title: "Modüller", href: `${ADMIN_ROOT}/moduller`, icon: Blocks },
-        { title: "IP havuzları", href: `${ADMIN_ROOT}/ip-havuzlari`, icon: Network },
-        { title: "DNS bölgeleri", href: `${ADMIN_ROOT}/dns`, icon: Waypoints },
-        { title: "Provisioning kuyruğu", href: `${ADMIN_ROOT}/provisioning`, icon: RefreshCw },
-        { title: "İçe aktarma", href: `${ADMIN_ROOT}/ice-aktar`, icon: Download },
-      ],
-    },
-    {
-      label: "İçerik",
-      collapsible: true,
-      items: [
-        { title: "Blog", href: `${ADMIN_ROOT}/icerik/blog`, icon: Newspaper },
-        { title: "Bilgi bankası", href: `${ADMIN_ROOT}/icerik/bilgi-bankasi`, icon: BookOpen },
+        { title: "Sunucular", href: `${ADMIN_ROOT}/sunucular`, icon: Server, description: "Fiziksel sunucular ve kapasite" },
+        { title: "Modüller", href: `${ADMIN_ROOT}/moduller`, icon: Blocks, description: "WHM, Proxmox, kayıt firması, DNS" },
+        { title: "IP havuzları", href: `${ADMIN_ROOT}/ip-havuzlari`, icon: Network, description: "IP blokları ve atamalar" },
+        { title: "DNS bölgeleri", href: `${ADMIN_ROOT}/dns`, icon: Waypoints, description: "Cloudflare ve kayıt firması DNS'i" },
+        { title: "Provisioning kuyruğu", href: `${ADMIN_ROOT}/provisioning`, icon: RefreshCw, description: "Otomatik kurulum işleri" },
+        { title: "İçe aktarma", href: `${ADMIN_ROOT}/ice-aktar`, icon: Download, description: "WHM, Proxmox ve kayıt firmasından" },
       ],
     },
     {
       label: "Sistem",
       collapsible: true,
       items: [
-        { title: "Personel", href: `${ADMIN_ROOT}/personel`, icon: UserCog },
-        { title: "API token'ları", href: `${ADMIN_ROOT}/api-tokenlari`, icon: KeyRound },
-        { title: "Entegrasyonlar", href: `${ADMIN_ROOT}/entegrasyonlar`, icon: Plug },
-        { title: "Arka plan işleri", href: `${ADMIN_ROOT}/isler`, icon: ListChecks },
-        { title: "Olaylar", href: `${ADMIN_ROOT}/olaylar`, icon: Radio },
-        { title: "Ayarlar", href: `${ADMIN_ROOT}/ayarlar`, icon: Settings },
+        { title: "Personel", href: `${ADMIN_ROOT}/personel`, icon: UserCog, description: "Ekip üyeleri ve roller" },
+        { title: "API token'ları", href: `${ADMIN_ROOT}/api-tokenlari`, icon: KeyRound, description: "Yönetim API erişimi" },
+        { title: "Entegrasyonlar", href: `${ADMIN_ROOT}/entegrasyonlar`, icon: Plug, description: "Ödeme, e-posta ve dış servisler" },
+        { title: "Arka plan işleri", href: `${ADMIN_ROOT}/isler`, icon: ListChecks, description: "Kuyruk ve zamanlanmış görevler" },
+        { title: "Olaylar", href: `${ADMIN_ROOT}/olaylar`, icon: Radio, description: "Sistem olayları ve teslimatlar" },
+        { title: "Aktivite kayıtları", href: `${ADMIN_ROOT}/aktivite`, icon: ScrollText, description: "Kim, ne zaman, ne yaptı" },
+        { title: "Ayarlar", href: `${ADMIN_ROOT}/ayarlar`, icon: Settings, description: "Genel, faturalama ve güvenlik" },
       ],
     },
   ];
   return groups
     .map((group) => ({ ...group, items: group.items.filter((item) => canAccessRoute(role, item.href)) }))
     .filter((group) => group.items.length > 0);
+}
+
+/**
+ * Sub-pages worth one click from the mega menu: a group's section tabs minus
+ * the overview and the pages already listed as group items.
+ */
+export function adminGroupShortcuts(group: AppNavGroup, role: StaffRole, limit = 8): AdminSectionTab[] {
+  const roots = new Set(group.items.map((item) => item.href));
+  return adminSectionsFor(role)
+    .flatMap((section) => (roots.has(section.tabs[0]?.href ?? "") ? section.tabs.slice(1) : []))
+    .filter((tab) => !roots.has(tab.href))
+    .slice(0, limit);
+}
+
+export type AdminQuickAction = {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+  /** Pending count shown on the right (queues only). */
+  count?: number;
+};
+
+/** "Hızlı işlemler" menu in the top bar: create shortcuts + the queues that need someone. */
+export function adminQuickActions(counts: AdminCounts, role: StaffRole) {
+  const create: AdminQuickAction[] = [
+    { title: "Müşteri ekle", href: `${ADMIN_ROOT}/musteri-ekle`, icon: UserPlus },
+    { title: "Hizmet ekle", href: `${ADMIN_ROOT}/hizmet-ekle`, icon: PackagePlus },
+    { title: "Fatura oluştur", href: `${ADMIN_ROOT}/faturalar/olustur`, icon: FilePlus },
+    { title: "Duyuru hazırla", href: `${ADMIN_ROOT}/duyurular/yeni`, icon: Megaphone },
+    { title: "Blog yazısı", href: `${ADMIN_ROOT}/icerik/blog/yeni`, icon: Newspaper },
+    { title: "Bilgi bankası makalesi", href: `${ADMIN_ROOT}/icerik/bilgi-bankasi/yeni`, icon: BookOpen },
+  ];
+  const queues: AdminQuickAction[] = [
+    { title: "Bekleyen siparişler", href: `${ADMIN_ROOT}/siparisler/beklemede`, icon: ShoppingCart, count: counts.pendingOrders },
+    { title: "İptal talepleri", href: `${ADMIN_ROOT}/siparisler/iptal-talepleri`, icon: ShoppingCart, count: counts.pendingCancellations },
+    { title: "Havale bildirimleri", href: `${ADMIN_ROOT}/faturalar/havale-bildirimleri`, icon: HandCoins, count: counts.pendingBankTransfers },
+    { title: "Gecikmiş faturalar", href: `${ADMIN_ROOT}/faturalar/gecikmis`, icon: FileText, count: counts.overdueInvoices },
+    { title: "Kurulum görevleri", href: `${ADMIN_ROOT}/kurulumlar`, icon: Wrench, count: counts.pendingManualProvisioning },
+    { title: "Açık destek talepleri", href: `${ADMIN_ROOT}/destek`, icon: Headphones, count: counts.openTickets },
+  ];
+  const allowed = (list: AdminQuickAction[]) => list.filter((a) => canAccessRoute(role, a.href));
+  return { create: allowed(create), queues: allowed(queues) };
 }
 
 export type AdminSectionTab = {

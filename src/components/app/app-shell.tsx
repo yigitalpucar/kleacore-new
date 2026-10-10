@@ -20,6 +20,8 @@ export type AppNavItem = {
   badge?: number | string | null;
   /** Active only on an exact path match (use for the dashboard root). */
   exact?: boolean;
+  /** One line under the title in the top-bar mega menu. */
+  description?: string;
 };
 
 export type AppNavGroup = {
@@ -47,8 +49,15 @@ export type AppShellProps = {
   breadcrumbRoot: { label: string; href: string };
   /** Path segment → label overrides for crumbs ("yeni" → "Yeni talep"). */
   segmentLabels?: Record<string, string>;
+  /**
+   * Horizontal navigation under the top bar (e.g. a mega menu). When set, the
+   * desktop sidebar is dropped and the logo moves into the top bar; phones
+   * keep the drawer built from `nav`.
+   */
+  topNav?: React.ReactNode;
   /** Slots in the top bar, right side, in this order. */
   search?: React.ReactNode;
+  quickActions?: React.ReactNode;
   notifications?: React.ReactNode;
   themeToggle?: React.ReactNode;
   userMenu?: React.ReactNode;
@@ -111,7 +120,9 @@ export function AppShell({
   brand,
   breadcrumbRoot,
   segmentLabels = {},
+  topNav,
   search,
+  quickActions,
   notifications,
   themeToggle,
   userMenu,
@@ -119,6 +130,7 @@ export function AppShell({
   bottomBar,
   children,
 }: AppShellProps) {
+  const hasSidebar = !topNav;
   const pathname = usePathname() ?? breadcrumbRoot.href;
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -207,6 +219,7 @@ export function AppShell({
           </a>
 
           {/* Desktop sidebar */}
+          {hasSidebar ? (
           <aside
             aria-label="Panel menüsü"
             className={cn(
@@ -223,6 +236,7 @@ export function AppShell({
               onToggle={toggleCollapsed}
             />
           </aside>
+          ) : null}
 
           {/* Mobile drawer */}
           <DialogPrimitive.Root open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -242,9 +256,26 @@ export function AppShell({
             </DialogPrimitive.Portal>
           </DialogPrimitive.Root>
 
-          <div className={cn("flex min-h-screen flex-col transition-[padding] duration-200", collapsed ? "lg:pl-[64px]" : "lg:pl-64")}>
+          <div
+            className={cn(
+              "flex min-h-screen flex-col transition-[padding] duration-200",
+              hasSidebar && (collapsed ? "lg:pl-[64px]" : "lg:pl-64")
+            )}
+          >
+            <div className="sticky top-0 z-30">
             {/* Top bar */}
-            <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background/85 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/70 sm:px-4 lg:px-6">
+            <header
+              className={cn(
+                "h-14 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70",
+                hasSidebar && "px-2 sm:px-4 lg:px-6"
+              )}
+            >
+              <div
+                className={cn(
+                  "flex h-full w-full items-center gap-2",
+                  !hasSidebar && "mx-auto max-w-[1320px] px-2 sm:px-4 md:px-6 lg:px-8"
+                )}
+              >
               <button
                 type="button"
                 aria-label="Menüyü aç"
@@ -254,6 +285,28 @@ export function AppShell({
               >
                 <Menu aria-hidden className="size-5" />
               </button>
+
+              {!hasSidebar ? (
+                <Link
+                  href={brand.href}
+                  aria-label={`KLEACORE ${brand.label}`}
+                  className="mr-2 hidden shrink-0 items-center gap-2.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex"
+                >
+                  <Image src="/logo.svg" alt="" width={112} height={24} className="hidden h-[22px] w-auto dark:block" priority />
+                  <Image
+                    src="/logo-light.svg"
+                    alt=""
+                    width={112}
+                    height={24}
+                    className="h-[22px] w-auto [filter:brightness(0)_saturate(100%)] dark:hidden"
+                    priority
+                  />
+                  <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    {brand.label}
+                  </span>
+                  <span aria-hidden className="ml-2 hidden h-5 w-px bg-border md:block" />
+                </Link>
+              ) : null}
 
               <nav aria-label="Konum" className="min-w-0 flex-1">
                 <ol className="flex min-w-0 items-center gap-1 text-sm">
@@ -285,11 +338,15 @@ export function AppShell({
 
               <div className="flex shrink-0 items-center gap-1">
                 {search}
+                {quickActions}
                 {notifications}
                 {themeToggle}
                 {userMenu}
               </div>
+              </div>
             </header>
+            {topNav}
+            </div>
 
             <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">
               <RouteFade

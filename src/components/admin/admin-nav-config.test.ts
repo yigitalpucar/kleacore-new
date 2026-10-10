@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { adminSearchItems, buildAdminNav, findAdminSection, type AdminCounts } from "./admin-nav-config";
+import {
+  adminGroupShortcuts,
+  adminQuickActions,
+  adminSearchItems,
+  buildAdminNav,
+  findAdminSection,
+  type AdminCounts,
+} from "./admin-nav-config";
 
 const counts: AdminCounts = {
   pendingOrders: 1,
@@ -67,13 +74,13 @@ describe("admin nav filtering", () => {
     expect(search.some((h) => h.startsWith("/yonetim/urunler"))).toBe(false);
   });
 
-  it("folds every labelled group and keeps the sidebar short", () => {
+  it("folds every labelled group and keeps each mega menu panel short", () => {
     const groups = buildAdminNav(counts, "ADMIN");
     expect(groups[0].label).toBeUndefined();
     for (const group of groups.slice(1)) {
       expect(group.label).toBeTruthy();
       expect(group.collapsible).toBe(true);
-      expect(group.items.length).toBeLessThanOrEqual(6);
+      expect(group.items.length).toBeLessThanOrEqual(7);
     }
     const hrefsInNav = groups.flatMap((g) => g.items.map((i) => i.href));
     expect(new Set(hrefsInNav).size).toBe(hrefsInNav.length);
@@ -84,5 +91,25 @@ describe("admin nav filtering", () => {
       .flatMap((g) => g.items)
       .find((i) => i.href === "/yonetim/faturalar");
     expect(faturalar?.badge).toBe(7);
+  });
+});
+
+describe("admin top bar", () => {
+  it("lists only the quick actions a role can open", () => {
+    const support = adminQuickActions(counts, "SUPPORT");
+    expect(support.create.map((a) => a.href)).not.toContain("/yonetim/faturalar/olustur");
+    expect(support.queues.map((q) => q.href)).toContain("/yonetim/destek");
+    expect(support.queues.map((q) => q.href)).not.toContain("/yonetim/faturalar/havale-bildirimleri");
+
+    const admin = adminQuickActions(counts, "ADMIN");
+    expect(admin.queues.find((q) => q.href === "/yonetim/faturalar/havale-bildirimleri")?.count).toBe(4);
+  });
+
+  it("gives mega menu shortcuts from section tabs without repeating group pages", () => {
+    const finans = buildAdminNav(counts, "ADMIN").find((g) => g.label === "Finans")!;
+    const shortcuts = adminGroupShortcuts(finans, "ADMIN").map((t) => t.href);
+    expect(shortcuts).toContain("/yonetim/faturalar/gecikmis");
+    expect(shortcuts).not.toContain("/yonetim/faturalar");
+    expect(shortcuts.length).toBeLessThanOrEqual(8);
   });
 });

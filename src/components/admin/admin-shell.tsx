@@ -20,10 +20,13 @@ import {
 import {
   ADMIN_ROOT,
   ADMIN_SEGMENT_LABELS,
+  adminQuickActions,
   adminSearchItems,
   buildAdminNav,
   type AdminCounts,
 } from "./admin-nav-config";
+import { AdminMegaMenu } from "./admin-mega-menu";
+import { AdminQuickActions } from "./admin-quick-actions";
 import { AdminSectionTabs } from "./admin-section-tabs";
 import { canAccessRoute, hasAnyPermission, type StaffRole } from "@/lib/auth/permissions";
 
@@ -44,7 +47,7 @@ const quickLinks = [
   { title: "Fatura oluştur", href: `${ADMIN_ROOT}/faturalar/olustur`, icon: FilePlus, group: "İşlem", keywords: "yeni fatura" },
 ];
 
-/** Admin panel chrome (client): grouped sidebar, section tabs and top bar slots. */
+/** Admin panel chrome (client): mega menu under the top bar, quick actions, section tabs. */
 /** Any of these lets the ⌘K palette search records (each group is checked again on the server). */
 const SEARCHABLE = ["customers.view", "invoices.view", "orders.view", "services.view", "domains.view", "tickets.view"] as const;
 
@@ -58,6 +61,8 @@ export function AdminShell({ user, role, counts, notifications, unreadNotificati
       brand={{ href: ADMIN_ROOT, label: "Yönetim" }}
       breadcrumbRoot={{ label: "Yönetim", href: ADMIN_ROOT }}
       segmentLabels={ADMIN_SEGMENT_LABELS}
+      topNav={<AdminMegaMenu nav={nav} role={role} />}
+      quickActions={<AdminQuickActions {...adminQuickActions(counts, role)} />}
       search={
         <AppCommandSearch
           nav={nav}
