@@ -1,6 +1,3 @@
-"use client";
-
-import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface Beam {
@@ -33,8 +30,6 @@ export function Beams({
   /** Draw the dashed rails the beams travel on (default true). */
   rails?: boolean;
 }) {
-  const reduce = useReducedMotion();
-
   return (
     <div aria-hidden className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)}>
       {beams.map((beam) => (
@@ -44,21 +39,16 @@ export function Beams({
           style={{ left: `${beam.left}%` }}
         >
           {rails ? <div className="absolute inset-y-0 left-0 line-dashed-y mask-fade-y" /> : null}
-          {reduce ? null : (
-            <motion.div
-              className="absolute -left-px w-[3px] rounded-full bg-gradient-to-b from-transparent via-foreground/50 to-foreground"
-              style={{ height: beam.height }}
-              initial={{ top: "-15%", opacity: 0 }}
-              animate={{ top: ["-15%", "105%"], opacity: [0, 1, 1, 0] }}
-              transition={{
-                duration: beam.duration,
-                delay: beam.delay,
-                repeat: Infinity,
-                repeatDelay: 2.5,
-                ease: "linear",
-              }}
-            />
-          )}
+          {/* CSS keyframes (globals.css "beam-drop"), so the hero ships no animation JS;
+              the travel takes ~70% of each cycle, the rest is the pause. */}
+          <div
+            className="absolute -left-px w-[3px] rounded-full bg-gradient-to-b from-transparent via-foreground/50 to-foreground opacity-0 motion-reduce:hidden"
+            style={{
+              height: beam.height,
+              top: "-15%",
+              animation: `beam-drop ${(beam.duration + 2.5).toFixed(2)}s linear ${beam.delay}s infinite`,
+            }}
+          />
         </div>
       ))}
     </div>

@@ -1,7 +1,6 @@
 "use client";
 
-import { useId, useRef } from "react";
-import { motion } from "framer-motion";
+import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import { dativeSuffix, type BillingPeriod } from "@/lib/format/price";
 
@@ -32,7 +31,6 @@ export function BillingSwitch({
   className?: string;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const pillId = useId();
 
   const onKeyDown = (event: React.KeyboardEvent, index: number) => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
@@ -69,11 +67,7 @@ export function BillingSwitch({
               )}
             >
               {active ? (
-                <motion.span
-                  layoutId={`billing-pill-${pillId}`}
-                  className="absolute inset-0 -z-10 rounded-full bg-foreground shadow-sm"
-                  transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                />
+                <span aria-hidden className="absolute inset-0 -z-10 rounded-full bg-foreground shadow-sm" />
               ) : null}
               {option.label}
             </button>

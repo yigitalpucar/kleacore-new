@@ -6,7 +6,6 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useSession } from "next-auth/react";
-import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, ChevronDown, Menu, Moon, ShoppingCart, Sun } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -90,13 +89,9 @@ function CartButton({ className }: { className?: string }) {
 
 function MegaPanel({ group, onNavigate, id }: { group: NavGroup; onNavigate: () => void; id: string }) {
   return (
-    <motion.div
+    <div
       id={id}
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.16, ease: "easeOut" }}
-      className="absolute inset-x-0 top-full border-b bg-background shadow-[0_24px_40px_-24px_rgba(0,0,0,0.25)] backdrop-blur-xl"
+      className="absolute inset-x-0 top-full border-b motion-safe:duration-150 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 bg-background shadow-[0_24px_40px_-24px_rgba(0,0,0,0.25)] backdrop-blur-xl"
     >
       <Container className="grid grid-cols-12 gap-8 py-8">
         <div className="col-span-8">
@@ -142,7 +137,7 @@ function MegaPanel({ group, onNavigate, id }: { group: NavGroup; onNavigate: () 
           </div>
         </div>
       </Container>
-    </motion.div>
+    </div>
   );
 }
 
@@ -227,11 +222,9 @@ export function Header() {
                       className={cn("size-3.5 transition-transform duration-200", isActive && "rotate-180")}
                     />
                   </button>
-                  <AnimatePresence>
-                    {isActive ? (
-                      <MegaPanel group={group} id={panelId} onNavigate={() => setActive(null)} />
-                    ) : null}
-                  </AnimatePresence>
+                  {isActive ? (
+                    <MegaPanel group={group} id={panelId} onNavigate={() => setActive(null)} />
+                  ) : null}
                 </li>
               );
             })}
@@ -387,36 +380,27 @@ function MobileGroup({
         {group.title}
         <ChevronDown aria-hidden className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
       </button>
-      <AnimatePresence initial={false}>
-        {open ? (
-          <motion.ul
-            id={id}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18 }}
-            className="overflow-hidden pb-2"
-          >
-            {group.items.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={onNavigate}
-                  className="flex min-h-11 items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted/60"
-                >
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
-                    <item.icon aria-hidden className="size-4 text-foreground/80" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block font-medium">{item.title}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </motion.ul>
-        ) : null}
-      </AnimatePresence>
+      {open ? (
+        <ul id={id} className="overflow-hidden pb-2 motion-safe:duration-200 motion-safe:animate-in motion-safe:fade-in">
+          {group.items.map((item) => (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                onClick={onNavigate}
+                className="flex min-h-11 items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted/60"
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+                  <item.icon aria-hidden className="size-4 text-foreground/80" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-medium">{item.title}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

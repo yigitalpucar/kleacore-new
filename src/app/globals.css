@@ -123,3 +123,12 @@
     mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, #000 30%, transparent 100%);
   }
 }
+
+/* Hero beams (src/components/site/beams.tsx): fall down the rail, then pause. */
+@keyframes beam-drop {
+  0% { top: -15%; opacity: 0; }
+  7% { opacity: 1; }
+  63% { opacity: 1; }
+  70% { top: 105%; opacity: 0; }
+  100% { top: 105%; opacity: 0; }
+}

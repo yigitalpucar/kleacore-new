@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GridLineHorizontal } from "./grid-lines";
@@ -74,24 +73,18 @@ export function FaqList({
                       </span>
                     </button>
                   </QuestionHeading>
-                  <AnimatePresence initial={false}>
-                    {open ? (
-                      <motion.div
-                        id={`${id}-panel`}
-                        role="region"
-                        aria-labelledby={`${id}-trigger`}
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.22, ease: "easeOut" }}
-                        className="overflow-hidden"
-                      >
-                        <p className="max-w-3xl pb-5 text-sm leading-relaxed text-muted-foreground sm:px-2 sm:text-base">
-                          {item.answer}
-                        </p>
-                      </motion.div>
-                    ) : null}
-                  </AnimatePresence>
+                  {open ? (
+                    <div
+                      id={`${id}-panel`}
+                      role="region"
+                      aria-labelledby={`${id}-trigger`}
+                      className="overflow-hidden motion-safe:duration-200 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1"
+                    >
+                      <p className="max-w-3xl pb-5 text-sm leading-relaxed text-muted-foreground sm:px-2 sm:text-base">
+                        {item.answer}
+                      </p>
+                    </div>
+                  ) : null}
                   <GridLineHorizontal className="bottom-0" fade={false} />
                 </li>
               );
