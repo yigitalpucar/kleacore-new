@@ -1,7 +1,8 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
-import { ChevronDown, FileCheck2, Headphones, Loader2, Network, Search, UserCheck } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { FileCheck2, Headphones, Network, UserCheck } from "lucide-react";
+import { DomainSearch } from "@/components/domain/domain-search";
 import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -19,11 +20,7 @@ import {
   type FeatureItem,
   type TrustBarItem,
 } from "@/components/site";
-import { CornerTicks } from "@/components/site/grid-lines";
-import { DomainResultList, type DomainResultItem } from "@/components/site/domain/domain-results";
-import { searchDomainAvailability } from "@/lib/actions/public/domains";
 import { formatTRY } from "@/lib/format/price";
-import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 interface BelgesizTld {
@@ -87,52 +84,16 @@ const faqs: FaqItem[] = [
 ];
 
 export const BelgesizTRContent = ({ tlds }: { tlds: BelgesizTld[] }) => {
-  const [domain, setDomain] = useState("");
   const [selectedTld, setSelectedTld] = useState(tlds[0]?.ext ?? ".gen.tr");
-  const [isSearching, setIsSearching] = useState(false);
-  const [results, setResults] = useState<DomainResultItem[]>([]);
-  const inputId = useId();
-  const selectId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const lowest = tlds.length > 0 ? Math.min(...tlds.map((t) => t.registerPrice)) : null;
-
-  const handleSearch = async () => {
-    if (!domain.trim()) return;
-
-    setIsSearching(true);
-    setResults([]);
-
-    try {
-      const response = await searchDomainAvailability(domain, [selectedTld]);
-      if (!response.success || !response.data) {
-        toast.error(response.error ?? "Domain sorgusu tamamlanamadı");
-        return;
-      }
-
-      const firstResult = response.data.results[0];
-      if (!firstResult) {
-        toast.error("Sorgu sonucu alınamadı");
-        return;
-      }
-
-      setResults([
-        {
-          domain: firstResult.domain,
-          available: firstResult.available,
-          price: firstResult.price,
-          renewPrice: firstResult.renewPrice,
-        },
-      ]);
-    } catch {
-      toast.error("Domain sorgusu şu anda tamamlanamadı. Lütfen tekrar deneyin.");
-    } finally {
-      setIsSearching(false);
-    }
-  };
+  const searchTlds = useMemo(
+    () => tlds.map((tld) => ({ ext: tld.ext, price: tld.registerPrice, renewPrice: tld.renewPrice })),
+    [tlds]
+  );
 
   const pickTld = (ext: string) => {
     setSelectedTld(ext);
-    setResults([]);
     inputRef.current?.focus({ preventScroll: true });
     document.getElementById("belgesiz-ara")?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
@@ -152,82 +113,15 @@ export const BelgesizTRContent = ({ tlds }: { tlds: BelgesizTld[] }) => {
           }
           breadcrumbs={[{ label: "Domain", href: "/domain/kayit" }, { label: "Belgesiz .tr" }]}
         >
-          <div id="belgesiz-ara" className="mx-auto max-w-3xl scroll-mt-24 text-left">
-            <form
-              role="search"
-              aria-label="Belgesiz .tr alan adı sorgulama"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleSearch();
-              }}
-              className="relative rounded-xl border bg-background p-2 shadow-[0_16px_32px_-20px_rgba(0,0,0,0.25)] dark:shadow-none"
-            >
-              <CornerTicks />
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <div className="flex flex-1 items-center">
-                  <label htmlFor={inputId} className="sr-only">
-                    Alan adı
-                  </label>
-                  <input
-                    ref={inputRef}
-                    id={inputId}
-                    type="text"
-                    inputMode="url"
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    placeholder="ornek-isim"
-                    className="h-12 min-w-0 flex-1 rounded-lg bg-transparent px-4 text-base outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring sm:h-14 sm:text-lg"
-                    value={domain}
-                    onChange={(e) => setDomain(e.target.value)}
-                  />
-                  <label htmlFor={selectId} className="sr-only">
-                    Uzantı
-                  </label>
-                  <div className="relative shrink-0">
-                    <select
-                      id={selectId}
-                      value={selectedTld}
-                      onChange={(e) => {
-                        setSelectedTld(e.target.value);
-                        setResults([]);
-                      }}
-                      className="h-11 appearance-none rounded-md border bg-muted/50 pl-3 pr-8 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {tlds.map((tld) => (
-                        <option key={tld.ext} value={tld.ext}>
-                          {tld.ext}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      aria-hidden
-                      className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  className={buttonClasses({ size: "lg", className: "h-12 sm:h-14 sm:px-8" })}
-                  disabled={isSearching || !domain.trim()}
-                >
-                  {isSearching ? (
-                    <>
-                      <Loader2 aria-hidden className="size-4 animate-spin" />
-                      Sorgulanıyor…
-                    </>
-                  ) : (
-                    <>
-                      <Search aria-hidden className="size-4" />
-                      Sorgula
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-            <div aria-live="polite">
-              {results.length > 0 && !isSearching ? <DomainResultList results={results} className="mt-6" /> : null}
-            </div>
+          <div id="belgesiz-ara" className="mx-auto max-w-3xl scroll-mt-24">
+            <DomainSearch
+              tlds={searchTlds}
+              chips={0}
+              preferredExt={selectedTld}
+              inputRef={inputRef}
+              formLabel="Belgesiz .tr alan adı sorgulama"
+              placeholder="ornek-isim"
+            />
           </div>
         </PageHeader>
 

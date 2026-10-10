@@ -24,6 +24,12 @@ interface DomainSearchProps {
   tlds: DomainTldPrice[];
   /** How many TLD price chips to show under the box (0 hides them). */
   chips?: number;
+  /** Extension listed first when the visitor typed none (e.g. a picked .tr TLD card). */
+  preferredExt?: string | null;
+  inputRef?: React.Ref<HTMLInputElement>;
+  /** Accessible name of the search form. */
+  formLabel?: string;
+  placeholder?: string;
 }
 
 interface SearchRow {
@@ -147,7 +153,14 @@ function AddButton({
  * and caches availability itself; /api/domain/search applies the per-query
  * and per-IP rate limits.
  */
-export function DomainSearch({ tlds, chips = 6 }: DomainSearchProps) {
+export function DomainSearch({
+  tlds,
+  chips = 6,
+  preferredExt = null,
+  inputRef,
+  formLabel = "Alan adı sorgulama",
+  placeholder = "ornek-sirket",
+}: DomainSearchProps) {
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [label, setLabel] = useState<string | null>(null);
@@ -184,7 +197,7 @@ export function DomainSearch({ tlds, chips = 6 }: DomainSearchProps) {
         setError(null);
         return;
       }
-      const ordered = pickSearchTlds(soldExts, target.ext, soldExts.length);
+      const ordered = pickSearchTlds(soldExts, target.ext ?? preferredExt, soldExts.length);
       const wanted = ordered.slice(0, MAX_TLDS_PER_SEARCH * batchCount);
       const placeholder = (ext: string): SearchRow => ({
         domain: `${target.label}${ext}`,
@@ -251,7 +264,7 @@ export function DomainSearch({ tlds, chips = 6 }: DomainSearchProps) {
         if (abortRef.current === controller) setLoading(false);
       }
     },
-    [priceByExt, soldExts]
+    [priceByExt, soldExts, preferredExt]
   );
 
   // Search as you type (debounced); every keystroke cancels the previous request.
@@ -285,7 +298,7 @@ export function DomainSearch({ tlds, chips = 6 }: DomainSearchProps) {
     <div className="w-full text-left">
       <form
         role="search"
-        aria-label="Alan adı sorgulama"
+        aria-label={formLabel}
         onSubmit={(event) => {
           event.preventDefault();
           if (timerRef.current) window.clearTimeout(timerRef.current);
@@ -304,6 +317,7 @@ export function DomainSearch({ tlds, chips = 6 }: DomainSearchProps) {
                 className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground"
               />
               <input
+                ref={inputRef}
                 id={inputId}
                 type="search"
                 inputMode="url"
@@ -313,7 +327,7 @@ export function DomainSearch({ tlds, chips = 6 }: DomainSearchProps) {
                 enterKeyHint="search"
                 aria-describedby={hintId}
                 aria-invalid={invalid}
-                placeholder="ornek-sirket"
+                placeholder={placeholder}
                 className="h-12 w-full rounded-lg bg-transparent pl-12 pr-10 text-base outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring sm:h-14 sm:text-lg [&::-webkit-search-cancel-button]:hidden"
                 value={query}
                 onChange={(event) => {
