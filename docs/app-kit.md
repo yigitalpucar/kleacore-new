@@ -68,8 +68,8 @@ Top bar items (`topbar-items.tsx`, client):
 |---|---|
 | `AppThemeToggle` | – |
 | `AppUserMenu` | `name`, `email?`, `links?: {label, href, icon?}[]`. Logout (`LogoutButton`) is always last. |
-| `AppNotifications` | `items: {id,title,message,createdAt(ISO),isRead,link?,type?}[]`, `emptyText?`. Read-only list; no "mark all read" because no action exists. |
-| `AppCommandSearch` | `nav`, `extra?: {title,href,group?,icon?,keywords?}[]`, `placeholder?`. ⌘K / Ctrl+K. **Searches pages only**, not data. |
+| `AppNotifications` | `items` (server-rendered latest), `unread?` (total), `endpoint?` (default `/api/bildirimler`; `null` = static), `emptyText?`. Polls every 60 s while visible + on focus/open; marks an item read when followed; "Tümünü okundu işaretle". Rows come from the `in-app` event subscriber (`src/lib/events/subscribers/in-app.ts`); kept 90 days (privacy-maintenance cron). |
+| `AppCommandSearch` | `nav`, `actions?` (quick actions, listed first), `extra?` (more page links), `endpoint?` (record search: `/api/arama` customer, `/api/admin/arama` staff), `placeholder?`, `statusAudience?`. ⌘K / Ctrl+K. Pages + actions filter on the client (Turkish case/diacritics folded); records from 2 characters, debounced 250 ms, grouped, ↑↓/Enter/Esc. Server: `src/lib/search/command-search.ts` (customer = own rows only; staff = one group per view permission; 60 req/min/user). |
 
 ## Components
 
@@ -89,7 +89,7 @@ Top bar items (`topbar-items.tsx`, client):
 | `ChartCard` | server | `title`, `description?`, `actions?`, `data: {label,value}[]`, `formatValue?`, `height?`, `emptyText?`. Dependency-free CSS bars plus an sr-only table. If you need lines or areas, add recharts and keep it inside a `SectionCard`. |
 | `ListRow` | server | `title`, `subtitle?`, `trailing?`, `meta?`, `leading?`. The standard `mobileCard` body. |
 | `IconTile` | server | `size?: "sm"\|"md"\|"lg"`. A bordered square for an icon. |
-| `PageSkeleton` | server | `variant?: "list"\|"detail"\|"dashboard"\|"form"`. Use it in `loading.tsx`. |
+| `PageSkeleton` | server | `variant?: "list"\|"detail"\|"dashboard"\|"form"`, `back?` (reserve the back-link row), `stats?` (stat row; default on for list/dashboard). Use it in `loading.tsx` matching the page. |
 | `DataTable` | **client** | see below |
 | `RowActionsMenu` | **client** | `actions: RowAction[]`, `label?` |
 | `UnavailableAction` | **client** | `label`, `icon?`, `reason?` ("Yakında"), `variant?`, `size?`, `layout?: "button"\|"tile"`, `description?` (tile) |
@@ -166,9 +166,11 @@ export function Content({ rows }) {
   );
 }
 
-// loading.tsx
+// loading.tsx — every panel route has one; match the page (back link, stat row)
 export default function Loading() { return <PageSkeleton variant="list" />; }
 ```
+
+Route states: `src/app/musteri/panel/{error,not-found}.tsx` and `src/app/yonetim/{error,not-found}.tsx` render `AppRouteError` / `AppRouteNotFound` (`components/app/route-states.tsx`) inside the shell, so the sidebar stays usable; "Tekrar dene" = `router.refresh()` + `reset()`. Public product pages use `ContentLoading variant="plans"` (site frame kept). Navigation: `RouteProgress` (root layout; thin top bar after 150 ms) and `RouteFade` (AppShell content; opacity only, skipped with prefers-reduced-motion).
 
 Detail page: `PageHeader back={{ href, label }} eyebrow="Fatura" meta={<StatusBadge …/>}`, then `grid items-start gap-6 lg:grid-cols-3` with main content in `lg:col-span-2` (SectionCards) and a sidebar column (summary `DetailList`, actions). Put a page's primary action in `PageHeader.actions` and repeat it in the sidebar only when the page is long.
 

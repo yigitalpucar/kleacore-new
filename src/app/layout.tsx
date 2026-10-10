@@ -6,6 +6,7 @@ import { AuthSessionProvider } from "@/components/auth/session-provider";
 import { AnnouncementPopup } from "@/components/announcement-popup";
 import { CookieConsent } from "@/components/cookie-consent";
 import { Toaster } from "@/components/ui/toaster";
+import { RouteProgress } from "@/components/app/route-progress";
 import "./globals.css";
 
 const defaultTitle = "KLEACORE | Alan Adı, Hosting ve Sunucu";
@@ -64,6 +65,7 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
+            <RouteProgress />
             {children}
             <Toaster />
             <AnnouncementPopup />

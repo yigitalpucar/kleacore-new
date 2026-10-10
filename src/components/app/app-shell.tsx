@@ -8,6 +8,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ChevronRight, Menu, PanelLeftClose, PanelLeftOpen, X, type LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { RouteFade } from "./route-progress";
 
 /* ------------------------------------------------------------------ types */
 
@@ -279,7 +280,7 @@ export function AppShell({
             </header>
 
             <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">
-              <div className="mx-auto w-full max-w-[1320px] space-y-6 px-4 py-6 md:px-6 md:py-8 lg:px-8">{children}</div>
+              <RouteFade className="mx-auto w-full max-w-[1320px] space-y-6 px-4 py-6 md:px-6 md:py-8 lg:px-8">{children}</RouteFade>
             </main>
           </div>
         </div>
