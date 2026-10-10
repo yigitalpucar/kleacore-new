@@ -6,6 +6,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Section } from "@/components/site/section";
 import { CheckoutHeader } from "@/components/site/hosting/checkout-header";
+import { CheckoutSteps } from "@/components/checkout/checkout-steps";
 import { buttonClasses } from "@/components/site/button-classes";
 import { auth } from "@/lib/auth";
 import { formatTRY } from "@/lib/format/price";
@@ -67,6 +68,7 @@ export default async function Page({ searchParams }: PageProps) {
       <Header />
       <main id="main" className="flex-1">
         <CheckoutHeader
+          steps={<CheckoutSteps current="odeme" />}
           eyebrow="Ödeme · Kredi kartı"
           title="Güvenli ödeme"
           description="Kart bilgilerinizi girin; bankanızın 3D Secure doğrulama sayfasına yönlendirileceksiniz. Kart bilgileriniz saklanmaz."

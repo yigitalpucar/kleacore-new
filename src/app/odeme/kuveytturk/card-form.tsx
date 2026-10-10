@@ -12,6 +12,7 @@ import {
   validateCard,
   type CardValidationError,
 } from "@/lib/payments/card-validation";
+import { PaymentRedirectOverlay, useResetOnPageShow } from "@/components/checkout/payment-redirect-overlay";
 
 interface KuveytTurkCardFormProps {
   merchantOrderId: string;
@@ -37,6 +38,8 @@ export function KuveytTurkCardForm({
   const [cvv, setCvv] = useState("");
   const [errors, setErrors] = useState<CardValidationError[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  // Back from the bank page (bfcache): the form must be usable again.
+  useResetOnPageShow(() => setSubmitting(false));
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     if (submitting) {
@@ -208,6 +211,7 @@ export function KuveytTurkCardForm({
       <p className="border-t px-5 py-3 text-center text-xs text-muted-foreground">
         Visa, Mastercard ve Troy kartlar kabul edilir.
       </p>
+      <PaymentRedirectOverlay phase={submitting ? "bank" : null} gatewayName="Kuveyt Türk 3D Secure" />
     </div>
   );
 }
