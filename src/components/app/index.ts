@@ -9,6 +9,7 @@ export { AppShell, AppBreadcrumbLabel } from "./app-shell";
 export type { AppNavGroup, AppNavItem, AppShellProps, AppShellUser } from "./app-shell";
 export { AppThemeToggle, AppUserMenu, AppNotifications, AppCommandSearch } from "./topbar-items";
 export type { AppNotification, AppUserMenuLink, AppSearchItem } from "./topbar-items";
+export { RouteProgress, RouteFade } from "./route-progress";
 export { PageHeader } from "./page-header";
 export { SectionCard } from "./section-card";
 export { StatCard, StatGrid } from "./stat-card";

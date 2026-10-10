@@ -8,17 +8,29 @@ function Bone({ className }: { className?: string }) {
  * Loading placeholder that matches the kit's page layouts. Use in loading.tsx:
  *   export default function Loading() { return <PageSkeleton variant="list" />; }
  */
-export function PageSkeleton({ variant = "list" }: { variant?: "list" | "detail" | "dashboard" | "form" }) {
+export function PageSkeleton({
+  variant = "list",
+  back = false,
+  stats,
+}: {
+  variant?: "list" | "detail" | "dashboard" | "form";
+  /** Reserve the PageHeader back-link row (detail/sub pages with `back`). */
+  back?: boolean;
+  /** Stat card row; defaults to on for "list" and "dashboard". */
+  stats?: boolean;
+}) {
+  const showStats = stats ?? (variant === "dashboard" || variant === "list");
   return (
     <div role="status" aria-live="polite" className="space-y-6">
       <span className="sr-only">Yükleniyor…</span>
+      {back ? <Bone className="h-8 w-28" /> : null}
       <div className="space-y-2">
         <Bone className="h-3 w-24" />
         <Bone className="h-7 w-56" />
         <Bone className="h-4 w-80 max-w-full" />
       </div>
 
-      {variant === "dashboard" || variant === "list" ? (
+      {showStats ? (
         <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="space-y-3 rounded-lg border bg-card p-4 md:p-5">

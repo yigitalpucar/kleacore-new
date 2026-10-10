@@ -2,6 +2,7 @@ import type { EventType } from "../catalog";
 import { activityLogSubscriber } from "./activity-log";
 import { adminAlertSubscriber } from "./admin-alert";
 import { einvoiceSubscriber } from "./einvoice";
+import { inAppNotificationsSubscriber } from "./in-app";
 import { notificationsSubscriber } from "./notifications";
 import type { EventSubscriber } from "./types";
 import { webhooksSubscriber } from "./webhooks";
@@ -13,6 +14,7 @@ import { webhooksSubscriber } from "./webhooks";
  */
 export const eventSubscribers: readonly EventSubscriber[] = [
   notificationsSubscriber,
+  inAppNotificationsSubscriber,
   einvoiceSubscriber,
   webhooksSubscriber,
   activityLogSubscriber,

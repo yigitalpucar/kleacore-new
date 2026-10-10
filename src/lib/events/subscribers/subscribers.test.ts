@@ -45,9 +45,9 @@ const paid = event("invoice.paid", {
 beforeEach(() => Object.values(mocks).forEach((mock) => mock.mockReset()));
 
 describe("subscriber routing", () => {
-  it("invoice.paid reaches notifications, e-invoice, webhooks and activity log", () => {
-    expect(subscribersFor("invoice.paid").map((s) => s.name)).toEqual(["notifications", "einvoice", "webhooks", "activity-log"]);
-    expect(subscribersFor("ticket.opened").map((s) => s.name)).toEqual(["admin-alert"]);
+  it("invoice.paid reaches notifications, the bell, e-invoice, webhooks and activity log", () => {
+    expect(subscribersFor("invoice.paid").map((s) => s.name)).toEqual(["notifications", "in-app", "einvoice", "webhooks", "activity-log"]);
+    expect(subscribersFor("ticket.opened").map((s) => s.name)).toEqual(["in-app", "admin-alert"]);
   });
 });
 

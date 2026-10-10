@@ -1756,7 +1756,14 @@ model Notification {
   link      String?
   readAt    DateTime?
   createdAt DateTime         @default(now())
+  /// What produced it: domain event type ("invoice.paid") or a source key; null for legacy rows
+  kind      String?
+  /// Idempotency per recipient (e.g. "event:<eventId>"); retried subscribers never insert twice
+  dedupeKey String?
 
+  @@unique([userId, dedupeKey])
+  @@index([userId, isRead, createdAt])
+  @@index([createdAt])
   @@map("notifications")
 }
 
