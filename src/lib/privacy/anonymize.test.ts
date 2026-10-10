@@ -180,6 +180,7 @@ describe("dry run vs apply", () => {
       "trustedDevice.deleteMany",
       "loginEvent.updateMany",
       "broadcastRecipient.updateMany",
+      "fraudCheck.updateMany",
       "staffApiToken.updateMany",
       "emailMessage.deleteMany",
       "ticketAttachment.deleteMany",
@@ -230,6 +231,10 @@ describe("dry run vs apply", () => {
       data: { email: anonymousEmail("cus-1") },
     });
     expect(written.find((c) => c.model === "broadcastRecipient")?.args).toMatchObject({ data: { to: expect.stringContaining("KVKK") } });
+    expect(written.find((c) => c.model === "fraudCheck")?.args).toEqual({
+      where: { customerId: "cus-1" },
+      data: { ipAddress: null },
+    });
     expect(written.find((c) => c.model === "staffApiToken")?.args).toEqual({
       where: { userId: "cus-1", revokedAt: null },
       data: { revokedAt: now, revokedById: "admin-1" },

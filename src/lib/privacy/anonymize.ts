@@ -402,6 +402,8 @@ export async function applyAnonymization(
       // Kept for the security-log retention; only the typed e-mail goes.
       await tx.loginEvent.updateMany({ where: { userId }, data: { email: anonymousEmail(userId) } });
       await tx.broadcastRecipient.updateMany({ where: { userId }, data: { to: REDACTED_TEXT } });
+      // Risk scores and the country stay for fraud statistics; the IP is personal data.
+      await tx.fraudCheck.updateMany({ where: { customerId: userId }, data: { ipAddress: null } });
       await tx.staffApiToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: now, revokedById: actor.id },
