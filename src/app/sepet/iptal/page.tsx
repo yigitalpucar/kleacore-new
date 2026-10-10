@@ -124,7 +124,7 @@ export default async function CheckoutCancelPage({ searchParams }: CheckoutCance
                   {summary.invoices.map((invoice) => {
                     const open = summary.openInvoiceIds.includes(invoice.id);
                     return (
-                      <li key={invoice.id} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 py-4">
+                      <li key={invoice.id} className="flex items-start justify-between gap-4 py-4">
                         <div className="min-w-0">
                           <p className="break-words font-medium">
                             {invoice.order?.domain && invoice.order.product.category.slug === "domain"

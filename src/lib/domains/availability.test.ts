@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAvailabilityChecker, fetchRdapAnswer, type AvailabilityRegistrar } from "./availability";
+import { createAvailabilityChecker, fetchRdapAnswer, type AvailabilityRegistrar, type RdapAnswer } from "./availability";
 
-function setup(registrar: AvailabilityRegistrar, rdap = vi.fn(async () => "error" as const)) {
+function setup(
+  registrar: AvailabilityRegistrar,
+  rdap: (domain: string) => Promise<RdapAnswer> = vi.fn(async () => "error" as const)
+) {
   let clock = 0;
   const findLocal = vi.fn(async (domains: string[]) => domains.filter((domain) => domain === "bizde.com"));
   const checker = createAvailabilityChecker({ findLocal, registrar: async () => registrar, rdap, now: () => clock });
