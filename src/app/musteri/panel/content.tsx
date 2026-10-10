@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import { AlertTriangle, ArrowRight, CalendarClock, FileText, Globe, Headphones, Package, Plus, Wallet } from "lucide-react";
 import {
   DataTable,
-  EmptyState,
   ListRow,
   PageHeader,
   SectionCard,
@@ -19,6 +18,9 @@ import {
 import { formatTRY } from "@/lib/format/price";
 import { billingPeriodUnit, daysUntil, formatDate, formatDateTime } from "@/lib/format/date";
 import { max, sub, sum, toNumber } from "@/lib/money";
+import { OnboardingChecklist } from "@/components/panel/onboarding-checklist";
+import type { CustomerOnboarding } from "@/lib/onboarding/customer";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 interface DashboardService {
   id: string;
@@ -71,6 +73,8 @@ interface DashboardContentProps {
   domains: DashboardDomain[];
   invoices: DashboardInvoice[];
   tickets: DashboardTicket[];
+  /** First-login checklist; null when dismissed or complete. */
+  onboarding?: CustomerOnboarding | null;
 }
 
 const P = "/musteri/panel";
@@ -118,7 +122,7 @@ const serviceColumns: ColumnDef<DashboardService>[] = [
   },
 ];
 
-export function DashboardContent({ userName, stats, services, domains, invoices, tickets }: DashboardContentProps) {
+export function DashboardContent({ userName, stats, services, domains, invoices, tickets, onboarding }: DashboardContentProps) {
   const firstName = userName.trim().split(/\s+/)[0] ?? "";
 
   const derived = useMemo(() => {
@@ -178,6 +182,8 @@ export function DashboardContent({ userName, stats, services, domains, invoices,
           </>
         }
       />
+
+      {onboarding ? <OnboardingChecklist onboarding={onboarding} /> : null}
 
       {derived.unpaid.length > 0 ? (
         <div
@@ -274,18 +280,7 @@ export function DashboardContent({ userName, stats, services, domains, invoices,
               />
             )}
             emptyState={
-              <EmptyState
-                compact
-                className="m-4"
-                icon={Package}
-                title="Henüz hizmetiniz yok"
-                description="Hosting, sunucu veya alan adı alarak başlayabilirsiniz."
-                action={
-                  <Link href="/hosting/linux" className={appButton({ size: "sm" })}>
-                    Paketleri incele
-                  </Link>
-                }
-              />
+              <PanelEmptyState kind="services" compact className="m-4" />
             }
           />
         </SectionCard>
@@ -370,7 +365,7 @@ export function DashboardContent({ userName, stats, services, domains, invoices,
               ))}
             </ul>
           ) : (
-            <EmptyState compact className="m-4" icon={FileText} title="Henüz faturanız yok" />
+            <PanelEmptyState kind="invoices" compact className="m-4" />
           )}
         </SectionCard>
 
@@ -405,13 +400,7 @@ export function DashboardContent({ userName, stats, services, domains, invoices,
               ))}
             </ul>
           ) : (
-            <EmptyState
-              compact
-              className="m-4"
-              icon={Headphones}
-              title="Açık destek talebiniz yok"
-              description="Bir sorun yaşarsanız yeni talep oluşturabilirsiniz."
-            />
+            <PanelEmptyState kind="openTickets" compact className="m-4" />
           )}
         </SectionCard>
       </div>
