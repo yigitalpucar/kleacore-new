@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { money, sub } from "@/lib/money";
 import { getMrrReport } from "@/lib/reports/mrr";
 import { daysInRange, istanbulDayStart, toIstanbulDay } from "@/lib/reports/range";
+import { pastDueInvoiceWhere } from "@/lib/billing/past-due";
 
 const SHORT_TTL = 60;
 const MRR_TTL = 300;
@@ -78,18 +79,36 @@ export const getCurrentMrr = unstable_cache(
   { revalidate: MRR_TTL, tags: ["admin-overview"] }
 );
 
-/** Overdue receivables: OVERDUE invoices, remaining = total − paid. */
+/**
+ * Past-due receivables: OVERDUE invoices plus PENDING ones past their due date
+ * (src/lib/billing/past-due.ts); remaining = total − paid, KDV dahil.
+ */
+export async function loadPastDueReceivables(now: Date) {
+  const groups = await db.invoice.groupBy({
+    by: ["status"],
+    where: pastDueInvoiceWhere(now),
+    _sum: { totalAmount: true, paidAmount: true },
+    _count: { _all: true },
+  });
+  let remaining = money(0);
+  let overdueCount = 0;
+  let pendingPastDueCount = 0;
+  for (const group of groups) {
+    remaining = remaining.add(sub(group._sum.totalAmount ?? 0, group._sum.paidAmount ?? 0));
+    if (group.status === "OVERDUE") overdueCount += group._count._all;
+    else pendingPastDueCount += group._count._all;
+  }
+  return {
+    amount: (remaining.isNegative() ? money(0) : remaining).toFixed(2),
+    count: overdueCount + pendingPastDueCount,
+    overdueCount,
+    pendingPastDueCount,
+  };
+}
+
 export const getOverdueReceivables = unstable_cache(
-  async () => {
-    const agg = await db.invoice.aggregate({
-      where: { status: "OVERDUE" },
-      _sum: { totalAmount: true, paidAmount: true },
-      _count: { _all: true },
-    });
-    const remaining = sub(agg._sum.totalAmount ?? 0, agg._sum.paidAmount ?? 0);
-    return { amount: (remaining.isNegative() ? money(0) : remaining).toFixed(2), count: agg._count._all };
-  },
-  ["admin-overview-overdue"],
+  async (nowIso: string) => loadPastDueReceivables(new Date(nowIso)),
+  ["admin-overview-past-due"],
   { revalidate: SHORT_TTL, tags: ["admin-overview"] }
 );
 

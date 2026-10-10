@@ -22,14 +22,15 @@ export default async function OverdueInvoicesPage({
   const session = await requirePermission("invoices.view");
   const sp = await searchParams;
   const params = parsePagination(sp);
-  const result = await getInvoices({ ...params, perPage: withListPageSize(sp, params), status: "OVERDUE" });
   const now = new Date();
+  // Same set as the dashboard card: OVERDUE plus PENDING past the due date.
+  const result = await getInvoices({ ...params, perPage: withListPageSize(sp, params), pastDueAt: now });
   const rows = result.data.map((inv) => toAdminInvoiceRow(inv, now));
   const sum = toNumber(sumMoney(rows.map((r) => r.totalAmount)));
 
   return (
     <>
-      <PageHeader title="Gecikmiş faturalar" description="Son ödeme tarihi geçmiş faturalar. Hatırlatma gönderin ya da ödemeyi işaretleyin." />
+      <PageHeader title="Gecikmiş faturalar" description="Son ödeme tarihi geçmiş, ödenmemiş faturalar (gecikmiş olarak işaretlenenler ve vadesi yeni geçenler). Hatırlatma gönderin ya da ödemeyi işaretleyin." />
       <StatGrid columns={3}>
         <StatCard
           label="Gecikmiş fatura"

@@ -5,17 +5,21 @@ import {
 } from "@/lib/utils/pagination";
 import type { InvoiceStatus } from "@prisma/client";
 import { sub, toNumber } from "@/lib/money";
+import { pastDueInvoiceWhere } from "@/lib/billing/past-due";
 
 interface GetInvoicesParams extends PaginationParams {
   status?: InvoiceStatus;
   customerId?: string;
+  /** Unpaid and past the due date (OVERDUE + PENDING after dueDate), see src/lib/billing/past-due.ts. */
+  pastDueAt?: Date;
 }
 
 export async function getInvoices(params: GetInvoicesParams) {
-  const { page, perPage, search, sortBy, sortOrder, status, customerId } =
+  const { page, perPage, search, sortBy, sortOrder, status, customerId, pastDueAt } =
     params;
 
   const where = {
+    ...(pastDueAt && { AND: [pastDueInvoiceWhere(pastDueAt)] }),
     ...(status && { status }),
     ...(customerId && { customerId }),
     ...(search && {

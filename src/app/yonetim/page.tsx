@@ -84,7 +84,7 @@ export default async function AdminDashboard() {
       when(showServices, getServiceStats),
       when(showFinance, () => getRevenueSummary(minute)),
       when(showMrr, () => getCurrentMrr()),
-      when(showFinance, () => getOverdueReceivables()),
+      when(showFinance, () => getOverdueReceivables(minute)),
       when(showTickets, getOpenTicketsByStatus),
       when(can("provisioning.manage"), getPendingManualProvisioning),
       when(can("kyc.review"), getPendingKycCount),
@@ -165,9 +165,13 @@ export default async function AdminDashboard() {
           ) : null}
           {overdue ? (
             <StatCard
-              label="Gecikmiş alacak"
+              label="Vadesi geçmiş alacak"
               value={money(overdue.amount)}
-              hint={overdue.count ? `${num(overdue.count)} gecikmiş fatura (kalan tutar, KDV dahil)` : "Gecikmiş fatura yok"}
+              hint={
+                overdue.count
+                  ? `${num(overdue.count)} fatura: ${num(overdue.overdueCount)} gecikmiş, ${num(overdue.pendingPastDueCount)} vadesi geçmiş ödenmemiş (kalan tutar, KDV dahil)`
+                  : "Vadesi geçmiş fatura yok"
+              }
               tone={overdue.count ? "danger" : undefined}
               href="/yonetim/faturalar/gecikmis"
             />
