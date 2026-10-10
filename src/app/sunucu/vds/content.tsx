@@ -1,5 +1,6 @@
 import { CalendarClock, Cpu, HardDrive, MapPin, Terminal, Wrench } from "lucide-react";
 import type { FeatureItem } from "@/components/site/feature-grid";
+import { buildPackageComparison } from "@/lib/catalog/package-comparison";
 import { Section } from "@/components/site/section";
 import { SectionHeading } from "@/components/site/section-heading";
 import { serverFaqs } from "@/components/sunucu/server-faq";
@@ -11,6 +12,8 @@ import {
   type FamilySummary,
 } from "@/components/site/sunucu/server-catalog";
 import { ServerLanding, familyTrustItems } from "@/components/site/sunucu/server-landing";
+import { VdsConfigurator } from "@/components/site/sunucu/vds-configurator";
+import { sliderPlans, type VdsPlan } from "@/lib/catalog/vds-configurator";
 
 const columns = [
   { key: "cpu", label: "İşlemci" },
@@ -73,9 +76,11 @@ function terminalSteps(product: ProductWithPricing | undefined): TerminalStep[] 
 
 export function Content({
   products,
+  plans,
   summaries,
 }: {
   products: ProductWithPricing[];
+  plans: VdsPlan[];
   summaries: FamilySummary[];
 }) {
   const summary = summaries.find((s) => s.key === "vds");
@@ -124,6 +129,21 @@ export function Content({
       plansTitle="VDS sunucu paketleri"
       plansDescription="Tüm paketlerde NVMe SSD disk ve İstanbul lokasyon. Fiyatlar seçili ödeme dönemine göre aylık karşılık olarak gösterilir."
       rows={products.map(productToCartRow)}
+      comparison={buildPackageComparison(products)}
+      afterPlans={
+        sliderPlans(plans).length > 0 ? (
+          <Section id="yapilandir" divider aria-labelledby="yapilandir-heading" className="scroll-mt-20">
+            <SectionHeading
+              id="yapilandir-heading"
+              eyebrow="Yapılandırıcı"
+              title="VDS sunucunuzu yapılandırın"
+              description="Kaynakları kaydırın, sistemi ve sunucu adını seçin; fiyat seçili döneme göre anında güncellenir."
+              className="mb-10"
+            />
+            <VdsConfigurator plans={plans} />
+          </Section>
+        ) : null
+      }
       columns={columns}
       included={sharedIncluded(products)}
       summaries={summaries}
