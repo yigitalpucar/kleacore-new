@@ -25,7 +25,7 @@ import {
   type AdminCounts,
 } from "./admin-nav-config";
 import { AdminSectionTabs } from "./admin-section-tabs";
-import { canAccessRoute, type StaffRole } from "@/lib/auth/permissions";
+import { canAccessRoute, hasAnyPermission, type StaffRole } from "@/lib/auth/permissions";
 
 export type AdminShellProps = {
   user: { name: string; email?: string | null };
@@ -33,6 +33,8 @@ export type AdminShellProps = {
   role: StaffRole;
   counts: AdminCounts;
   notifications: AppNotification[];
+  /** Total unread bell notifications (the list shows the latest only). */
+  unreadNotifications?: number;
   children: React.ReactNode;
 };
 
@@ -43,7 +45,10 @@ const quickLinks = [
 ];
 
 /** Admin panel chrome (client): grouped sidebar, section tabs and top bar slots. */
-export function AdminShell({ user, role, counts, notifications, children }: AdminShellProps) {
+/** Any of these lets the ⌘K palette search records (each group is checked again on the server). */
+const SEARCHABLE = ["customers.view", "invoices.view", "orders.view", "services.view", "domains.view", "tickets.view"] as const;
+
+export function AdminShell({ user, role, counts, notifications, unreadNotifications, children }: AdminShellProps) {
   const nav = buildAdminNav(counts, role);
   const allowed = <T extends { href: string }>(links: T[]) => links.filter((l) => canAccessRoute(role, l.href));
 
@@ -53,8 +58,17 @@ export function AdminShell({ user, role, counts, notifications, children }: Admi
       brand={{ href: ADMIN_ROOT, label: "Yönetim" }}
       breadcrumbRoot={{ label: "Yönetim", href: ADMIN_ROOT }}
       segmentLabels={ADMIN_SEGMENT_LABELS}
-      search={<AppCommandSearch nav={nav} extra={[...allowed(quickLinks), ...adminSearchItems(nav, role)]} />}
-      notifications={<AppNotifications items={notifications} />}
+      search={
+        <AppCommandSearch
+          nav={nav}
+          actions={allowed(quickLinks)}
+          extra={adminSearchItems(nav, role)}
+          endpoint={hasAnyPermission(role, SEARCHABLE) ? "/api/admin/arama" : undefined}
+          placeholder={hasAnyPermission(role, SEARCHABLE) ? "Ara…" : "Sayfa ara…"}
+          statusAudience="admin"
+        />
+      }
+      notifications={<AppNotifications items={notifications} unread={unreadNotifications} />}
       themeToggle={<AppThemeToggle />}
       userMenu={
         <AppUserMenu

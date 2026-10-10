@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { db } from "@/lib/db";
-import { getNotifications } from "@/lib/dal/notifications";
+import { getBellNotifications } from "@/lib/dal/notifications";
 import { requireStaff } from "@/lib/utils/auth-helpers";
 
 export const metadata: Metadata = {
@@ -33,7 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     db.cancellationRequest.count({ where: { status: "PENDING" } }),
     db.provisioningJob.count({ where: { kind: "MANUAL", status: { in: ["PENDING", "PROCESSING", "FAILED"] } } }),
     db.bankTransferNotice.count({ where: { status: "PENDING" } }),
-    user?.id ? getNotifications(user.id) : Promise.resolve([]),
+    user?.id ? getBellNotifications(user.id) : Promise.resolve({ items: [], unread: 0 }),
   ]);
 
   return (
@@ -48,15 +48,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         pendingManualProvisioning,
         pendingBankTransfers,
       }}
-      notifications={notifications.slice(0, 10).map((n) => ({
-        id: n.id,
-        title: n.title,
-        message: n.message,
-        createdAt: n.createdAt.toISOString(),
-        isRead: n.isRead,
-        link: n.link,
-        type: n.type,
-      }))}
+      notifications={notifications.items}
+      unreadNotifications={notifications.unread}
     >
       {children}
     </AdminShell>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { CustomerShell } from "@/components/panel/customer-shell";
 import { auth } from "@/lib/auth";
 import { getCustomerDashboardStats } from "@/lib/dal/dashboard";
-import { getNotifications } from "@/lib/dal/notifications";
+import { getBellNotifications } from "@/lib/dal/notifications";
 import { isResellerUser } from "@/lib/reseller";
 import { isEmailVerified } from "@/lib/auth/email-verification";
 import { EmailVerificationBanner } from "@/components/auth/email-verification-banner";
@@ -24,10 +24,10 @@ export default async function PanelLayout({ children }: { children: React.ReactN
     ? await Promise.all([
         isResellerUser(userId),
         getCustomerDashboardStats(userId),
-        getNotifications(userId),
+        getBellNotifications(userId),
         isEmailVerified(userId),
       ])
-    : [false, null, [], true];
+    : [false, null, { items: [], unread: 0 }, true];
 
   return (
     <CustomerShell
@@ -37,15 +37,8 @@ export default async function PanelLayout({ children }: { children: React.ReactN
         unpaidInvoices: stats?.unpaidInvoices ?? 0,
         openTickets: stats?.openTickets ?? 0,
       }}
-      notifications={notifications.slice(0, 10).map((n) => ({
-        id: n.id,
-        title: n.title,
-        message: n.message,
-        createdAt: n.createdAt.toISOString(),
-        isRead: n.isRead,
-        link: n.link,
-        type: n.type,
-      }))}
+      notifications={notifications.items}
+      unreadNotifications={notifications.unread}
     >
       {emailVerified ? null : <EmailVerificationBanner email={user?.email} className="mb-6" />}
       {children}

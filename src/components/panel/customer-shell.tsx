@@ -36,6 +36,8 @@ export type CustomerShellProps = {
   isReseller: boolean;
   counts: { unpaidInvoices: number; openTickets: number };
   notifications: AppNotification[];
+  /** Total unread bell notifications (the list shows the latest only). */
+  unreadNotifications?: number;
   children: React.ReactNode;
 };
 
@@ -95,7 +97,7 @@ const segmentLabels: Record<string, string> = {
 };
 
 /** Customer panel chrome (client): builds the nav and fills the AppShell slots. */
-export function CustomerShell({ user, isReseller, counts, notifications, children }: CustomerShellProps) {
+export function CustomerShell({ user, isReseller, counts, notifications, unreadNotifications, children }: CustomerShellProps) {
   const nav = buildNav({ isReseller, counts });
 
   return (
@@ -107,14 +109,21 @@ export function CustomerShell({ user, isReseller, counts, notifications, childre
       search={
         <AppCommandSearch
           nav={nav}
+          endpoint="/api/arama"
+          actions={[
+            ...(counts.unpaidInvoices > 0
+              ? [{ title: "Fatura öde", href: `${ROOT}/faturalar`, icon: CreditCard, group: "İşlem", keywords: "ödeme borç ödenmemiş" }]
+              : []),
+            { title: "Yeni destek talebi", href: `${ROOT}/destek/yeni`, icon: Headphones, group: "İşlem", keywords: "destek yardım ticket" },
+            { title: "Bakiye yükle", href: `${ROOT}/kredi`, icon: Wallet, group: "İşlem", keywords: "kredi para" },
+          ]}
           extra={[
-            { title: "Yeni destek talebi", href: `${ROOT}/destek/yeni`, icon: Headphones, group: "İşlem" },
-            { title: "Webmail", href: `${ROOT}/webmail`, icon: Mail, group: "İşlem" },
+            { title: "Webmail", href: `${ROOT}/webmail`, icon: Mail, group: "Hizmetler" },
             { title: "Alan adı sorgula", href: "/domain/kayit", icon: Globe, group: "Site", keywords: "domain" },
           ]}
         />
       }
-      notifications={<AppNotifications items={notifications} />}
+      notifications={<AppNotifications items={notifications} unread={unreadNotifications} />}
       themeToggle={<AppThemeToggle />}
       userMenu={
         <AppUserMenu
