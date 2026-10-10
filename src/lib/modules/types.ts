@@ -51,6 +51,7 @@ export interface CapabilitiesByKind {
     | "provision" // createAccount / suspend / unsuspend / terminate (required)
     | "changePackage" // required method, capability documents support
     | "usage" // getUsage
+    | "metrics" // getMetrics (CPU/RAM/network/disk time series)
     | "bulkUsage" // listUsage (daily usage sync)
     | "sso" // getSsoUrl
     | "password" // resetPassword

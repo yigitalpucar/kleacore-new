@@ -86,6 +86,27 @@ export interface ServerUsage {
 
 export type ServerPowerAction = "start" | "stop" | "restart" | "shutdown";
 
+/** Time window of a metrics read (capability "metrics"). */
+export type ServerMetricsRange = "hour" | "day" | "week";
+
+/**
+ * One sample of a VM's time series (hypervisor averages over the step).
+ * Missing values (gaps, VM off) stay undefined; never invented.
+ */
+export interface ServerMetricPoint {
+  /** Epoch milliseconds. */
+  time: number;
+  cpuPercent?: number;
+  memUsedMB?: number;
+  memTotalMB?: number;
+  /** Network, bytes per second. */
+  netInBps?: number;
+  netOutBps?: number;
+  /** Disk I/O, bytes per second. */
+  diskReadBps?: number;
+  diskWriteBps?: number;
+}
+
 /** Panel area a single sign-on URL may open directly (modules map it to their own app id). */
 export type ServerSsoApp = "fileManager" | "emailAccounts" | "phpMyAdmin";
 
@@ -217,6 +238,8 @@ export interface ServerModule<TOptions = Record<string, unknown>> {
     ctx: ServerAccountContext<TOptions>
   ): Promise<IntegrationResult<{ url: string; expiresAt?: Date; type?: "novnc" | "xtermjs" | "spice" }>>;
   powerAction?(ctx: ServerAccountContext<TOptions>, action: ServerPowerAction): Promise<OperationResult>;
+  /** CPU / RAM / network / disk I/O time series of the account's VM (capability "metrics"; read-only). */
+  getMetrics?(ctx: ServerAccountContext<TOptions>, range: ServerMetricsRange): Promise<IntegrationResult<ServerMetricPoint[]>>;
   reinstall?(
     ctx: ServerAccountContext<TOptions>,
     input: { templateId?: string; password?: string; sshKeys?: string[] }

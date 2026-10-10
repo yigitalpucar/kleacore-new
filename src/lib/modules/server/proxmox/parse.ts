@@ -2,7 +2,7 @@
  * Pure helpers for Proxmox VE API payloads (no I/O): VM config parsing (boot
  * disk, size, net0), usage from /status/current + /rrddata.
  */
-import type { ServerUsage } from "../../contracts";
+import type { ServerMetricPoint, ServerUsage } from "../../contracts";
 
 const MB = 1024 * 1024;
 const DISK_KEY = /^(scsi|virtio|sata|ide)\d+$/;
@@ -98,6 +98,9 @@ export interface RrdPoint {
   netout?: number;
   cpu?: number;
   mem?: number;
+  maxmem?: number;
+  diskread?: number;
+  diskwrite?: number;
 }
 
 function finite(value: unknown): number | undefined {
@@ -188,4 +191,38 @@ export function archiveFromTaskLog(lines: string[], storage: string): string | n
     if (file) return `${storage}:backup/${file[1].split("/").pop()}`;
   }
   return null;
+}
+
+/**
+ * rrddata rows → metric points, oldest first. `cpu` is the fraction of the
+ * VM's vCPUs (→ %), mem/maxmem bytes (→ MB), net/disk bytes per second.
+ * Rows without a timestamp are dropped; missing values stay undefined
+ * (PVE leaves them out while the VM is off).
+ */
+export function parseMetrics(rrd: RrdPoint[] | null | undefined): ServerMetricPoint[] {
+  return (rrd ?? [])
+    .filter((row) => finite(row?.time) !== undefined)
+    .sort((a, b) => a.time - b.time)
+    .map((row) => {
+      const point: ServerMetricPoint = { time: row.time * 1000 };
+      const cpu = finite(row.cpu);
+      if (cpu !== undefined) point.cpuPercent = Math.round(Math.min(Math.max(cpu, 0), 1) * 1000) / 10;
+      const mem = finite(row.mem);
+      if (mem !== undefined) point.memUsedMB = Math.round(mem / MB);
+      const maxmem = finite(row.maxmem);
+      if (maxmem) point.memTotalMB = Math.round(maxmem / MB);
+      const rate = (value: unknown) => {
+        const n = finite(value);
+        return n === undefined ? undefined : Math.max(0, Math.round(n));
+      };
+      const netIn = rate(row.netin);
+      const netOut = rate(row.netout);
+      const diskRead = rate(row.diskread);
+      const diskWrite = rate(row.diskwrite);
+      if (netIn !== undefined) point.netInBps = netIn;
+      if (netOut !== undefined) point.netOutBps = netOut;
+      if (diskRead !== undefined) point.diskReadBps = diskRead;
+      if (diskWrite !== undefined) point.diskWriteBps = diskWrite;
+      return point;
+    });
 }

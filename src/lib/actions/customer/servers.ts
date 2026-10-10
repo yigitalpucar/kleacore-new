@@ -22,6 +22,17 @@ function remoteFailed(service: { id: string; moduleInstanceId: string | null }, 
   return true;
 }
 
+/** Bound servers: store the new power state (the remote task has finished). */
+async function rememberPower(service: { id: string; moduleInstanceId: string | null }, powerState: "running" | "stopped") {
+  if (!service.moduleInstanceId) return;
+  try {
+    const { recordPowerChange } = await import("@/lib/modules/server-panel");
+    await recordPowerChange(service.id, powerState);
+  } catch (error) {
+    log.warn("power state not recorded", { serviceId: service.id, error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 function revalidateServer(serviceId: string) {
   revalidatePath("/musteri/panel/sunucular");
   revalidatePath(`/musteri/panel/hizmetlerim/${serviceId}`);
@@ -59,6 +70,7 @@ export async function restartServer(serviceId: string) {
 
   const integration = await runRemoteServerAction(service, "restart");
   if (remoteFailed(service, integration)) return { success: false, error: REMOTE_FAILED };
+  await rememberPower(service, "running");
 
   await db.service.update({
     where: { id: serviceId },
@@ -84,6 +96,7 @@ export async function stopServer(serviceId: string) {
 
   const integration = await runRemoteServerAction(service, "stop");
   if (remoteFailed(service, integration)) return { success: false, error: REMOTE_FAILED };
+  await rememberPower(service, "stopped");
 
   await db.service.update({
     where: { id: serviceId },
@@ -112,6 +125,7 @@ export async function startServer(serviceId: string) {
 
   const integration = await runRemoteServerAction(service, "start");
   if (remoteFailed(service, integration)) return { success: false, error: REMOTE_FAILED };
+  await rememberPower(service, "running");
 
   await db.service.update({
     where: { id: serviceId },
@@ -214,4 +228,23 @@ export async function refreshServerUsage(serviceId: string) {
   revalidateServer(serviceId);
   if (result.error) return { success: false as const, error: "Kullanım verisi alınamadı" };
   return { success: true as const, refreshed: result.refreshed };
+}
+
+/** Charts on the server detail: time series for 1 h / 24 h / 7 d (read-only). */
+export async function getServerMetrics(serviceId: string, range: string) {
+  const session = await requireCustomer();
+  const { getServiceMetrics, isMetricsRange } = await import("@/lib/modules/server-panel");
+  if (!isMetricsRange(range)) return { success: false as const, error: "Geçersiz zaman aralığı" };
+  const service = await findOwnedService(serviceId, session.user.id);
+  if (!service) return { success: false as const, error: "Sunucu bulunamadı" };
+  return { success: true as const, metrics: await getServiceMetrics(service, range) };
+}
+
+/** Polled by the power buttons while an action / reinstall runs. */
+export async function getServerStatus(serviceId: string) {
+  const session = await requireCustomer();
+  const service = await findOwnedService(serviceId, session.user.id);
+  if (!service) return { success: false as const, error: "Sunucu bulunamadı" };
+  const { getServerLiveStatus } = await import("@/lib/modules/server-panel");
+  return { success: true as const, live: await getServerLiveStatus(service) };
 }

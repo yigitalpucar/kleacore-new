@@ -37,7 +37,6 @@ import {
 import {
   AppBreadcrumbLabel,
   DetailList,
-  EmptyState,
   IconTile,
   PageHeader,
   SectionCard,
@@ -54,8 +53,10 @@ import { formatTRY } from "@/lib/format/price";
 import { billingPeriodLabel, formatDate, formatDateTime } from "@/lib/format/date";
 import { VdsPanel } from "@/components/panel/vds-panel";
 import { VdsBackups } from "@/components/panel/vds-backups";
+import { ServerMetrics, ServerMetricsUnavailable } from "@/components/panel/server-metrics";
 import type { VdsBackupsView } from "@/lib/backups/vds";
 import type { VdsPanelView } from "@/lib/modules/server-panel";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 const categoryIcons: Record<string, typeof Package> = {
   hosting: Package,
@@ -148,11 +149,25 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
 
   const categorySlug = service.product.category?.slug ?? "hosting";
   const isHosting = categorySlug === "hosting";
-  const isServer = ["vds", "vps", "server"].includes(categorySlug);
+  const isServer = ["vds", "vps", "cloud", "server"].includes(categorySlug);
   const vds = service.vds ?? null;
   const isSsl = categorySlug === "ssl";
 
   const TypeIcon = categoryIcons[categorySlug] || Package;
+  const metricsCard =
+    isServer && service.status !== "PENDING" ? (
+      vds?.capabilities.metrics && vds.provisioning === "ready" ? (
+        <ServerMetrics serviceId={service.id} />
+      ) : (
+        <ServerMetricsUnavailable
+          description={
+            vds && vds.provisioning !== "ready"
+              ? "Sunucunuz hazır olduğunda işlemci, bellek, ağ ve disk grafikleri burada görünür."
+              : undefined
+          }
+        />
+      )
+    ) : null;
   const canRequestCancellation =
     !service.pendingCancellation && service.status !== "CANCELLED" && service.status !== "EXPIRED";
   const endDate = service.nextDueDate ?? service.expiresAt;
@@ -320,6 +335,7 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
           {vds ? (
             <VdsPanel
               serviceId={service.id}
+              serverName={service.label || service.product.name}
               status={service.status}
               suspendReason={service.suspendReason ?? null}
               ipAddress={service.ipAddress}
@@ -331,6 +347,7 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
                 bandwidthUsed: service.bandwidthUsed,
               }}
               view={vds}
+              afterUsage={metricsCard}
             />
           ) : null}
 
@@ -368,6 +385,8 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
               )}
             </SectionCard>
           ) : null}
+
+          {vds ? null : metricsCard}
 
           {isServer && !vds && specItems.some((s) => s.value) ? (
             <SectionCard title="Sunucu özellikleri">
@@ -432,7 +451,7 @@ export function HizmetDetayContent({ service }: HizmetDetayContentProps) {
                   ))}
                 </ul>
               ) : (
-                <EmptyState compact className="m-4" title="Henüz yedek yok" />
+                <PanelEmptyState kind="serviceBackups" compact className="m-4" />
               )}
             </SectionCard>
           ) : null}
