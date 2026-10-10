@@ -36,13 +36,13 @@ export function RootTerminal({ steps, host = "vds" }: { steps: TerminalStep[]; h
 
   return (
     <div className="grid overflow-hidden rounded-2xl border bg-muted/40 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] dark:bg-muted/20">
-      <div className="p-3 sm:p-4 md:p-6" role="tablist" aria-label="Root erişimi örnekleri" aria-orientation="vertical">
-        <ul className="space-y-2">
+      <div className="p-3 sm:p-4 md:p-6">
+        <ul className="space-y-2" role="tablist" aria-label="Root erişimi örnekleri" aria-orientation="vertical">
           {steps.map((s) => {
             const Icon = icons[s.icon];
             const selected = s.id === step.id;
             return (
-              <li key={s.id}>
+              <li key={s.id} role="presentation">
                 <button
                   type="button"
                   role="tab"
@@ -138,7 +138,7 @@ function Terminal({ step, host }: { step: TerminalStep; host: string }) {
           <span className="size-2.5 rounded-full border border-neutral-700 bg-neutral-800" />
           <span className="size-2.5 rounded-full border border-neutral-700 bg-neutral-800" />
         </span>
-        <span className="ml-2 truncate font-mono text-xs text-neutral-500">root@{host}: ~</span>
+        <span className="ml-2 truncate font-mono text-xs text-neutral-400">root@{host}: ~</span>
       </div>
       <div className="h-64 overflow-hidden p-4 font-mono text-[12px] leading-relaxed sm:h-72 sm:text-[13px]">
         <p className="sr-only">
@@ -163,7 +163,7 @@ function Terminal({ step, host }: { step: TerminalStep; host: string }) {
           ) : null}
         </div>
       </div>
-      <p className="border-t border-neutral-800 px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+      <p className="border-t border-neutral-800 px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-400">
         Temsili örnek · gerçek oturum değildir
       </p>
     </div>
@@ -172,7 +172,7 @@ function Terminal({ step, host }: { step: TerminalStep; host: string }) {
 
 function Prompt({ host }: { host: string }) {
   return (
-    <span className="text-neutral-500">
+    <span className="text-neutral-400">
       <span className="text-neutral-300">root@{host}</span>:~#{" "}
     </span>
   );
@@ -202,7 +202,7 @@ function Highlighted({ text }: { text: string }) {
           cls = "font-semibold text-white";
           first = /^(&&|\|)$/.test(word);
         } else if (word.startsWith("-")) cls = "text-neutral-400";
-        else if (word.startsWith("#")) cls = "text-neutral-500";
+        else if (word.startsWith("#")) cls = "text-neutral-400";
         return (
           <span key={i} className={cls}>
             {word}

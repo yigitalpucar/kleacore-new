@@ -12,7 +12,9 @@ const linkClass =
  */
 export function Topbar() {
   return (
-    <div className="dark relative z-[60] hidden border-b border-white/10 bg-neutral-950 text-xs text-muted-foreground md:block">
+    <aside
+      aria-label="İletişim ve yardımcı bağlantılar"
+      className="dark relative z-[60] hidden border-b border-white/10 bg-neutral-950 text-xs text-muted-foreground md:block">
       <Container className="flex h-9 items-center justify-between gap-6">
         <div className="flex items-center gap-5">
           <a href="mailto:support@kleacore.com" className={linkClass}>
@@ -44,6 +46,6 @@ export function Topbar() {
           </ul>
         </nav>
       </Container>
-    </div>
+    </aside>
   );
 }

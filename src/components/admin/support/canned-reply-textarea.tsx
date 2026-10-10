@@ -110,9 +110,9 @@ export function CannedReplyTextarea({
         rows={rows}
         disabled={disabled}
         placeholder={placeholder}
-        role="combobox"
+        // A textarea can't take role="combobox" (ARIA 1.2); it stays a textbox
+        // that owns the suggestion list via aria-controls/activedescendant.
         aria-autocomplete="list"
-        aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-activedescendant={activeId}
         aria-describedby={`${id}-hint`}

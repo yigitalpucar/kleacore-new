@@ -363,7 +363,7 @@ function SidebarBody({
               collapsed ? (
                 <span aria-hidden className="line-dashed-x mx-auto mb-2 block w-6" />
               ) : (
-                <p className="mb-1.5 px-2 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
+                <p className="mb-1.5 px-2 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                   {group.label}
                 </p>
               )
