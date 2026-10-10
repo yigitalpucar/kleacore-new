@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getCustomerById } from "@/lib/dal/customers";
-import { CustomerDetailContent, type CustomerDetail } from "./content";
+import { CustomerDetailContent, type CustomerDetail, type CustomerOverview } from "./content";
+import { CustomerTimeline } from "@/components/admin/customer-360/customer-timeline";
+import { allowedTimelineKinds, decodeCursor, getCustomerTimeline, parseKinds } from "@/lib/admin/customer-timeline";
+import { getCustomerLifetimeRevenue, getCustomerOverdue, getCustomerRisk } from "@/lib/dal/customer-360";
 import { requirePermission } from "@/lib/utils/auth-helpers";
 import { hasPermission } from "@/lib/auth/permissions";
 
@@ -11,13 +14,31 @@ export const metadata: Metadata = { title: "Müşteri detayı" };
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
-export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CustomerDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await requirePermission("customers.view");
   const role = session.user.role;
-  const { id } = await params;
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   const c = await getCustomerById(id);
 
   if (!c) return notFound();
+
+  // Customer 360: header figures and the unified timeline, per permission.
+  const allowedKinds = allowedTimelineKinds(role);
+  const kinds = parseKinds(sp.tur, allowedKinds);
+  const cursor = decodeCursor(typeof sp.once === "string" ? sp.once : null);
+  const canBilling = hasPermission(role, "invoices.view");
+  const [lifetime, overdue, risk, timeline] = await Promise.all([
+    canBilling ? getCustomerLifetimeRevenue(id) : null,
+    canBilling ? getCustomerOverdue(id) : null,
+    hasPermission(role, "orders.view") ? getCustomerRisk(id) : null,
+    getCustomerTimeline(id, { kinds, cursor, limit: 20 }),
+  ]);
 
   const customer: CustomerDetail = {
     id: c.id,
@@ -89,5 +110,29 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
     sslCount: c.sslCertificates.length,
   };
 
-  return <CustomerDetailContent customer={customer} role={role} />;
+  const overview: CustomerOverview = {
+    lifetime,
+    overdue,
+    risk,
+    kycStatus: c.kycStatus,
+    kycSubmittedAt: iso(c.kycSubmittedAt),
+  };
+
+  return (
+    <CustomerDetailContent
+      customer={customer}
+      role={role}
+      overview={overview}
+      timeline={
+        <CustomerTimeline
+          basePath={`/yonetim/musteriler/${id}`}
+          allowed={allowedKinds}
+          active={kinds}
+          events={timeline.events}
+          next={timeline.next}
+          paged={Boolean(cursor)}
+        />
+      }
+    />
+  );
 }

@@ -19,26 +19,15 @@ import {
 } from "@/components/app";
 import { ServerPager } from "@/components/admin/server-pager";
 import { activateService, cancelService, suspendService } from "@/lib/actions/admin/services";
+import { bulkSuspendServices, bulkUnsuspendServices } from "@/lib/actions/admin/bulk";
+import { useAdminList, type BulkActionDef } from "@/components/admin/list-tools/use-admin-list";
+import type { ListCapabilities } from "@/lib/admin/list-views";
 import { formatTRY } from "@/lib/format/price";
 import { billingPeriodLabel, billingPeriodUnit, formatDate } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
+import { SERVICE_FILTER_VALUES, serviceSearch, type ServiceListRow } from "./service-rows";
 
-export type ServiceListRow = {
-  id: string;
-  label: string;
-  domain: string | null;
-  ipAddress: string | null;
-  serverName: string | null;
-  status: string;
-  billingPeriod: string;
-  /** Charge for ONE billing period (yearly services store the yearly total). */
-  amount: number;
-  nextDueDate: string | null;
-  suspendReason: string | null;
-  createdAt: string;
-  customer: { id: string; name: string; email: string };
-  product: { name: string; sku: string; categorySlug: string | null; categoryName: string | null };
-};
+export type { ServiceListRow } from "./service-rows";
 
 type ServiceStats = {
   total: number;
@@ -54,11 +43,42 @@ type ServicesContentProps = {
   pagination: { page: number; totalPages: number; total: number };
   /** Status pages (aktif / askida / iptal) lock the list to one status. */
   view: { title: string; description: string; status?: string };
+  /** Bulk actions / CSV export allowed for the viewer (from the server). */
+  capabilities?: ListCapabilities;
 };
+
+const n = (v: number) => v.toLocaleString("tr-TR");
+
+const BULK_ACTIONS: BulkActionDef<ServiceListRow>[] = [
+  {
+    id: "suspend",
+    label: "Askıya al",
+    icon: <Pause aria-hidden />,
+    appliesTo: (s) => s.status === "ACTIVE",
+    confirmTitle: (c) => `${n(c)} hizmet askıya alınsın mı?`,
+    confirmDescription: "Her hizmet sağlayıcıda askıya alınır ve müşteriye bildirilir. Neden müşteri panelinde görünür.",
+    input: { kind: "text", label: "Askıya alma nedeni", defaultValue: "Yönetim tarafından askıya alındı" },
+    run: (ids, reason) => bulkSuspendServices(ids, reason),
+    successText: (c) => `${n(c)} hizmet askıya alındı`,
+  },
+  {
+    id: "unsuspend",
+    label: "Askıdan çıkar",
+    icon: <CheckCircle aria-hidden />,
+    appliesTo: (s) => s.status === "SUSPENDED",
+    confirmTitle: (c) => `${n(c)} hizmet yeniden açılsın mı?`,
+    confirmDescription: "Her hizmet sağlayıcıda askıdan çıkarılır ve aktif olur.",
+    run: (ids) => bulkUnsuspendServices(ids),
+    successText: (c) => `${n(c)} hizmet aktifleştirildi`,
+  },
+];
+
+const SCOPES: Record<string, string> = { ACTIVE: "active", SUSPENDED: "suspended", CANCELLED: "cancelled" };
+const getId = (s: ServiceListRow) => s.id;
+const getLabel = (s: ServiceListRow) => s.domain || s.label || s.product.name;
 
 const money = (n: number) => formatTRY(n, { keepDecimals: true });
 const detailHref = (id: string) => `/yonetim/hizmetler/${id}`;
-const tr = (s: string | null | undefined) => (s ?? "").toLocaleLowerCase("tr-TR");
 
 function categoryLabel(row: ServiceListRow) {
   const slug = row.product.categorySlug;
@@ -82,8 +102,18 @@ function PeriodAmount({ row }: { row: ServiceListRow }) {
   );
 }
 
-export function ServicesContent({ rows, stats, pagination, view }: ServicesContentProps) {
+export function ServicesContent({ rows, stats, pagination, view, capabilities }: ServicesContentProps) {
   const router = useRouter();
+  const admin = useAdminList({
+    list: "services",
+    scope: view.status ? (SCOPES[view.status] ?? "all") : "all",
+    filterIds: view.status ? [] : ["status"],
+    getId,
+    getLabel,
+    noun: "hizmet",
+    actions: BULK_ACTIONS,
+    capabilities,
+  });
 
   const handleSuspendService = async (serviceId: string) => {
     const reason = prompt("Askıya alma nedeni:", "Yonetim tarafindan askiya alindi")?.trim() ?? "";
@@ -271,17 +301,8 @@ export function ServicesContent({ rows, stats, pagination, view }: ServicesConte
         caption={view.title}
         columns={columns}
         data={rows}
-        getRowId={(s) => s.id}
         initialSort={[{ id: "nextDueDate", desc: false }]}
-        searchFn={(s, q) =>
-          tr(s.id).includes(q) ||
-          tr(s.domain).includes(q) ||
-          tr(s.label).includes(q) ||
-          tr(s.ipAddress).includes(q) ||
-          tr(s.customer.name).includes(q) ||
-          tr(s.customer.email).includes(q) ||
-          tr(s.product.name).includes(q)
-        }
+        searchFn={serviceSearch}
         searchPlaceholder="Domain, müşteri, paket, IP veya hizmet ID ara…"
         filters={
           view.status
@@ -291,7 +312,7 @@ export function ServicesContent({ rows, stats, pagination, view }: ServicesConte
                   id: "status",
                   label: "Durum",
                   options: getStatusOptions("service"),
-                  getValue: (s) => s.status,
+                  getValue: SERVICE_FILTER_VALUES.status,
                 },
               ]
         }
@@ -325,6 +346,8 @@ export function ServicesContent({ rows, stats, pagination, view }: ServicesConte
           />
         }
         noResultsText="Aramanızla eşleşen hizmet bulunamadı."
+        {...admin.tableProps}
+        toolbar={admin.toolbar}
       />
 
       <ServerPager page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} noun="hizmet" />

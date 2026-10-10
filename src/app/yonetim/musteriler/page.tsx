@@ -9,6 +9,7 @@ import { parsePagination } from "@/lib/utils/pagination";
 import { listPerPage, toCustomerRow } from "./_components/customer-row";
 import { CustomersTable } from "./_components/customers-table";
 import { requirePermission } from "@/lib/utils/auth-helpers";
+import { listCapabilities } from "@/lib/admin/list-views";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function CustomersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requirePermission("customers.view");
+  const session = await requirePermission("customers.view");
   const sp = await searchParams;
   const params = parsePagination(sp);
 
@@ -81,6 +82,7 @@ export default async function CustomersPage({
       <CustomersTable
         rows={result.data.map(toCustomerRow)}
         typeFilter
+        capabilities={listCapabilities(session.user.role, "customers")}
         emptyAction={
           <Link href="/yonetim/musteri-ekle" prefetch={false} className={appButton({ variant: "outline", size: "sm" })}>
             <UserPlus aria-hidden />

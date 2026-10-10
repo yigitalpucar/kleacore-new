@@ -5,6 +5,9 @@ export type AdminInvoiceRow = {
   id: string;
   invoiceNumber: string;
   status: string;
+  /** KDV hariç. */
+  subtotal: number;
+  taxAmount: number;
   totalAmount: number;
   paidAmount: number;
   createdAt: string;
@@ -25,6 +28,8 @@ export function toAdminInvoiceRow(inv: InvoiceListItem, now = new Date()): Admin
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
     status: inv.status,
+    subtotal: Number(inv.subtotal),
+    taxAmount: Number(inv.taxAmount),
     totalAmount: Number(inv.totalAmount),
     paidAmount: Number(inv.paidAmount),
     createdAt: inv.createdAt.toISOString(),
@@ -48,3 +53,37 @@ export function withListPageSize(
 ) {
   return sp.perPage ? params.perPage : 100;
 }
+
+const lower = (s: string | null | undefined) => (s ?? "").toLocaleLowerCase("tr-TR");
+
+/** Search of the invoice tables (and their CSV export); `q` is already lower-cased. */
+export function invoiceSearch(inv: AdminInvoiceRow, q: string) {
+  return (
+    lower(inv.invoiceNumber).includes(q) ||
+    lower(inv.customer.name).includes(q) ||
+    lower(inv.customer.email).includes(q) ||
+    lower(inv.description).includes(q)
+  );
+}
+
+/** Bekleyen: kritik 0–2 gün, yaklaşan 3–5, normal 6+. */
+export function invoiceUrgency(r: Pick<AdminInvoiceRow, "daysToDue">) {
+  if (r.daysToDue <= 2) return "critical";
+  if (r.daysToDue <= 5) return "warning";
+  return "normal";
+}
+
+/** Gecikmiş: 1–14 / 15–29 / 30+ gün. */
+export function invoiceSeverity(r: Pick<AdminInvoiceRow, "daysToDue">) {
+  const d = -r.daysToDue;
+  if (d >= 30) return "severe";
+  if (d >= 15) return "moderate";
+  return "mild";
+}
+
+/** Filter id → row value, shared by the table filters and the CSV export. */
+export const INVOICE_FILTER_VALUES: Record<string, (r: AdminInvoiceRow) => string> = {
+  status: (r) => r.status,
+  urgency: invoiceUrgency,
+  severity: invoiceSeverity,
+};

@@ -4,6 +4,7 @@ import { PageHeader, StatCard, StatGrid, appButton } from "@/components/app";
 import { ServerPager } from "@/components/admin/server-pager";
 import type { CustomerRow } from "./customer-row";
 import { CustomersTable } from "./customers-table";
+import type { ListCapabilities } from "@/lib/admin/list-views";
 
 /**
  * Shared body of the customer segment pages (tüm / bireysel / kurumsal /
@@ -21,6 +22,8 @@ export function CustomerSegmentPage({
   typeFilter = false,
   emptyTitle,
   emptyDescription,
+  scope,
+  capabilities,
 }: {
   title: string;
   description: string;
@@ -34,6 +37,8 @@ export function CustomerSegmentPage({
   typeFilter?: boolean;
   emptyTitle: string;
   emptyDescription?: string;
+  scope?: string;
+  capabilities?: ListCapabilities;
 }) {
   const count = (status: string) => rows.filter((r) => r.status === status).length;
   const partial = total > rows.length;
@@ -75,6 +80,8 @@ export function CustomerSegmentPage({
         typeFilter={typeFilter}
         emptyTitle={emptyTitle}
         emptyDescription={emptyDescription}
+        scope={scope}
+        capabilities={capabilities}
       />
       <ServerPager page={page} totalPages={totalPages} total={total} noun="müşteri" />
     </>

@@ -25,7 +25,7 @@ export { UsageMeter } from "./usage-meter";
 export { ChartCard } from "./chart-card";
 export type { BarDatum } from "./chart-card";
 export { DataTable, RowActionsMenu } from "./data-table";
-export type { DataTableProps, DataTableFilter, RowAction, ColumnDef } from "./data-table";
+export type { DataTableProps, DataTableFilter, DataTableSelection, RowAction, ColumnDef } from "./data-table";
 export { UnavailableAction } from "./unavailable-action";
 export { CopyButton } from "./copy-button";
 export { ListRow, IconTile } from "./list-row";

@@ -3,6 +3,12 @@ import { SectionCard } from "./section-card";
 
 export type BarDatum = { label: string; value: number };
 
+/** Every n-th label plus the last one, skipping one that would crowd the last. */
+function showAxisLabel(i: number, count: number, every: number) {
+  if (every <= 1 || i === count - 1) return true;
+  return i % every === 0 && count - 1 - i >= every / 2;
+}
+
 /**
  * Card with a dependency-free vertical bar chart (CSS bars + an sr-only data
  * table). Good enough for monthly revenue / counts; if you need lines, areas
@@ -16,6 +22,7 @@ export function ChartCard({
   formatValue = (n) => n.toLocaleString("tr-TR"),
   height = 180,
   emptyText = "Bu dönem için veri yok.",
+  labelEvery = 1,
   className,
 }: {
   title: React.ReactNode;
@@ -25,6 +32,8 @@ export function ChartCard({
   formatValue?: (n: number) => string;
   height?: number;
   emptyText?: string;
+  /** Show every n-th axis label (dense series, e.g. 30 days → 5). The last label is always shown. */
+  labelEvery?: number;
   className?: string;
 }) {
   const max = Math.max(0, ...data.map((d) => d.value));
@@ -53,9 +62,20 @@ export function ChartCard({
             </div>
           </div>
           <div aria-hidden className="mt-2 flex gap-1.5 sm:gap-2">
-            {data.map((d) => (
-              <span key={d.label} className="min-w-0 flex-1 truncate text-center font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                {d.label}
+            {data.map((d, i) => (
+              <span
+                key={d.label}
+                className={cn(
+                  "min-w-0 flex-1 text-center font-mono text-[10px] uppercase tracking-wider text-muted-foreground",
+                  // Dense axes: labels may overflow their bar's slot (neighbours are blank);
+                  // flex alignment keeps the first/last label inside the card.
+                  labelEvery > 1 ? "flex overflow-visible whitespace-nowrap" : "truncate",
+                  labelEvery > 1 && (i === 0 ? "justify-start" : i === data.length - 1 ? "justify-end" : "justify-center"),
+                  // Phones: half as many labels.
+                  labelEvery > 1 && !showAxisLabel(i, data.length, labelEvery * 2) && "invisible sm:visible"
+                )}
+              >
+                {showAxisLabel(i, data.length, labelEvery) ? d.label : ""}
               </span>
             ))}
           </div>

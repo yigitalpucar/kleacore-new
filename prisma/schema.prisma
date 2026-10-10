@@ -430,6 +430,8 @@ model User {
   loginEvents             LoginEvent[]
   trustedDevices          TrustedDevice[]
   dataRequests            DataRequest[]
+  savedFilters            SavedFilter[]
+  ticketPresence          TicketPresence[]
 
   // Affiliate relations
   affiliateReferrals AffiliateReferral[] @relation("AffiliateReferrals")
@@ -1372,6 +1374,7 @@ model SupportTicket {
   messages      TicketMessage[]
   attachments   TicketAttachment[]
   inboundEmails InboundEmail[]
+  presence      TicketPresence[]
 
   closedAt  DateTime?
   createdAt DateTime  @default(now())
@@ -1420,6 +1423,22 @@ model TicketAttachment {
   @@index([ticketId])
   @@index([messageId])
   @@map("ticket_attachments")
+}
+
+/// Staff presence on an admin ticket page (collision warning, UI3): the page
+/// sends a heartbeat every ~15 s (typingAt while the reply box changes).
+/// Rows older than 2 minutes are deleted by the next heartbeat or on leave.
+model TicketPresence {
+  ticketId   String
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastSeenAt DateTime      @default(now())
+  typingAt   DateTime?
+
+  @@id([ticketId, userId])
+  @@index([lastSeenAt])
+  @@map("ticket_presence")
 }
 
 /// Staff reply templates; body may use {{customer.name}} style variables.
@@ -1774,6 +1793,23 @@ model Notification {
 // ACTIVITY LOG
 // =====================
 
+/// A staff member's saved view of an admin list (UI3): `path` is the list
+/// route, `params` the query string it reads (q = search, f_<id> = filter).
+model SavedFilter {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// List key: invoices | services | customers | orders | tickets
+  list      String
+  path      String
+  name      String
+  params    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, list, name])
+  @@map("saved_filters")
+}
+
 model ActivityLog {
   id        String   @id @default(cuid())
   userId    String
@@ -1785,6 +1821,9 @@ model ActivityLog {
   ipAddress String?
   createdAt DateTime @default(now())
 
+  /// Customer 360 timeline and per-user activity lists (UI3).
+  @@index([userId, createdAt])
+  @@index([entityId, createdAt])
   @@map("activity_logs")
 }
 

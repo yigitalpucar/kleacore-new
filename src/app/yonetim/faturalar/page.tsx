@@ -9,6 +9,7 @@ import { parsePagination } from "@/lib/utils/pagination";
 import { InvoiceTable } from "./_components/invoice-table";
 import { toAdminInvoiceRow, withListPageSize } from "./_components/invoice-rows";
 import { requirePermission } from "@/lib/utils/auth-helpers";
+import { listCapabilities } from "@/lib/admin/list-views";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export default async function InvoicesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requirePermission("invoices.view");
+  const session = await requirePermission("invoices.view");
   const sp = await searchParams;
   const params = parsePagination(sp);
   const [result, stats] = await Promise.all([
@@ -65,7 +66,7 @@ export default async function InvoicesPage({
         />
       </StatGrid>
 
-      <InvoiceTable variant="all" rows={rows} />
+      <InvoiceTable variant="all" rows={rows} capabilities={listCapabilities(session.user.role, "invoices")} />
       <ServerPager page={result.page} totalPages={result.totalPages} total={result.total} noun="fatura" />
     </>
   );

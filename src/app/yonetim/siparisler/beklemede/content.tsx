@@ -1,5 +1,6 @@
 "use client";
 
+import type { ListCapabilities } from "@/lib/admin/list-views";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, X } from "lucide-react";
@@ -9,6 +10,7 @@ import { approveOrder, rejectOrder } from "@/lib/actions/admin/orders";
 import { toast } from "@/lib/toast";
 import {
   OrderTable,
+  useOrderListTools,
   amountColumn,
   baseOrderActions,
   createdColumn,
@@ -23,10 +25,12 @@ interface PendingOrdersContentProps {
   total: number;
   page: number;
   totalPages: number;
+  capabilities?: ListCapabilities;
   pendingCount: number;
 }
 
-export function PendingOrdersContent({ orders, total, page, totalPages, pendingCount }: PendingOrdersContentProps) {
+export function PendingOrdersContent({ orders, total, page, totalPages, pendingCount, capabilities }: PendingOrdersContentProps) {
+  const tools = useOrderListTools({ scope: "pending", capabilities });
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -123,6 +127,8 @@ export function PendingOrdersContent({ orders, total, page, totalPages, pendingC
         ]}
         emptyTitle="Bekleyen sipariş yok"
         emptyDescription="Yeni siparişler onayınıza düştüğünde burada görünür."
+        {...tools.tableProps}
+        toolbar={tools.toolbar}
       />
 
       <ServerPager page={page} totalPages={totalPages} total={total} noun="sipariş" />

@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { getTickets } from "@/lib/dal/tickets";
 import { parsePagination } from "@/lib/utils/pagination";
-import { DestekContent, type AdminTicketRow } from "./content";
+import { DestekContent } from "./content";
+import { toAdminTicketRow } from "./ticket-rows";
 import type { TicketStatus, TicketPriority, TicketDepartment } from "@prisma/client";
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/utils/auth-helpers";
+import { listCapabilities } from "@/lib/admin/list-views";
+import { getAdminUsers } from "@/lib/dal/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -35,24 +38,13 @@ export default async function DestekPage({
     ? (sp.department as TicketDepartment)
     : undefined;
 
-  const result = await getTickets({ ...params, perPage, status, priority, department });
+  const capabilities = listCapabilities(session.user.role, "tickets");
+  const [result, staff] = await Promise.all([
+    getTickets({ ...params, perPage, status, priority, department }),
+    capabilities.bulk.includes("assign") ? getAdminUsers() : Promise.resolve([]),
+  ]);
 
-  const rows: AdminTicketRow[] = result.data.map((t) => ({
-    id: t.id,
-    ticketNumber: t.ticketNumber,
-    subject: t.subject,
-    department: t.department,
-    priority: t.priority,
-    status: t.status,
-    assignedTo: t.assignedTo,
-    createdAt: t.createdAt.toISOString(),
-    updatedAt: t.updatedAt.toISOString(),
-    messageCount: t._count.messages,
-    source: t.source,
-    customer: t.customer
-      ? { id: t.customer.id, name: `${t.customer.name} ${t.customer.surname}`.trim(), email: t.customer.email }
-      : { id: null, name: t.guestName || t.guestEmail || "Bilinmeyen gönderen", email: t.guestEmail ?? "" },
-  }));
+  const rows = result.data.map(toAdminTicketRow);
 
   return (
     <DestekContent
@@ -61,6 +53,8 @@ export default async function DestekPage({
       page={result.page}
       totalPages={result.totalPages}
       serverFilters={{ status, priority, department }}
+      capabilities={capabilities}
+      staff={staff.map((u) => ({ id: u.id, name: `${u.name} ${u.surname}`.trim() || u.email }))}
       links={{
         cannedReplies: hasPermission(session.user.role, "tickets.reply"),
         settings: hasPermission(session.user.role, "settings.manage"),

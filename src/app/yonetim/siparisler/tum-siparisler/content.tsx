@@ -4,7 +4,9 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { PageHeader, StatCard, StatGrid, appButton, getStatusOptions } from "@/components/app";
 import { ServerPager } from "@/components/admin/server-pager";
-import { OrderTable, type OrderRow } from "../_components/order-list";
+import { OrderTable, useOrderListTools, type OrderRow } from "../_components/order-list";
+import type { ListCapabilities } from "@/lib/admin/list-views";
+import { ORDER_FILTER_VALUES } from "../_components/serialize";
 
 interface AllOrdersContentProps {
   orders: OrderRow[];
@@ -12,9 +14,11 @@ interface AllOrdersContentProps {
   page: number;
   totalPages: number;
   stats: { total: number; pending: number; processing: number; completed: number; cancelled: number };
+  capabilities?: ListCapabilities;
 }
 
-export function AllOrdersContent({ orders, total, page, totalPages, stats }: AllOrdersContentProps) {
+export function AllOrdersContent({ orders, total, page, totalPages, stats, capabilities }: AllOrdersContentProps) {
+  const tools = useOrderListTools({ scope: "all", filterIds: ["status"], capabilities });
   const n = (v: number) => v.toLocaleString("tr-TR");
   return (
     <>
@@ -49,11 +53,13 @@ export function AllOrdersContent({ orders, total, page, totalPages, stats }: All
             id: "status",
             label: "Durum",
             options: getStatusOptions("order"),
-            getValue: (o) => o.status,
+            getValue: ORDER_FILTER_VALUES.status,
           },
         ]}
         emptyTitle="Henüz sipariş yok"
         emptyDescription="Müşteriler sipariş verdiğinde burada listelenir."
+        {...tools.tableProps}
+        toolbar={tools.toolbar}
       />
 
       <ServerPager page={page} totalPages={totalPages} total={total} noun="sipariş" />

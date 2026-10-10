@@ -15,7 +15,8 @@ import {
   enumLabel,
   getStatusMeta,
 } from "@/components/app";
-import { Textarea } from "@/components/ui/textarea";
+import { CannedReplyTextarea } from "@/components/admin/support/canned-reply-textarea";
+import { TicketPresenceNotice, useTicketPresence } from "@/components/admin/support/ticket-presence";
 import {
   assignTicket,
   closeTicket,
@@ -51,11 +52,7 @@ export interface AdminTicketDetail {
   messages: ThreadMessage[];
 }
 
-interface CannedReplyOption {
-  id: string;
-  title: string;
-  body: string;
-}
+type CannedReplyOption = { id: string; title: string; body: string };
 
 interface TicketDetailContentProps {
   ticket: AdminTicketDetail;
@@ -82,16 +79,17 @@ export function TicketDetailContent({ ticket, adminUsers, cannedReplies, staffNa
   const [isAssigning, setIsAssigning] = useState(false);
   const [assignedAdminId, setAssignedAdminId] = useState(ticket.assignedTo ?? "");
   const [linkEmail, setLinkEmail] = useState(ticket.guest?.email ?? "");
+  // Bumped on every keystroke in the reply box → "yanıt yazıyor" for other staff.
+  const [typingSignal, setTypingSignal] = useState(0);
+  const viewers = useTicketPresence(ticket.id, typingSignal);
 
   const customerFullName = ticket.customer
     ? `${ticket.customer.name} ${ticket.customer.surname}`.trim()
     : ticket.guest?.name || ticket.guest?.email || "Bilinmeyen gönderen";
   const customerEmail = ticket.customer?.email ?? ticket.guest?.email ?? "";
 
-  const insertCannedReply = (id: string) => {
-    const reply = cannedReplies.find((r) => r.id === id);
-    if (!reply) return;
-    const text = renderCannedReply(reply.body, {
+  const renderReply = (reply: CannedReplyOption) =>
+    renderCannedReply(reply.body, {
       "customer.name": customerFullName,
       "customer.firstName": ticket.customer?.name ?? ticket.guest?.name?.split(" ")[0] ?? "",
       "customer.email": customerEmail,
@@ -99,6 +97,11 @@ export function TicketDetailContent({ ticket, adminUsers, cannedReplies, staffNa
       "ticket.subject": ticket.subject,
       "staff.name": staffName,
     });
+
+  const insertCannedReply = (id: string) => {
+    const reply = cannedReplies.find((r) => r.id === id);
+    if (!reply) return;
+    const text = renderReply(reply);
     setReplyText((current) => (current.trim() ? `${current.trimEnd()}\n\n${text}` : text));
     void markCannedReplyUsed(id);
   };
@@ -229,6 +232,8 @@ export function TicketDetailContent({ ticket, adminUsers, cannedReplies, staffNa
         }
       />
 
+      <TicketPresenceNotice viewers={viewers} />
+
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
           <SectionCard title={`Mesajlar (${ticket.messages.length})`}>
@@ -340,13 +345,18 @@ export function TicketDetailContent({ ticket, adminUsers, cannedReplies, staffNa
               <label htmlFor="reply" className="sr-only">
                 Yanıtınız
               </label>
-              <Textarea
+              <CannedReplyTextarea
                 id="reply"
-                placeholder="Yanıtınızı yazın…"
+                placeholder="Yanıtınızı yazın… Hazır yanıt için / yazın"
                 value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                rows={6}
-                className="resize-y"
+                onChange={(text) => {
+                  setReplyText(text);
+                  setTypingSignal((n) => n + 1);
+                }}
+                replies={cannedReplies}
+                render={renderReply}
+                onInserted={(reply) => void markCannedReplyUsed(reply.id)}
+                disabled={isSubmitting}
               />
               <SelectedFiles files={files} onChange={setFiles} />
             </SectionCard>
