@@ -6,7 +6,6 @@ import { Camera, Cloud, HardDrive, Loader2, Play, Plus, Power, RotateCcw, Server
 import {
   CopyButton,
   DataTable,
-  EmptyState,
   IconTile,
   ListRow,
   PageHeader,
@@ -21,9 +20,9 @@ import {
 } from "@/components/app";
 import { formatDate } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
-import { restartServer, stopServer, startServer } from "@/lib/actions/customer/servers";
-import { CUSTOMER_STOPPED_REASON, customerStartBlockReason } from "@/lib/services/server-power";
-import { toast } from "@/lib/toast";
+import { CUSTOMER_STOPPED_REASON, POWER_ACTION_COPY, customerPowerButtons } from "@/lib/services/server-power";
+import { ServerPowerProgress, useServerPower, type PowerTarget } from "@/components/panel/server-power";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 interface ServerServiceItem {
   id: string;
@@ -105,65 +104,42 @@ function UsageCell({ s }: { s: ServerServiceItem }) {
 }
 
 export function SunucularContent({ servers, stats }: SunucularContentProps) {
-  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [localServers, setLocalServers] = useState(servers);
-
-  const handleRestart = async (serviceId: string) => {
-    setActionInProgress(serviceId);
-    const result = await restartServer(serviceId);
-    if (result.success) {
-      toast.success("Sunucu yeniden başlatıldı");
-    } else {
-      toast.error(result.error || "İşlem başarısız");
-    }
-    setActionInProgress(null);
-  };
-
-  const handleStop = async (serviceId: string) => {
-    if (!window.confirm("Sunucu durdurulacak. Üzerindeki tüm uygulamalar erişilemez olur. Devam edilsin mi?")) return;
-    setActionInProgress(serviceId);
-    const result = await stopServer(serviceId);
-    if (result.success) {
-      setLocalServers((prev) => prev.map((s) => (s.id === serviceId ? { ...s, status: "SUSPENDED", suspendReason: CUSTOMER_STOPPED_REASON } : s)));
-      toast.success("Sunucu durduruldu");
-    } else {
-      toast.error(result.error || "İşlem başarısız");
-    }
-    setActionInProgress(null);
-  };
-
-  const handleStart = async (serviceId: string) => {
-    setActionInProgress(serviceId);
-    const result = await startServer(serviceId);
-    if (result.success) {
-      setLocalServers((prev) => prev.map((s) => (s.id === serviceId ? { ...s, status: "ACTIVE", suspendReason: null } : s)));
-      toast.success("Sunucu başlatıldı");
-    } else {
-      toast.error(result.error || "İşlem başarısız");
-    }
-    setActionInProgress(null);
-  };
+  // Optimistic status after a confirmed action; the page refresh brings the real one.
+  const power = useServerPower({
+    onDone: (run, ok) => {
+      if (!ok) return;
+      setLocalServers((prev) =>
+        prev.map((s) =>
+          s.id !== run.id
+            ? s
+            : run.action === "stop"
+              ? { ...s, status: "SUSPENDED", suspendReason: CUSTOMER_STOPPED_REASON }
+              : { ...s, status: "ACTIVE", suspendReason: null }
+        )
+      );
+    },
+  });
+  const targetOf = (s: ServerServiceItem): PowerTarget => ({
+    id: s.id,
+    name: s.label || s.productName,
+    status: s.status,
+    suspendReason: s.suspendReason,
+  });
 
   const rowActions = (s: ServerServiceItem): RowAction[] => {
-    const isActive = s.status === "ACTIVE";
-    const busy = actionInProgress === s.id ? "İşlem sürüyor" : undefined;
+    const buttons = customerPowerButtons({ ...s, busy: Boolean(power.run) });
+    const icons = { start: <Play aria-hidden />, stop: <Power aria-hidden />, restart: <RotateCcw aria-hidden /> };
     return [
       { label: "Hizmeti yönet", href: `${SERVICE_PATH}/${s.id}`, icon: <Settings aria-hidden /> },
-      {
-        label: "Yeniden başlat",
-        icon: <RotateCcw aria-hidden />,
-        onSelect: () => void handleRestart(s.id),
-        disabledReason: busy ?? (isActive ? undefined : "Sunucu çalışmıyor"),
-        separator: true,
-      },
-      isActive
-        ? { label: "Durdur", icon: <Power aria-hidden />, onSelect: () => void handleStop(s.id), disabledReason: busy, destructive: true }
-        : {
-            label: "Başlat",
-            icon: <Play aria-hidden />,
-            onSelect: () => void handleStart(s.id),
-            disabledReason: busy ?? customerStartBlockReason(s) ?? undefined,
-          },
+      ...buttons.map((b, i) => ({
+        label: POWER_ACTION_COPY[b.action].label,
+        icon: icons[b.action],
+        onSelect: () => power.request(targetOf(s), b.action),
+        disabledReason: b.disabledReason ?? undefined,
+        destructive: b.action === "stop",
+        separator: i === 0,
+      })),
       { label: "Snapshot al", icon: <Camera aria-hidden />, disabledReason: "Yakında", separator: true },
       s.managed
         ? { label: "İşletim sistemini yeniden kur", icon: <HardDrive aria-hidden />, href: `${SERVICE_PATH}/${s.id}` }
@@ -172,18 +148,26 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
   };
 
   const PrimaryAction = ({ s }: { s: ServerServiceItem }) => {
-    const busy = actionInProgress === s.id;
+    const busy = power.isBusy(s.id);
     if (s.status === "ACTIVE") {
+      if (busy) {
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 aria-hidden className="size-3.5 animate-spin motion-reduce:animate-none" />
+            {POWER_ACTION_COPY[power.run!.action].running}…
+          </span>
+        );
+      }
       return <UnavailableAction label="Konsol" icon={<Terminal aria-hidden />} size="sm" />;
     }
-    const blockReason = customerStartBlockReason(s);
+    const [start] = customerPowerButtons({ ...s, busy: Boolean(power.run) });
     return (
       <button
         type="button"
         className={appButton({ variant: "outline", size: "sm" })}
-        disabled={busy || Boolean(blockReason)}
-        title={blockReason ?? undefined}
-        onClick={() => void handleStart(s.id)}
+        disabled={Boolean(start.disabledReason)}
+        title={start.disabledReason ?? undefined}
+        onClick={() => power.request(targetOf(s), "start")}
       >
         {busy ? <Loader2 aria-hidden className="animate-spin" /> : <Play aria-hidden />}
         Başlat
@@ -260,7 +244,7 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
     <>
       <PageHeader title="Sunucularım" description="VDS, VPS ve bulut sunucularınızı izleyin ve yönetin." actions={newServer} />
 
-      <StatGrid columns={3} className="grid-cols-1 sm:grid-cols-3">
+      <StatGrid columns={3}>
         <StatCard label="Toplam" value={stats.total} hint="Tüm sunucularınız" />
         <StatCard
           label="Aktif"
@@ -275,6 +259,9 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
           hint={stats.suspended ? "Durdurulan veya askıya alınan sunucular" : "Durdurulan sunucu yok"}
         />
       </StatGrid>
+
+      <ServerPowerProgress power={power} className="rounded-lg border border-dashed px-4 py-3" />
+      {power.dialog}
 
       <DataTable
         caption="Sunucular"
@@ -333,16 +320,7 @@ export function SunucularContent({ servers, stats }: SunucularContentProps) {
           );
         }}
         emptyState={
-          <EmptyState
-            icon={Server}
-            title="Henüz sunucunuz yok"
-            description="VDS veya VPS paketlerinden birini seçerek dakikalar içinde sunucunuzu açabilirsiniz."
-            action={
-              <Link href="/sunucu/vds" className={appButton()}>
-                Sunucu paketlerini incele
-              </Link>
-            }
-          />
+          <PanelEmptyState kind="servers" />
         }
         noResultsText="Aramanızla eşleşen sunucu bulunamadı."
       />

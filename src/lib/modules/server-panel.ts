@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import type { ServiceWithProduct } from "@/lib/integrations/provisioning/types";
 import { createLogger } from "@/lib/logger";
 import { decryptSecret } from "@/lib/secrets/crypto";
-import type { ServerAccountContext } from "./contracts";
+import type { ServerAccountContext, ServerMetricPoint, ServerMetricsRange } from "./contracts";
 import { getServerBindingForService, getInstance } from "./instances";
 import { parseProductOptions } from "./product-options";
 import { getModule } from "./registry";
@@ -38,7 +38,7 @@ export interface VdsPanelView {
   usageCollectedAt: string | null;
   credentials: { available: boolean; revealedAt: string | null };
   reinstall: { phase: string; requestedAt: string | null; error: string | null } | null;
-  capabilities: { power: boolean; usage: boolean; reinstall: boolean; console: boolean };
+  capabilities: { power: boolean; usage: boolean; metrics: boolean; reinstall: boolean; console: boolean };
 }
 
 export interface ProxmoxAdminView {
@@ -103,6 +103,7 @@ export async function getVdsPanelView(service: ServiceForPanel): Promise<VdsPane
     capabilities: {
       power: capabilities.includes("power"),
       usage: capabilities.includes("usage"),
+      metrics: capabilities.includes("metrics"),
       // Imported VMs were not cloned from our template: no reinstall.
       reinstall: capabilities.includes("reinstall") && !state.imported,
       // noVNC needs a PVE user ticket in the browser; not exposed (docs/modules/proxmox.md).
@@ -324,4 +325,93 @@ export async function fetchProxmoxTaskLog(service: ServiceForPanel): Promise<{ u
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Görev kaydı alınamadı" };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Metrics (charts) and live status (power buttons)
+// ---------------------------------------------------------------------------
+
+export const METRICS_RANGES: readonly ServerMetricsRange[] = ["hour", "day", "week"];
+const METRICS_TIMEOUT_MS = 8_000;
+
+export function isMetricsRange(value: unknown): value is ServerMetricsRange {
+  return typeof value === "string" && (METRICS_RANGES as readonly string[]).includes(value);
+}
+
+/**
+ * - `unavailable`: no module / module without "metrics" / VM not created yet
+ *   (the panel says "Ölçüm verisi bu sunucu için henüz yok").
+ * - `error`: the hypervisor did not answer (temporary).
+ * - `ok`: points as reported (may be empty right after creation).
+ */
+export type ServiceMetricsResult =
+  | { status: "unavailable" }
+  | { status: "error" }
+  | { status: "ok"; range: ServerMetricsRange; points: ServerMetricPoint[] };
+
+/** Time series of a module-bound server; never throws, never invents data. */
+export async function getServiceMetrics(service: ServiceForPanel, range: ServerMetricsRange): Promise<ServiceMetricsResult> {
+  if (!service.moduleInstanceId || !service.remoteId) return { status: "unavailable" };
+  try {
+    const binding = await getServerBindingForService(service);
+    const declared = (binding?.manifest.capabilities as readonly string[] | undefined)?.includes("metrics");
+    if (!binding || !declared || !binding.module.getMetrics) return { status: "unavailable" };
+    const result = await withTimeout(binding.module.getMetrics(contextFor(binding, service), range), METRICS_TIMEOUT_MS);
+    if (!result.ok || !result.data) {
+      log.warn("metrics read failed", { serviceId: service.id, error: result.error });
+      return { status: "error" };
+    }
+    return { status: "ok", range, points: result.data };
+  } catch (error) {
+    log.warn("metrics read failed", { serviceId: service.id, error: error instanceof Error ? error.message : String(error) });
+    return { status: "error" };
+  }
+}
+
+export interface ServerLiveStatus {
+  status: string;
+  suspendReason: string | null;
+  powerState: VdsPanelView["powerState"];
+  /** Reinstall phase from the module state (queued / destroy / provision / done / failed), else null. */
+  reinstallPhase: string | null;
+  collectedAt: string | null;
+}
+
+/**
+ * Status the power buttons poll while an action runs: DB status plus the
+ * VM power state (refreshed from the module at most every `maxAgeMs`).
+ */
+export async function getServerLiveStatus(service: ServiceForPanel, options: { maxAgeMs?: number } = {}): Promise<ServerLiveStatus> {
+  let current = service;
+  if (service.moduleInstanceId && service.remoteId) {
+    const refreshed = await refreshServiceUsage(service, { maxAgeMs: options.maxAgeMs ?? 4_000 });
+    if (refreshed.refreshed) {
+      const row = await db.service.findUnique({
+        where: { id: service.id },
+        select: { status: true, suspendReason: true, moduleData: true },
+      });
+      if (row) current = { ...service, ...row };
+    }
+  }
+  const usage = moduleSlice(current.moduleData, USAGE_KEY);
+  const state = moduleSlice(current.moduleData, PROXMOX_MODULE_ID) as ProxmoxServiceState;
+  const legacyPower: VdsPanelView["powerState"] =
+    current.status === "ACTIVE" ? "running" : current.status === "SUSPENDED" ? "stopped" : "unknown";
+  return {
+    status: current.status,
+    suspendReason: current.suspendReason ?? null,
+    powerState: current.moduleInstanceId
+      ? ((usage.powerState as VdsPanelView["powerState"] | undefined) ?? "unknown")
+      : legacyPower,
+    reinstallPhase: state.reinstall?.phase ?? null,
+    collectedAt: typeof usage.collectedAt === "string" ? usage.collectedAt : null,
+  };
+}
+
+/**
+ * After a completed power action: remember the resulting power state and
+ * expire the usage reading so the next view pulls fresh values.
+ */
+export async function recordPowerChange(serviceId: string, powerState: VdsPanelView["powerState"]) {
+  await patchServiceModuleState(serviceId, USAGE_KEY, { powerState, collectedAt: undefined });
 }

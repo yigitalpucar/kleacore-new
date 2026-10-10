@@ -460,6 +460,9 @@ model User {
   marketingConsentAt  DateTime?
   broadcastRecipients BroadcastRecipient[]
 
+  // Customer panel onboarding checklist hidden by the customer ("Kapat").
+  onboardingDismissedAt DateTime?
+
   // Timestamps
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?

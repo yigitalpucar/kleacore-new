@@ -22,6 +22,7 @@ import {
   Wallet,
 } from "lucide-react";
 import {
+  AppBottomNav,
   AppCommandSearch,
   AppNotifications,
   AppShell,
@@ -134,6 +135,21 @@ export function CustomerShell({ user, isReseller, counts, notifications, unreadN
             { label: "Faturalarım", href: `${ROOT}/faturalar`, icon: CreditCard },
             { label: "Hesap ayarları", href: `${ROOT}/ayarlar`, icon: Settings },
             { label: "kleacore.com", href: "/", icon: Home },
+          ]}
+        />
+      }
+      bottomBar={
+        <AppBottomNav
+          items={[
+            { title: "Ana sayfa", href: ROOT, icon: LayoutDashboard, exact: true },
+            {
+              title: "Hizmetler",
+              href: `${ROOT}/hizmetlerim`,
+              icon: Package,
+              match: [`${ROOT}/sunucular`, `${ROOT}/domainler`, `${ROOT}/ssl`, `${ROOT}/e-posta`, `${ROOT}/yedekleme`],
+            },
+            { title: "Faturalar", href: `${ROOT}/faturalar`, icon: FileText, badge: counts.unpaidInvoices || null },
+            { title: "Destek", href: `${ROOT}/destek`, icon: Headphones, badge: counts.openTickets || null },
           ]}
         />
       }

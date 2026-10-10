@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, HardDrive, Loader2, Play, Power, RefreshCcw, RotateCcw, Terminal, TriangleAlert } from "lucide-react";
+import { Eye, HardDrive, Loader2, RefreshCcw, Terminal, TriangleAlert } from "lucide-react";
 import {
   DetailList,
   SectionCard,
@@ -22,21 +22,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  refreshServerUsage,
-  reinstallServer,
-  restartServer,
-  revealServerCredentials,
-  startServer,
-  stopServer,
-} from "@/lib/actions/customer/servers";
+import { getServerStatus, refreshServerUsage, reinstallServer, revealServerCredentials } from "@/lib/actions/customer/servers";
 import { formatDateTime } from "@/lib/format/date";
 import { customerStartBlockReason } from "@/lib/services/server-power";
 import { toast } from "@/lib/toast";
 import type { VdsPanelView } from "@/lib/modules/server-panel";
+import { ServerPowerButtons, ServerPowerProgress, useServerPower } from "./server-power";
 
 export interface VdsPanelProps {
   serviceId: string;
+  /** Name shown in confirmations (label or product name). */
+  serverName: string;
   status: string;
   suspendReason: string | null;
   ipAddress: string | null;
@@ -48,6 +44,8 @@ export interface VdsPanelProps {
     bandwidthUsed: number | null;
   };
   view: VdsPanelView;
+  /** Rendered right after the usage card (performance charts). */
+  afterUsage?: React.ReactNode;
 }
 
 const POWER_LABELS: Record<VdsPanelView["powerState"], { label: string; tone: "success" | "muted" | "warning" | "neutral" }> = {
@@ -73,7 +71,7 @@ function memoryLabel(mb: number | null) {
  * power buttons, usage, one-time initial credentials and reinstall. The
  * browser never talks to Proxmox; every action is a server action.
  */
-export function VdsPanel({ serviceId, status, suspendReason, ipAddress, usage, view }: VdsPanelProps) {
+export function VdsPanel({ serviceId, serverName, status, suspendReason, ipAddress, usage, view, afterUsage }: VdsPanelProps) {
   const router = useRouter();
   const [busy, startBusy] = useTransition();
   const [credentials, setCredentials] = useState<{ username: string | null; password: string; ipAddress: string | null } | null>(null);
@@ -87,7 +85,30 @@ export function VdsPanel({ serviceId, status, suspendReason, ipAddress, usage, v
   const startBlock = customerStartBlockReason({ status, suspendReason });
   const reinstallRunning = Boolean(view.reinstall && REINSTALL_RUNNING.includes(view.reinstall.phase));
   const manageable = ready && !reinstallRunning && (isActive || startBlock === null);
-  const power = POWER_LABELS[view.powerState];
+
+  const powerLabel = POWER_LABELS[view.powerState];
+  const power = useServerPower();
+  const powerBusy = Boolean(power.run);
+  const powerTarget = { id: serviceId, name: serverName, status, suspendReason };
+
+  // A queued reinstall runs in the job queue: poll its phase and refresh the
+  // page once it is done or failed.
+  useEffect(() => {
+    if (!reinstallRunning) return;
+    let cancelled = false;
+    const timer = setInterval(async () => {
+      const result = await getServerStatus(serviceId).catch(() => null);
+      if (cancelled || !result?.success) return;
+      if (!result.live.reinstallPhase || !REINSTALL_RUNNING.includes(result.live.reinstallPhase)) {
+        clearInterval(timer);
+        router.refresh();
+      }
+    }, 5_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [reinstallRunning, serviceId, router]);
 
   const run = (action: () => Promise<{ success: boolean; error?: string }>, success: string) =>
     startBusy(async () => {
@@ -99,11 +120,6 @@ export function VdsPanel({ serviceId, status, suspendReason, ipAddress, usage, v
       toast.success(success);
       router.refresh();
     });
-
-  const handleStop = () => {
-    if (!window.confirm("Sunucu kapatılacak (önce düzgün kapatma denenir, 60 sn sonra zorla kapatılır). Devam edilsin mi?")) return;
-    run(() => stopServer(serviceId), "Sunucu durduruldu");
-  };
 
   const handleReveal = () =>
     startBusy(async () => {
@@ -158,44 +174,12 @@ export function VdsPanel({ serviceId, status, suspendReason, ipAddress, usage, v
       <SectionCard
         title="Sunucu"
         description={view.usageCollectedAt ? `Durum ${formatDateTime(view.usageCollectedAt)} itibarıyla` : undefined}
-        actions={<StatusBadge tone={power.tone} label={reinstallRunning ? "Yeniden kuruluyor" : power.label} />}
+        actions={<StatusBadge tone={powerLabel.tone} label={reinstallRunning ? "Yeniden kuruluyor" : powerLabel.label} />}
         footer={
           view.capabilities.power ? (
             <>
               {view.capabilities.console ? null : <UnavailableAction label="Konsol" icon={<Terminal aria-hidden />} size="sm" />}
-              {isActive ? (
-                <>
-                  <button
-                    type="button"
-                    className={appButton({ variant: "outline", size: "sm" })}
-                    disabled={busy || !manageable}
-                    onClick={() => run(() => restartServer(serviceId), "Sunucu yeniden başlatıldı")}
-                  >
-                    <RotateCcw aria-hidden />
-                    Yeniden başlat
-                  </button>
-                  <button
-                    type="button"
-                    className={appButton({ variant: "destructive", size: "sm" })}
-                    disabled={busy || !manageable}
-                    onClick={handleStop}
-                  >
-                    <Power aria-hidden />
-                    Durdur
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className={appButton({ size: "sm" })}
-                  disabled={busy || Boolean(startBlock) || reinstallRunning}
-                  title={startBlock ?? undefined}
-                  onClick={() => run(() => startServer(serviceId), "Sunucu başlatıldı")}
-                >
-                  {busy ? <Loader2 aria-hidden className="animate-spin" /> : <Play aria-hidden />}
-                  Başlat
-                </button>
-              )}
+              <ServerPowerButtons target={powerTarget} power={power} reinstallRunning={reinstallRunning} />
             </>
           ) : undefined
         }
@@ -215,7 +199,9 @@ export function VdsPanel({ serviceId, status, suspendReason, ipAddress, usage, v
           ]}
         />
         {!isActive && startBlock ? <p className="mt-4 text-sm text-muted-foreground">{startBlock}.</p> : null}
+        <ServerPowerProgress power={power} id={serviceId} className="mt-4" />
       </SectionCard>
+      {power.dialog}
 
       {view.capabilities.usage ? (
         <SectionCard
@@ -249,6 +235,8 @@ export function VdsPanel({ serviceId, status, suspendReason, ipAddress, usage, v
           )}
         </SectionCard>
       ) : null}
+
+      {afterUsage}
 
       {view.credentials.available || credentials ? (
         <SectionCard
@@ -329,7 +317,7 @@ export function VdsPanel({ serviceId, status, suspendReason, ipAddress, usage, v
                 <button
                   type="button"
                   className={appButton({ variant: "destructive" })}
-                  disabled={busy || !manageable}
+                  disabled={busy || !manageable || powerBusy}
                   onClick={() => setReinstallOpen(true)}
                 >
                   <HardDrive aria-hidden />

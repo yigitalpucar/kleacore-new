@@ -28,6 +28,7 @@ import type {
   ServerAccountCreated,
   ServerModule,
   ServerModuleState,
+  ServerMetricPoint,
   ServerPowerAction,
   ServerUsage,
 } from "../../contracts";
@@ -46,6 +47,7 @@ import {
   archiveFromTaskLog,
   backupVmidOf,
   findBootDisk,
+  parseMetrics,
   parseUsage,
   rewriteNet0,
   type RrdPoint,
@@ -263,6 +265,7 @@ const STEP_CODES: Record<string, string> = {
   destroy: "PROXMOX_DESTROY",
   power: "PROXMOX_POWER",
   usage: "PROXMOX_USAGE",
+  metrics: "PROXMOX_METRICS",
   resolve: "PROXMOX_VM",
   backup: "PROXMOX_BACKUP",
   restore: "PROXMOX_RESTORE",
@@ -776,6 +779,17 @@ export function createProxmoxModule(
       }
     },
 
+    /** rrddata of the service's own VM (AVERAGE); read-only, no state changes. */
+    async getMetrics(ctx, range): Promise<IntegrationResult<ServerMetricPoint[]>> {
+      try {
+        const vm = await resolveOwnedVm(ctx);
+        const rrd = await client.get<RrdPoint[]>(qemu(vm.node, vm.vmid, "/rrddata"), { timeframe: range, cf: "AVERAGE" });
+        return { ok: true, provider: MODULE_ID, data: parseMetrics(rrd) };
+      } catch (error) {
+        return fail<ServerMetricPoint[]>("metrics", error);
+      }
+    },
+
     /**
      * Re-clone from the template keeping VMID and IP: destroy (owned VM only)
      * → the provision pipeline with a fixed VMID. Resumable through
@@ -1080,7 +1094,7 @@ export const proxmoxModule = defineModule({
     },
     backupNotifyCustomer: { label: "Yedek bildirimleri müşteriye", hint: "Açıksa müşteriye yedek tamamlandı/başarısız e-postası gider. Hatalar her zaman yöneticiye bildirilir." },
   },
-  capabilities: ["provision", "changePackage", "usage", "power", "reinstall", "listAccounts", "ipam", "backups"],
+  capabilities: ["provision", "changePackage", "usage", "metrics", "power", "reinstall", "listAccounts", "ipam", "backups"],
   productCategories: ["vds", "vps", "server", "cloud"],
   productOptionsSchema: proxmoxProductOptionsSchema,
   productOptionsFields: {

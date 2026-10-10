@@ -4,7 +4,6 @@ import Link from "next/link";
 import { ArrowUpDown, Cloud, ExternalLink, Mail, Package, Plus, RefreshCcw, Server, Settings, Shield } from "lucide-react";
 import {
   DataTable,
-  EmptyState,
   IconTile,
   ListRow,
   PageHeader,
@@ -18,6 +17,7 @@ import {
 } from "@/components/app";
 import { formatTRY } from "@/lib/format/price";
 import { billingPeriodUnit, formatDate } from "@/lib/format/date";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 const categoryIcons: Record<string, typeof Package> = {
   hosting: Package,
@@ -230,16 +230,7 @@ export function HizmetlerimContent({ services }: HizmetlerimContentProps) {
           />
         )}
         emptyState={
-          <EmptyState
-            icon={Package}
-            title="Henüz hizmetiniz yok"
-            description="Hosting, sunucu veya SSL paketlerinden birini seçerek başlayabilirsiniz."
-            action={
-              <Link href="/hosting/linux" className={appButton()}>
-                Hizmetleri incele
-              </Link>
-            }
-          />
+          <PanelEmptyState kind="services" />
         }
         noResultsText="Aramanızla eşleşen hizmet bulunamadı."
       />

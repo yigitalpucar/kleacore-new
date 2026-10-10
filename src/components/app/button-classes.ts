@@ -18,9 +18,9 @@ const variants: Record<Variant, string> = {
 // Phones get 44px targets; md+ uses the denser app sizes.
 const sizes: Record<Size, string> = {
   md: "h-11 px-4 md:h-9 md:px-3.5",
-  sm: "h-10 px-3 text-[13px] md:h-8 md:px-2.5",
+  sm: "h-11 px-3 text-[13px] md:h-8 md:px-2.5",
   icon: "size-11 md:size-9",
-  "icon-sm": "size-10 md:size-8",
+  "icon-sm": "size-11 md:size-8",
 };
 
 /**

@@ -5,6 +5,7 @@ import { getServicesByCustomer } from "@/lib/dal/services";
 import { getDomainsByCustomer } from "@/lib/dal/domains";
 import { getInvoicesByCustomer } from "@/lib/dal/invoices";
 import { getTicketsByCustomer } from "@/lib/dal/tickets";
+import { getCustomerOnboarding } from "@/lib/onboarding/customer";
 import { DashboardContent } from "./content";
 import { WaitingOrdersNotice } from "@/components/panel/waiting-orders-notice";
 
@@ -16,12 +17,13 @@ export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [dashboardStats, services, domains, invoices, tickets] = await Promise.all([
+  const [dashboardStats, services, domains, invoices, tickets, onboarding] = await Promise.all([
     getCustomerDashboardStats(userId),
     getServicesByCustomer(userId),
     getDomainsByCustomer(userId),
     getInvoicesByCustomer(userId),
     getTicketsByCustomer(userId),
+    getCustomerOnboarding(userId),
   ]);
 
   return (
@@ -29,6 +31,7 @@ export default async function DashboardPage() {
       <WaitingOrdersNotice userId={userId} />
       <DashboardContent
         userName={session!.user.name ?? ""}
+        onboarding={onboarding}
         stats={{
           activeServices: dashboardStats.activeServices,
           totalInvoices: dashboardStats.totalInvoices,

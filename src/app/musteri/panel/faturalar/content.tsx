@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { CreditCard, Download, Eye, FileText } from "lucide-react";
+import { CreditCard, Download, Eye } from "lucide-react";
 import {
   DataTable,
-  EmptyState,
   ListRow,
   PageHeader,
   StatCard,
@@ -19,6 +18,7 @@ import { getCustomerEInvoiceLabel } from "@/lib/efatura/customer-status";
 import { formatTRY } from "@/lib/format/price";
 import { formatDate } from "@/lib/format/date";
 import type { EInvoiceStatus } from "@prisma/client";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 interface SerializedInvoice {
   id: string;
@@ -208,11 +208,7 @@ export function FaturalarContent({ invoices, stats }: FaturalarContentProps) {
           />
         )}
         emptyState={
-          <EmptyState
-            icon={FileText}
-            title="Henüz faturanız yok"
-            description="Satın aldığınız hizmetlerin faturaları burada listelenir."
-          />
+          <PanelEmptyState kind="invoices" />
         }
         noResultsText="Aramanızla eşleşen fatura bulunamadı."
       />

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, Link2, Loader2, Share2, ShoppingCart, UserPlus, Users, Wallet } from "lucide-react";
+import { CreditCard, Link2, Loader2, Share2, ShoppingCart, UserPlus, Wallet } from "lucide-react";
 import {
   CopyButton,
   DataTable,
@@ -32,6 +32,7 @@ import { MIN_PAYOUT_AMOUNT } from "@/lib/affiliate/constants";
 import { formatTRY } from "@/lib/format/price";
 import { formatDate } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 // Mirrors AFFILIATE_COMMISSION_RATE (src/lib/affiliate/index.ts) — a flat rate on every paid order.
 const COMMISSION_PERCENT = 10;
@@ -268,7 +269,8 @@ export function SatisOrtakligiContent({
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <SectionCard
-          className="lg:col-span-2"
+          id="referans-baglantisi"
+          className="lg:col-span-2 scroll-mt-20"
           title="Referans bağlantınız"
           description="Bu bağlantıyla hesap açan herkes sizin referansınız olarak kaydedilir."
         >
@@ -285,7 +287,7 @@ export function SatisOrtakligiContent({
                 <span className="text-muted-foreground">Referans kodu</span>
                 <span className="inline-flex items-center gap-0.5 rounded-md border px-2 py-0.5">
                   <code className="font-mono text-[13px] font-medium">{referralCode}</code>
-                  <CopyButton value={referralCode} label="Referans kodunu kopyala" className="size-8 md:size-7" />
+                  <CopyButton value={referralCode} label="Referans kodunu kopyala" className="size-11 md:size-7" />
                 </span>
               </div>
             </div>
@@ -369,11 +371,7 @@ export function SatisOrtakligiContent({
             />
           )}
           emptyState={
-            <EmptyState
-              icon={Users}
-              title="Henüz referansınız yok"
-              description="Referans bağlantınızla hesap açan müşteriler burada listelenir. E-posta adresleri gizlilik için kısaltılarak gösterilir."
-            />
+            <PanelEmptyState kind="affiliateReferrals" />
           }
           noResultsText="Aramanızla eşleşen referans bulunamadı."
         />
@@ -403,10 +401,9 @@ export function SatisOrtakligiContent({
             />
           )}
           emptyState={
-            <EmptyState
+            <PanelEmptyState
+              kind="affiliatePayouts"
               compact
-              icon={Wallet}
-              title="Henüz ödeme talebiniz yok"
               description={`Kullanılabilir bakiyeniz ${formatTRY(MIN_PAYOUT_AMOUNT)} tutarına ulaştığında ödeme talep edebilirsiniz.`}
             />
           }

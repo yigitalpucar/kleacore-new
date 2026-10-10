@@ -8,7 +8,6 @@ import {
   Bell,
   CreditCard,
   Headphones,
-  Inbox,
   Loader2,
   Mail,
   MailOpen,
@@ -21,6 +20,7 @@ import { formatDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 import { markEmailAsRead } from "@/lib/actions/customer/emails";
 import { toast } from "@/lib/toast";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 const categoryConfig = {
   billing: { label: "Fatura", icon: CreditCard },
@@ -132,11 +132,7 @@ export function EPostaContent({ emails, stats }: EPostaContentProps) {
       </StatGrid>
 
       {emailItems.length === 0 ? (
-        <EmptyState
-          icon={Inbox}
-          title="Henüz e-posta yok"
-          description="Fatura, destek ve hizmet bildirimleri gönderildikçe burada listelenir."
-        />
+        <PanelEmptyState kind="inbox" />
       ) : (
         <section
           ref={inboxRef}

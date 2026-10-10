@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
   getVdsPanelView: vi.fn(),
   queueServerReinstall: vi.fn(),
   revealInitialCredentials: vi.fn(),
+  getServiceMetrics: vi.fn(),
+  getServerLiveStatus: vi.fn(),
+  recordPowerChange: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({ db: { service: { findFirst: mocks.findFirst, update: mocks.update } } }));
@@ -22,11 +25,15 @@ vi.mock("@/lib/modules/server-panel", async (importOriginal) => {
     getVdsPanelView: mocks.getVdsPanelView,
     queueServerReinstall: mocks.queueServerReinstall,
     revealInitialCredentials: mocks.revealInitialCredentials,
+    isMetricsRange: actual.isMetricsRange,
+    getServiceMetrics: mocks.getServiceMetrics,
+    getServerLiveStatus: mocks.getServerLiveStatus,
+    recordPowerChange: mocks.recordPowerChange,
   };
 });
 
 import { CUSTOMER_STOPPED_REASON } from "@/lib/services/server-power";
-import { reinstallServer, revealServerCredentials, startServer, stopServer } from "./servers";
+import { getServerMetrics, getServerStatus, reinstallServer, revealServerCredentials, startServer, stopServer } from "./servers";
 
 const bound = {
   id: "svc_1",
@@ -62,6 +69,7 @@ describe("customer server power actions", () => {
 
     expect(await stopServer("svc_1")).toMatchObject({ success: true });
     expect(mocks.runRemoteServerAction).toHaveBeenCalledWith(bound, "stop");
+    expect(mocks.recordPowerChange).toHaveBeenCalledWith("svc_1", "stopped");
     expect(mocks.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "SUSPENDED", suspendReason: CUSTOMER_STOPPED_REASON }) })
     );
@@ -128,5 +136,40 @@ describe("credentials and reinstall", () => {
   it("does not queue a second reinstall while one is running", async () => {
     mocks.getVdsPanelView.mockResolvedValue({ hostname: "kc-abc", capabilities: { reinstall: true }, reinstall: { phase: "provision" } });
     expect(await reinstallServer("svc_1", { confirmation: "kc-abc" })).toEqual({ success: false, error: "Yeniden kurulum zaten sürüyor" });
+  });
+});
+
+describe("customer server metrics and live status", () => {
+  beforeEach(() => {
+    mocks.findFirst.mockReset();
+    mocks.getServiceMetrics.mockReset();
+    mocks.getServerLiveStatus.mockReset();
+  });
+
+  it("rejects unknown ranges before touching the database", async () => {
+    expect(await getServerMetrics("svc_1", "month")).toMatchObject({ success: false });
+    expect(mocks.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("only reads metrics of the customer's own server", async () => {
+    mocks.findFirst.mockResolvedValue(null);
+    expect(await getServerMetrics("svc_other", "day")).toMatchObject({ success: false, error: "Sunucu bulunamadı" });
+    expect(mocks.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ customerId: "user_1" }) }));
+    expect(mocks.getServiceMetrics).not.toHaveBeenCalled();
+  });
+
+  it("passes the range through and returns the metrics result", async () => {
+    mocks.findFirst.mockResolvedValue(bound);
+    mocks.getServiceMetrics.mockResolvedValue({ status: "unavailable" });
+    expect(await getServerMetrics("svc_1", "week")).toEqual({ success: true, metrics: { status: "unavailable" } });
+    expect(mocks.getServiceMetrics).toHaveBeenCalledWith(bound, "week");
+  });
+
+  it("returns live status for the owner only", async () => {
+    mocks.findFirst.mockResolvedValueOnce(null);
+    expect(await getServerStatus("svc_x")).toMatchObject({ success: false });
+    mocks.findFirst.mockResolvedValueOnce(bound);
+    mocks.getServerLiveStatus.mockResolvedValue({ status: "ACTIVE", powerState: "running" });
+    expect(await getServerStatus("svc_1")).toMatchObject({ success: true, live: { powerState: "running" } });
   });
 });

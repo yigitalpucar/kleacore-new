@@ -13,6 +13,7 @@ It shares the public kit's visual language (`docs/ui-kit.md`): monochrome tokens
 - **Statuses:** never write status labels or colours by hand. Use `<StatusBadge kind="invoice" status={x.status} />`. The labels and tones live in `status-map.ts`, which covers every Prisma status enum.
 - **Unfinished features:** don't build buttons that pretend to work. Use `<UnavailableAction label="cPanel" reason="Yakında" />`, which renders a disabled control with a tooltip. In row menus, pass `{ label, disabledReason: "Yakında" }`.
 - **Money:** use `formatTRY(n, { keepDecimals: true })` in the panels, where invoice amounts always show kuruş. **Dates:** use `formatDate`, `formatDateTime` and `formatDateLong`. They are tr-TR and pinned to Europe/Istanbul, so server and client render the same output. Billing periods: `billingPeriodLabel("yearly")` returns "Yıllık", and `billingPeriodUnit` returns "yıl".
+- **Empty lists (customer panel):** use `<PanelEmptyState kind="invoices" />` (`src/components/panel/empty-presets.ts`): icon, title, one sentence, one primary link. Override `action` only when the primary action is a button on the same page.
 - **Mobile:** no page-level horizontal scroll at 390px. `DataTable` needs a `mobileCard` (use `ListRow`) for any table with more than 3 columns. Toolbars stack, and filter tabs scroll inside their own row.
 - **A11y:** icon-only buttons need `aria-label`, and decorative icons get `aria-hidden`. Inputs use `FormField` (label + control) or `aria-label`. Keep focus rings. `AppShell` adds the "İçeriğe geç" skip link and `<main id="main">`.
 - **Private pages:** the panel layout sets `robots: { index: false }` and the title template. Pages only export `metadata = { title: "Faturalarım" }`.
@@ -58,7 +59,7 @@ The shell has these parts:
 - **Desktop sidebar:** grouped nav with a mono group label, an active item marked by `bg-muted` plus a 2px rail, and badges for counts (hidden at 0). The bottom button (or ⌘B / Ctrl+B) collapses it to a 64px icon rail with tooltips, and the state persists in `localStorage` (`kc-app-sidebar-collapsed`).
 - **Mobile drawer:** a left Radix dialog that closes on navigation.
 - **Top bar:** the breadcrumb is derived from the path under `breadcrumbRoot`. A crumb uses the nav title when the href matches a nav item, then `segmentLabels`, then "Detay" for id-like segments, and finally the humanised segment. On phones only the last crumb shows. Override a crumb from a page with `<AppBreadcrumbLabel segment={invoice.id} label={invoice.invoiceNumber} />`.
-- **Slots:** `search`, `notifications`, `themeToggle`, `userMenu` and `sidebarFooter`. All are optional.
+- **Slots:** `search`, `notifications`, `themeToggle`, `userMenu`, `sidebarFooter` and `bottomBar` (phone tab bar, `<AppBottomNav>`). All are optional.
 - **Content:** `<main id="main">` is centred, max 1320px, `px-4 md:px-6 lg:px-8`, with `space-y-6` between direct children. Don't add another container in pages.
 - **Tooltips:** the shell provides `TooltipProvider`.
 
@@ -87,6 +88,8 @@ Top bar items (`topbar-items.tsx`, client):
 | `FormField` | server | `label`, `htmlFor`, `hint?`, `error?`, `required?`, `children` |
 | `UsageMeter` | server | `label`, `used?`, `limit?`, `unit?`, or `percent?`; `warnAt?` (70), `dangerAt?` (90) |
 | `ChartCard` | server | `title`, `description?`, `actions?`, `data: {label,value}[]`, `formatValue?`, `height?`, `emptyText?`. Dependency-free CSS bars plus an sr-only table. If you need lines or areas, add recharts and keep it inside a `SectionCard`. |
+| `TimeSeriesChart` | **client** | `label` (aria), `times` (epoch ms), `series: {id,label,values,variant?:"solid"\|"dashed"}[]`, `formatValue`, `formatTime`, `formatTooltipTime?`, `max?`, `height?`. Dependency-free SVG lines (gaps stay open), hover/arrow-key crosshair + tooltip, sr-only summary table. Helpers in `src/lib/format/metrics.ts`. |
+| `AppBottomNav` | **client** | `items: {title,href,icon,exact?,badge?,match?}[]` (≤4) + a "Menü" tab that opens the shell drawer. Pass it to `AppShell bottomBar`; it shows below `md` and the shell pads the content. |
 | `ListRow` | server | `title`, `subtitle?`, `trailing?`, `meta?`, `leading?`. The standard `mobileCard` body. |
 | `IconTile` | server | `size?: "sm"\|"md"\|"lg"`. A bordered square for an icon. |
 | `PageSkeleton` | server | `variant?: "list"\|"detail"\|"dashboard"\|"form"`, `back?` (reserve the back-link row), `stats?` (stat row; default on for list/dashboard). Use it in `loading.tsx` matching the page. |

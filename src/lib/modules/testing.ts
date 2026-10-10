@@ -193,6 +193,7 @@ export function restoreFetch() {
 const OPTIONAL_METHOD_CAPABILITIES: Partial<Record<ModuleKind, Record<string, string>>> = {
   server: {
     getUsage: "usage",
+    getMetrics: "metrics",
     listUsage: "bulkUsage",
     getSsoUrl: "sso",
     resetPassword: "password",

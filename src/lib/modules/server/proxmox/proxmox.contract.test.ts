@@ -440,6 +440,41 @@ describe("proxmox: operations on an existing VM", () => {
     expect(result.data).toMatchObject({ cpuPercent: 12.5, ramUsedMB: 512, ramLimitMB: 2048, diskLimitMB: 40960, powerState: "running" });
   });
 
+  it("getMetrics reads rrddata for the requested timeframe and converts units", async () => {
+    const { pve, subject, vmCtx } = await provisioned();
+    pve.rrd = [
+      { time: 1_700_000_060, cpu: 0.5, mem: 1024 * 1024 * 1024, maxmem: 2048 * 1024 * 1024, netin: 1500.4, netout: 300, diskread: 4096, diskwrite: 8192 },
+      { time: 1_700_000_000, cpu: 0.25 },
+    ];
+    pve.calls.length = 0;
+    const result = await subject.getMetrics!(vmCtx(), "day");
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual([
+      { time: 1_700_000_000_000, cpuPercent: 25 },
+      {
+        time: 1_700_000_060_000,
+        cpuPercent: 50,
+        memUsedMB: 1024,
+        memTotalMB: 2048,
+        netInBps: 1500,
+        netOutBps: 300,
+        diskReadBps: 4096,
+        diskWriteBps: 8192,
+      },
+    ]);
+    const call = pve.calls.find((c) => c.path.endsWith("/rrddata"));
+    expect(call?.params.get("timeframe")).toBe("day");
+    expect(call?.params.get("cf")).toBe("AVERAGE");
+    expect(pve.calls.every((c) => c.method === "GET")).toBe(true);
+  });
+
+  it("getMetrics fails without throwing when the VM is not ours", async () => {
+    const { subject, vmCtx } = await provisioned();
+    const result = await subject.getMetrics!({ ...vmCtx(), service: { ...vmCtx().service, remoteId: "1009" } }, "hour");
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/^PROXMOX_/);
+  });
+
   it("listAccounts lists non-template VMs and marks KLEACORE-managed ones", async () => {
     const { subject } = await provisioned();
     const result = await subject.listAccounts!();

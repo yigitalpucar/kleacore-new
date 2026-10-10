@@ -13,6 +13,7 @@ import {
 } from "@/components/app";
 import { formatTRY } from "@/lib/format/price";
 import { RefreshButton } from "./refresh-button";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 type Pair = { used: number | null; total: number | null };
 
@@ -112,17 +113,7 @@ export function IstatistiklerContent({ serviceUsage, totals, monthlyPayments }: 
       >
         {serviceUsage.length === 0 ? (
           <div className="p-4 md:p-5">
-            <EmptyState
-              compact
-              icon={Activity}
-              title="Henüz hizmetiniz yok"
-              description="Hizmet satın aldığınızda kaynak kullanımı burada görünür."
-              action={
-                <Link href="/hosting" className={appButton({ variant: "outline", size: "sm" })}>
-                  Hizmetlere göz at
-                </Link>
-              }
-            />
+            <PanelEmptyState kind="usage" compact />
           </div>
         ) : withMetrics.length === 0 ? (
           <div className="p-4 md:p-5">

@@ -37,7 +37,7 @@ export function PageHeader({
       {back ? (
         <Link
           href={back.href}
-          className="-ml-1 inline-flex h-8 w-fit items-center gap-1.5 rounded-md px-1 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="-ml-1 inline-flex h-11 w-fit items-center gap-1.5 md:h-8 rounded-md px-1 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ArrowLeft aria-hidden className="size-4" />
           {back.label}

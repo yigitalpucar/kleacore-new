@@ -48,8 +48,13 @@ export type AppShellProps = {
   userMenu?: React.ReactNode;
   /** Pinned to the bottom of the sidebar (secondary links, help card…). */
   sidebarFooter?: React.ReactNode;
+  /** Fixed tab bar on phones (< md), e.g. <AppBottomNav />. Content gets bottom padding. */
+  bottomBar?: React.ReactNode;
   children: React.ReactNode;
 };
+
+/** Lets the bottom bar's "Menü" tab open the mobile drawer. */
+export const AppShellMenuContext = React.createContext<{ openMenu: () => void; menuOpen: boolean } | null>(null);
 
 /* -------------------------------------------------------- breadcrumb ctx */
 
@@ -105,6 +110,7 @@ export function AppShell({
   themeToggle,
   userMenu,
   sidebarFooter,
+  bottomBar,
   children,
 }: AppShellProps) {
   const pathname = usePathname() ?? breadcrumbRoot.href;
@@ -280,9 +286,21 @@ export function AppShell({
             </header>
 
             <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">
-              <RouteFade className="mx-auto w-full max-w-[1320px] space-y-6 px-4 py-6 md:px-6 md:py-8 lg:px-8">{children}</RouteFade>
+              <RouteFade
+                className={cn(
+                  "mx-auto w-full max-w-[1320px] space-y-6 px-4 py-6 md:px-6 md:py-8 lg:px-8",
+                  bottomBar && "pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-8"
+                )}
+              >
+                {children}
+              </RouteFade>
             </main>
           </div>
+          {bottomBar ? (
+            <AppShellMenuContext.Provider value={{ openMenu: () => setMobileOpen(true), menuOpen: mobileOpen }}>
+              {bottomBar}
+            </AppShellMenuContext.Provider>
+          ) : null}
         </div>
       </CrumbContext.Provider>
     </TooltipProvider>

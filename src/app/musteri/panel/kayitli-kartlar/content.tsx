@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, CreditCard, Loader2, Plus, Star, Trash2 } from "lucide-react";
 import {
-  EmptyState,
   IconTile,
   PageHeader,
   SectionCard,
@@ -23,6 +22,7 @@ import {
   updateAutoPay,
 } from "@/lib/actions/customer/saved-cards";
 import type { SavedCardView } from "@/lib/payments/saved-cards";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 export interface CardNotice {
   tone: "success" | "warning" | "error";
@@ -152,12 +152,7 @@ export function KayitliKartlarContent({
           <SectionCard title="Kartlar" flush>
             {cards.length === 0 ? (
               <div className="p-4">
-                <EmptyState
-                  compact
-                  icon={CreditCard}
-                  title="Kayıtlı kartınız yok"
-                  description="Kart ekleyerek faturalarınızı tek tıkla veya otomatik olarak ödeyebilirsiniz."
-                />
+                <PanelEmptyState kind="savedCards" compact />
               </div>
             ) : (
               <ul className="divide-y">
