@@ -61,7 +61,7 @@ export function renderOverrideEmail(
   data: Record<string, unknown>,
   ctx: RenderContext,
   override: NonNullable<TemplateOverride["email"]>,
-  options: { logoSrc: string }
+  options: { logoSrc: string; eyebrow?: string }
 ): RenderedEmail {
   const view = buildTemplateView(template, data, ctx);
   const subject = renderTemplate(override.subject, view, { escape: false }).replace(/\s+/g, " ").trim();
@@ -73,7 +73,7 @@ export function renderOverrideEmail(
   // Structural parts the admin text cannot carry (e.g. the ticket reply
   // marker the inbound mail parser cuts at) come from the typed template.
   const replyMarker = template.render(data, ctx).replyMarker;
-  const html = renderEmailShell({ subject, preheader, bodyHtml, replyMarker }, ctx.brand, options);
+  const html = renderEmailShell({ subject, preheader, bodyHtml, replyMarker, eyebrow: options.eyebrow }, ctx.brand, options);
   const text = `${replyMarker ? `${replyMarker}\n\n` : ""}${textBody}\n\n${textFooter(ctx.brand)}`
     .replace(/\n{3,}/g, "\n\n")
     .trim();

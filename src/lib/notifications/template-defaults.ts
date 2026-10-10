@@ -94,7 +94,7 @@ export function defaultTemplateSource(template: NotificationTemplate, ctx: Rende
 
   const GREETING_MARK = "\u0000greeting\u0000";
   let bodyHtml = htmlTokens(renderEmailBody(content, greets ? { greetingHtml: GREETING_MARK } : {}));
-  bodyHtml = guardOptional(bodyHtml, optional, /<tr>[\s\S]*?<\/tr>|<p\b[^>]*>[\s\S]*?<\/p>/g);
+  bodyHtml = guardOptional(bodyHtml, optional, /<tr\b[^>]*>[\s\S]*?<\/tr>|<p\b[^>]*>[\s\S]*?<\/p>/g);
   bodyHtml = bodyHtml.replace(GREETING_MARK, GREETING_SECTION);
 
   const textLines = renderTextBody(content, greets ? GREETING_MARK : null).map((line) =>

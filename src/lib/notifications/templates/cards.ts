@@ -48,7 +48,7 @@ export const billingAutoChargeFailed = defineTemplate({
       ],
       details: [
         { label: "Fatura", value: data.invoiceNumber, mono: true },
-        { label: "Tutar", value: money(data.amount) },
+        { label: "Tutar", value: money(data.amount), emphasis: true },
         { label: "Son ödeme tarihi", value: date(data.dueDate) },
         { label: "Kart", value: data.card },
         ...(data.reason ? [{ label: "Banka yanıtı", value: data.reason }] : []),

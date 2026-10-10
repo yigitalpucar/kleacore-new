@@ -22,6 +22,8 @@ export interface EmailDetail {
   value: string;
   /** Monospace value (IDs, IPs, usernames). */
   mono?: boolean;
+  /** Amount / key figure: larger, bolder value in the summary table. */
+  emphasis?: boolean;
 }
 
 /**
