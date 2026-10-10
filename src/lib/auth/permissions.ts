@@ -53,6 +53,8 @@ export const PERMISSIONS = [
   "privacy.anonymize",
   /** Bulk announcements (e-mail / SMS) to customers — ADMIN only by default. */
   "broadcast.send",
+  /** CSV export of an admin list's filtered view (also needs that list's view permission). ADMIN + BILLING. */
+  "export.csv",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -71,7 +73,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
 export const ROLE_DESCRIPTIONS: Record<StaffRole, string> = {
   ADMIN: "Tüm yetkiler.",
   SUPPORT: "Destek talepleri, müşteri/hizmet/alan adı görüntüleme, kimlik doğrulama (KYC) ve KVKK başvuruları, kendi aktivite kayıtları.",
-  BILLING: "Faturalar, iade, havale onayı, e-fatura, raporlar; müşteri ve sipariş görüntüleme.",
+  BILLING: "Faturalar, iade, havale onayı, e-fatura, raporlar, CSV dışa aktarma; müşteri ve sipariş görüntüleme.",
 };
 
 const ROLE_PERMISSIONS: Record<Exclude<StaffRole, "ADMIN">, readonly Permission[]> = {
@@ -96,6 +98,7 @@ const ROLE_PERMISSIONS: Record<Exclude<StaffRole, "ADMIN">, readonly Permission[
     "reports.view",
     "orders.view",
     "api_tokens.manage",
+    "export.csv",
   ],
 };
 

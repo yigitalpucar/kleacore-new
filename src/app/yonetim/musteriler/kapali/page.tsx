@@ -4,6 +4,7 @@ import { parsePagination } from "@/lib/utils/pagination";
 import { listPerPage, toCustomerRow } from "../_components/customer-row";
 import { CustomerSegmentPage } from "../_components/segment-page";
 import { requirePermission } from "@/lib/utils/auth-helpers";
+import { listCapabilities } from "@/lib/admin/list-views";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +15,15 @@ export default async function ClosedCustomersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requirePermission("customers.view");
+  const session = await requirePermission("customers.view");
   const sp = await searchParams;
   const params = parsePagination(sp);
   const result = await getCustomers({ ...params, status: "CLOSED", perPage: listPerPage(sp, params.perPage) });
 
   return (
     <CustomerSegmentPage
+      scope="closed"
+      capabilities={listCapabilities(session.user.role, "customers")}
       title="Kapalı hesaplar"
       description="Kapatılmış müşteri hesapları. Gerekirse yeniden etkinleştirebilirsiniz."
       rows={result.data.map(toCustomerRow)}

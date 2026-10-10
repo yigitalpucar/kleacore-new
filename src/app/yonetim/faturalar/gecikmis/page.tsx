@@ -8,6 +8,7 @@ import { InvoiceTable } from "../_components/invoice-table";
 import { toAdminInvoiceRow, withListPageSize } from "../_components/invoice-rows";
 import { sum as sumMoney, toNumber } from "@/lib/money";
 import { requirePermission } from "@/lib/utils/auth-helpers";
+import { listCapabilities } from "@/lib/admin/list-views";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function OverdueInvoicesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requirePermission("invoices.view");
+  const session = await requirePermission("invoices.view");
   const sp = await searchParams;
   const params = parsePagination(sp);
   const result = await getInvoices({ ...params, perPage: withListPageSize(sp, params), status: "OVERDUE" });
@@ -43,7 +44,7 @@ export default async function OverdueInvoicesPage({
           hint={`30+ gün: ${rows.filter((r) => -r.daysToDue >= 30).length} fatura`}
         />
       </StatGrid>
-      <InvoiceTable variant="overdue" rows={rows} pageSize={25} caption="Gecikmiş faturalar" />
+      <InvoiceTable variant="overdue" rows={rows} capabilities={listCapabilities(session.user.role, "invoices")} pageSize={25} caption="Gecikmiş faturalar" />
       <ServerPager page={result.page} totalPages={result.totalPages} total={result.total} noun="fatura" />
     </>
   );

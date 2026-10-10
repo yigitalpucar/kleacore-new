@@ -51,3 +51,23 @@ export function toCustomerRow(c: CustomerRecord): CustomerRow {
 export function listPerPage(sp: Record<string, string | string[] | undefined>, parsed: number) {
   return sp.perPage ? parsed : 100;
 }
+
+const tr = (s: string | null | undefined) => (s ?? "").toLocaleLowerCase("tr-TR");
+
+export const customerFullName = (c: Pick<CustomerRow, "name" | "surname">) => `${c.name} ${c.surname}`.trim();
+
+/** Search of the customer tables (and their CSV export); `q` is already lower-cased. */
+export function customerSearch(c: CustomerRow, q: string) {
+  return (
+    tr(customerFullName(c)).includes(q) ||
+    tr(c.email).includes(q) ||
+    tr(c.id).includes(q) ||
+    tr(c.companyName).includes(q) ||
+    tr(c.phone).includes(q)
+  );
+}
+
+export const CUSTOMER_FILTER_VALUES: Record<string, (c: CustomerRow) => string> = {
+  status: (c) => c.status,
+  type: (c) => c.customerType ?? "INDIVIDUAL",
+};

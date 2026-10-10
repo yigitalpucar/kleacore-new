@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, ShoppingCart, UserRound } from "lucide-react";
+import { Ban, Eye, ShoppingCart, UserRound } from "lucide-react";
+import { bulkCancelOrders } from "@/lib/actions/admin/bulk";
+import { useAdminList, type BulkActionDef } from "@/components/admin/list-tools/use-admin-list";
+import type { ListCapabilities } from "@/lib/admin/list-views";
 import {
   DataTable,
   EmptyState,
@@ -13,6 +16,7 @@ import {
 } from "@/components/app";
 import { formatTRY } from "@/lib/format/price";
 import { formatDate } from "@/lib/format/date";
+import { orderSearch } from "./serialize";
 
 type DateLike = string | Date;
 
@@ -47,16 +51,7 @@ export const orderHref = (id: string) => `/yonetim/siparisler/${id}`;
 export const customerHref = (id: string) => `/yonetim/musteriler/${id}`;
 export const customerName = (c: { name: string; surname: string }) => `${c.name} ${c.surname}`.trim();
 
-const tr = (s: string | null | undefined) => (s ?? "").toLocaleLowerCase("tr-TR");
-
-export function orderSearch(o: OrderRow, q: string) {
-  return (
-    tr(o.orderNumber).includes(q) ||
-    tr(customerName(o.customer)).includes(q) ||
-    tr(o.customer.email).includes(q) ||
-    tr(o.product.name).includes(q)
-  );
-}
+export { orderSearch } from "./serialize";
 
 export const orderNumberColumn: ColumnDef<OrderRow> = {
   accessorKey: "orderNumber",
@@ -175,4 +170,45 @@ export function OrderTable({
       {...rest}
     />
   );
+}
+
+const ORDER_BULK_ACTIONS: BulkActionDef<OrderRow>[] = [
+  {
+    id: "cancel",
+    label: "İptal et",
+    icon: <Ban aria-hidden />,
+    destructive: true,
+    appliesTo: (o) => o.status !== "COMPLETED" && o.status !== "CANCELLED",
+    confirmTitle: (c) => `${c.toLocaleString("tr-TR")} sipariş iptal edilsin mi?`,
+    confirmDescription: "Tamamlanmış siparişler iptal edilemez. Ödeme alınmışsa iade ayrıca yapılmalıdır.",
+    input: { kind: "text", label: "İptal nedeni", placeholder: "Örn. Müşteri talebi" },
+    run: (ids, reason) => bulkCancelOrders(ids, reason),
+    successText: (c) => `${c.toLocaleString("tr-TR")} sipariş iptal edildi`,
+  },
+];
+
+const orderId = (o: OrderRow) => o.id;
+const orderLabel = (o: OrderRow) => o.orderNumber;
+
+/** Bulk cancel, saved views and CSV export for an order list page. */
+export function useOrderListTools({
+  scope,
+  filterIds = [],
+  capabilities,
+}: {
+  /** Export scope: all | pending | processing | cancelled. */
+  scope: string;
+  filterIds?: string[];
+  capabilities?: ListCapabilities;
+}) {
+  return useAdminList({
+    list: "orders",
+    scope,
+    filterIds,
+    getId: orderId,
+    getLabel: orderLabel,
+    noun: "sipariş",
+    actions: ORDER_BULK_ACTIONS,
+    capabilities,
+  });
 }

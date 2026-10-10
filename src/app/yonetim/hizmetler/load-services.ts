@@ -1,7 +1,7 @@
 import type { ServiceStatus } from "@prisma/client";
 import { getServices, getServiceStats } from "@/lib/dal/services";
 import { parsePagination } from "@/lib/utils/pagination";
-import type { ServiceListRow } from "./content";
+import { toServiceListRow, type ServiceListRow } from "./service-rows";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -19,30 +19,7 @@ export async function loadServices(sp: SearchParams, status?: ServiceStatus) {
     getServiceStats(),
   ]);
 
-  const rows: ServiceListRow[] = result.data.map((s) => ({
-    id: s.id,
-    label: s.label,
-    domain: s.domain,
-    ipAddress: s.ipAddress,
-    serverName: s.serverName,
-    status: s.status,
-    billingPeriod: s.billingPeriod,
-    amount: Number(s.amount),
-    nextDueDate: s.nextDueDate ? s.nextDueDate.toISOString() : null,
-    suspendReason: s.suspendReason,
-    createdAt: s.createdAt.toISOString(),
-    customer: {
-      id: s.customer.id,
-      name: `${s.customer.name} ${s.customer.surname}`.trim(),
-      email: s.customer.email,
-    },
-    product: {
-      name: s.product.name,
-      sku: s.product.sku,
-      categorySlug: s.product.category?.slug ?? null,
-      categoryName: s.product.category?.name ?? null,
-    },
-  }));
+  const rows: ServiceListRow[] = result.data.map(toServiceListRow);
 
   return {
     rows,

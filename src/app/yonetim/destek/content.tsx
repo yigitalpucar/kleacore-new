@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Eye, Headphones, Mail, MessageSquareText, RotateCcw, Settings, User, X } from "lucide-react";
+import { CheckCircle, Eye, Headphones, Mail, MessageSquareText, RotateCcw, Settings, User, UserCheck, X } from "lucide-react";
 import {
   DataTable,
   EmptyState,
@@ -21,24 +21,14 @@ import {
 } from "@/components/app";
 import { ServerPager } from "@/components/admin/server-pager";
 import { closeTicket, reopenTicket } from "@/lib/actions/admin/tickets";
+import { bulkAssignTickets, bulkCloseTickets } from "@/lib/actions/admin/bulk";
+import { useAdminList, type BulkActionDef } from "@/components/admin/list-tools/use-admin-list";
+import type { ListCapabilities } from "@/lib/admin/list-views";
 import { formatDateTime } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
+import { TICKET_FILTER_VALUES, ticketSearch, type AdminTicketRow } from "./ticket-rows";
 
-export interface AdminTicketRow {
-  id: string;
-  ticketNumber: string;
-  subject: string;
-  department: string;
-  priority: string;
-  status: string;
-  assignedTo: string | null;
-  createdAt: string;
-  updatedAt: string;
-  messageCount: number;
-  source: string;
-  /** id null = e-mail from an address that matches no verified customer. */
-  customer: { id: string | null; name: string; email: string };
-}
+export type { AdminTicketRow } from "./ticket-rows";
 
 interface DestekContentProps {
   data: AdminTicketRow[];
@@ -49,10 +39,16 @@ interface DestekContentProps {
   serverFilters: { status?: string; priority?: string; department?: string };
   /** Header links shown only to staff who may open them (tickets.reply / settings.manage). */
   links?: { cannedReplies: boolean; settings: boolean };
+  /** Bulk actions / CSV export allowed for the viewer (from the server). */
+  capabilities?: ListCapabilities;
+  /** Active staff for bulk assignment. */
+  staff?: { id: string; name: string }[];
 }
 
+const getId = (t: AdminTicketRow) => t.id;
+const getLabel = (t: AdminTicketRow) => `#${t.ticketNumber}`;
+
 const detailHref = (id: string) => `/yonetim/destek/${id}`;
-const lower = (s: string) => s.toLocaleLowerCase("tr-TR");
 const PRIORITY_RANK: Record<string, number> = { URGENT: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
 
 function PriorityLabel({ priority }: { priority: string }) {
@@ -144,8 +140,48 @@ export function DestekContent({
   totalPages,
   serverFilters,
   links = { cannedReplies: true, settings: true },
+  capabilities,
+  staff = [],
 }: DestekContentProps) {
   const router = useRouter();
+  const n = (v: number) => v.toLocaleString("tr-TR");
+  const bulkActions: BulkActionDef<AdminTicketRow>[] = [
+    {
+      id: "assign",
+      label: "Ata",
+      icon: <UserCheck aria-hidden />,
+      appliesTo: (t) => t.status !== "CLOSED",
+      confirmTitle: (c) => `${n(c)} talep personele atansın mı?`,
+      confirmDescription: "Kapalı talepler atlanır. Atanan personel talebin sorumlusu olur.",
+      input: { kind: "select", label: "Atanacak personel", options: staff.map((s) => ({ value: s.id, label: s.name })) },
+      run: (ids, staffId) => bulkAssignTickets(ids, staffId),
+      successText: (c) => `${n(c)} talep atandı`,
+    },
+    {
+      id: "close",
+      label: "Kapat",
+      icon: <CheckCircle aria-hidden />,
+      appliesTo: (t) => t.status !== "CLOSED",
+      confirmTitle: (c) => `${n(c)} talep kapatılsın mı?`,
+      confirmDescription: "Müşterilere talebin kapandığı bildirilir. Kapalı talepler yeniden açılabilir.",
+      run: (ids) => bulkCloseTickets(ids),
+      successText: (c) => `${n(c)} talep kapatıldı`,
+    },
+  ];
+  const admin = useAdminList({
+    list: "tickets",
+    filterIds: ["status", "priority", "department"],
+    filterDefaults: {
+      status: serverFilters.status ?? "all",
+      priority: serverFilters.priority ?? "all",
+      department: serverFilters.department ?? "all",
+    },
+    getId,
+    getLabel,
+    noun: "talep",
+    actions: bulkActions,
+    capabilities,
+  });
 
   const handleCloseTicket = async (ticketId: string) => {
     const result = await closeTicket(ticketId);
@@ -254,19 +290,14 @@ export function DestekContent({
         data={data}
         pageSize={15}
         initialSort={[{ id: "updatedAt", desc: true }]}
-        searchFn={(t, q) =>
-          lower(t.subject).includes(q) ||
-          lower(t.ticketNumber).includes(q) ||
-          lower(t.customer.name).includes(q) ||
-          lower(t.customer.email).includes(q)
-        }
+        searchFn={ticketSearch}
         searchPlaceholder="Konu, talep no veya müşteri ara…"
         filters={[
           {
             id: "status",
             label: "Durum",
             options: getStatusOptions("ticket", "admin"),
-            getValue: (t) => t.status,
+            getValue: TICKET_FILTER_VALUES.status,
             defaultValue: serverFilters.status ?? "all",
           },
           {
@@ -274,7 +305,7 @@ export function DestekContent({
             label: "Öncelik",
             variant: "select",
             options: getStatusOptions("ticketPriority"),
-            getValue: (t) => t.priority,
+            getValue: TICKET_FILTER_VALUES.priority,
             defaultValue: serverFilters.priority ?? "all",
           },
           {
@@ -285,7 +316,7 @@ export function DestekContent({
               value: d,
               label: enumLabel("ticketDepartment", d),
             })),
-            getValue: (t) => t.department,
+            getValue: TICKET_FILTER_VALUES.department,
             defaultValue: serverFilters.department ?? "all",
           },
         ]}
@@ -319,6 +350,8 @@ export function DestekContent({
           />
         }
         noResultsText="Aramanızla eşleşen talep bulunamadı."
+        {...admin.tableProps}
+        toolbar={admin.toolbar}
       />
       <ServerPager page={page} totalPages={totalPages} total={total} noun="talep" />
     </>

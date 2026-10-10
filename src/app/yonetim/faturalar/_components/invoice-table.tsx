@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Download, Eye, FileText, Mail, Receipt, User } from "lucide-react";
+import { Ban, CheckCircle, Download, Eye, FileText, Mail, Receipt, User } from "lucide-react";
 import {
   DataTable,
   EmptyState,
@@ -14,11 +14,14 @@ import {
   type RowAction,
 } from "@/components/app";
 import { markPaid, sendInvoiceReceipt, sendInvoiceReminder } from "@/lib/actions/admin/invoices";
+import { bulkCancelInvoices, bulkSendInvoiceReminders } from "@/lib/actions/admin/bulk";
+import { useAdminList, type BulkActionDef } from "@/components/admin/list-tools/use-admin-list";
+import type { ListCapabilities } from "@/lib/admin/list-views";
 import { formatDate } from "@/lib/format/date";
 import { formatTRY } from "@/lib/format/price";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import type { AdminInvoiceRow } from "./invoice-rows";
+import { INVOICE_FILTER_VALUES, invoiceSearch, type AdminInvoiceRow } from "./invoice-rows";
 
 export type InvoiceTableVariant = "all" | "pending" | "overdue" | "paid" | "cancelled";
 
@@ -26,7 +29,6 @@ const money = (n: number) => formatTRY(n, { keepDecimals: true });
 const detailHref = (id: string) => `/yonetim/faturalar/${id}`;
 const pdfHref = (id: string) => `/api/faturalar/${id}/pdf`;
 const isOpen = (status: string) => status === "PENDING" || status === "OVERDUE";
-const lower = (s: string) => s.toLocaleLowerCase("tr-TR");
 
 /* ------------------------------------------------------------ columns */
 
@@ -147,26 +149,13 @@ const INITIAL_SORT: Record<InvoiceTableVariant, { id: string; desc: boolean }[]>
 
 /* ------------------------------------------------------------ filters */
 
-function urgency(r: AdminInvoiceRow) {
-  if (r.daysToDue <= 2) return "critical";
-  if (r.daysToDue <= 5) return "warning";
-  return "normal";
-}
-
-function severity(r: AdminInvoiceRow) {
-  const d = -r.daysToDue;
-  if (d >= 30) return "severe";
-  if (d >= 15) return "moderate";
-  return "mild";
-}
-
 const FILTERS: Record<InvoiceTableVariant, DataTableFilter<AdminInvoiceRow>[]> = {
   all: [
     {
       id: "status",
       label: "Durum",
       options: getStatusOptions("invoice").filter((o) => o.value !== "DRAFT"),
-      getValue: (r) => r.status,
+      getValue: INVOICE_FILTER_VALUES.status,
     },
   ],
   pending: [
@@ -178,7 +167,7 @@ const FILTERS: Record<InvoiceTableVariant, DataTableFilter<AdminInvoiceRow>[]> =
         { value: "warning", label: "Yaklaşan (3–5 gün)" },
         { value: "normal", label: "Normal (6+ gün)" },
       ],
-      getValue: urgency,
+      getValue: INVOICE_FILTER_VALUES.urgency,
     },
   ],
   overdue: [
@@ -190,7 +179,7 @@ const FILTERS: Record<InvoiceTableVariant, DataTableFilter<AdminInvoiceRow>[]> =
         { value: "moderate", label: "15–29 gün" },
         { value: "severe", label: "30+ gün" },
       ],
-      getValue: severity,
+      getValue: INVOICE_FILTER_VALUES.severity,
     },
   ],
   paid: [],
@@ -205,6 +194,38 @@ const EMPTY: Record<InvoiceTableVariant, { title: string; description: string }>
   cancelled: { title: "İptal edilmiş fatura yok", description: "İptal edilen faturalar burada listelenir." },
 };
 
+/* -------------------------------------------------------------- bulk */
+
+const n = (v: number) => v.toLocaleString("tr-TR");
+
+const BULK_ACTIONS: BulkActionDef<AdminInvoiceRow>[] = [
+  {
+    id: "remind",
+    label: "Hatırlatma gönder",
+    icon: <Mail aria-hidden />,
+    appliesTo: (inv) => isOpen(inv.status),
+    confirmTitle: (c) => `${n(c)} faturaya hatırlatma gönderilsin mi?`,
+    confirmDescription: "Her müşteriye vadesine göre ödeme hatırlatması ya da gecikme e-postası gider.",
+    confirmLabel: "Gönder",
+    run: (ids) => bulkSendInvoiceReminders(ids),
+    successText: (c) => `${n(c)} faturaya hatırlatma gönderildi`,
+  },
+  {
+    id: "cancel",
+    label: "İptal et",
+    icon: <Ban aria-hidden />,
+    destructive: true,
+    appliesTo: (inv) => inv.status !== "PAID" && inv.status !== "CANCELLED",
+    confirmTitle: (c) => `${n(c)} fatura iptal edilsin mi?`,
+    confirmDescription: "Ödenmiş faturalar iptal edilemez. İptal edilen fatura için müşteriden ödeme alınmaz.",
+    run: (ids) => bulkCancelInvoices(ids),
+    successText: (c) => `${n(c)} fatura iptal edildi`,
+  },
+];
+
+const getId = (inv: AdminInvoiceRow) => inv.id;
+const getLabel = (inv: AdminInvoiceRow) => inv.invoiceNumber;
+
 /* -------------------------------------------------------------- table */
 
 export function InvoiceTable({
@@ -212,13 +233,26 @@ export function InvoiceTable({
   rows,
   pageSize = 10,
   caption = "Faturalar",
+  capabilities,
 }: {
   variant: InvoiceTableVariant;
   rows: AdminInvoiceRow[];
   pageSize?: number;
   caption?: string;
+  /** Bulk actions / CSV export allowed for the viewer (from the server). */
+  capabilities?: ListCapabilities;
 }) {
   const router = useRouter();
+  const admin = useAdminList({
+    list: "invoices",
+    scope: variant,
+    filterIds: FILTERS[variant].map((f) => f.id),
+    getId,
+    getLabel,
+    noun: "fatura",
+    actions: BULK_ACTIONS,
+    capabilities,
+  });
 
   const handleMarkPaid = async (id: string) => {
     const result = await markPaid(id);
@@ -294,12 +328,7 @@ export function InvoiceTable({
       data={rows}
       pageSize={pageSize}
       initialSort={INITIAL_SORT[variant]}
-      searchFn={(inv, q) =>
-        lower(inv.invoiceNumber).includes(q) ||
-        lower(inv.customer.name).includes(q) ||
-        lower(inv.customer.email).includes(q) ||
-        lower(inv.description ?? "").includes(q)
-      }
+      searchFn={invoiceSearch}
       searchPlaceholder="Fatura no, müşteri veya e-posta ara…"
       filters={FILTERS[variant]}
       rowHref={(inv) => detailHref(inv.id)}
@@ -319,6 +348,8 @@ export function InvoiceTable({
       )}
       emptyState={<EmptyState icon={FileText} title={EMPTY[variant].title} description={EMPTY[variant].description} />}
       noResultsText="Aramanızla eşleşen fatura bulunamadı."
+      {...admin.tableProps}
+      toolbar={admin.toolbar}
     />
   );
 }

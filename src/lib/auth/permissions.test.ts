@@ -56,6 +56,7 @@ describe("permission matrix", () => {
         "payments.refund",
         "reports.view",
         "api_tokens.manage",
+        "export.csv",
       ].sort()
     );
     expect(hasPermission("BILLING", "tickets.view")).toBe(false);

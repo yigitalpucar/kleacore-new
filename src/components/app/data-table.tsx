@@ -97,6 +97,28 @@ export type DataTableProps<T> = {
   /** Wrap in a bordered card (default true). Set false inside a SectionCard flush. */
   framed?: boolean;
   className?: string;
+  /**
+   * Multi-select (bulk actions): adds a checkbox column (and a checkbox on
+   * mobile cards). Ids come from `getRowId`, which is required with it.
+   */
+  selection?: DataTableSelection<T>;
+  /** Controlled search text (saved views). Uncontrolled when omitted. */
+  query?: string;
+  onQueryChange?: (query: string) => void;
+  /** Controlled filter values by filter id (saved views). */
+  filterValues?: Record<string, string>;
+  onFilterValuesChange?: (values: Record<string, string>) => void;
+  /** Rows left after search + filters (all pages), e.g. for "select all" or export counts. */
+  onFilteredChange?: (rows: T[]) => void;
+  /** Rendered under the toolbar, above the rows (e.g. a bulk action bar). */
+  banner?: React.ReactNode;
+};
+
+export type DataTableSelection<T> = {
+  selected: readonly string[];
+  onChange: (ids: string[]) => void;
+  /** Accessible name of a row's checkbox, e.g. "FTR-001 seç". */
+  rowLabel?: (row: T) => string;
 };
 
 const trLower = (s: string) => s.toLocaleLowerCase("tr-TR");
@@ -124,15 +146,33 @@ export function DataTable<T>({
   caption,
   framed = true,
   className,
+  selection,
+  query: controlledQuery,
+  onQueryChange,
+  filterValues: controlledFilterValues,
+  onFilterValuesChange,
+  onFilteredChange,
+  banner,
 }: DataTableProps<T>) {
   const router = useRouter();
-  const [query, setQuery] = React.useState("");
+  const [uncontrolledQuery, setUncontrolledQuery] = React.useState("");
+  const query = controlledQuery ?? uncontrolledQuery;
+  const setQuery = (value: string) => {
+    if (controlledQuery === undefined) setUncontrolledQuery(value);
+    onQueryChange?.(value);
+  };
   const [sorting, setSorting] = React.useState<SortingState>(initialSort);
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: pageSize > 0 ? pageSize : 10 });
   const resetPage = () => setPagination((p) => ({ ...p, pageIndex: 0 }));
-  const [filterValues, setFilterValues] = React.useState<Record<string, string>>(() =>
+  const [uncontrolledFilterValues, setUncontrolledFilterValues] = React.useState<Record<string, string>>(() =>
     Object.fromEntries(filters.map((f) => [f.id, f.defaultValue ?? "all"]))
   );
+  const filterValues = controlledFilterValues ?? uncontrolledFilterValues;
+  const setFilterValue = (id: string, value: string) => {
+    const next = { ...filterValues, [id]: value };
+    if (controlledFilterValues === undefined) setUncontrolledFilterValues(next);
+    onFilterValuesChange?.(next);
+  };
 
   const filtered = React.useMemo(() => {
     const q = trLower(query.trim());
@@ -146,8 +186,16 @@ export function DataTable<T>({
     });
   }, [data, filters, filterValues, query, searchFn]);
 
+  React.useEffect(() => {
+    onFilteredChange?.(filtered);
+  }, [filtered, onFilteredChange]);
+
+  const rowIdOf = React.useCallback((row: T) => (getRowId ? getRowId(row) : ""), [getRowId]);
+  const selectedSet = React.useMemo(() => new Set(selection?.selected ?? []), [selection?.selected]);
+
   const allColumns = React.useMemo(() => {
-    if (!rowActions) return columns;
+    const base = selection ? [selectColumn(selection, selectedSet, rowIdOf), ...columns] : columns;
+    if (!rowActions) return base;
     const actionsCol: ColumnDef<T, unknown> = {
       id: "__actions",
       header: () => <span className="sr-only">İşlemler</span>,
@@ -155,8 +203,8 @@ export function DataTable<T>({
       meta: { align: "right", className: "w-12" },
       cell: ({ row }) => <RowActionsMenu actions={rowActions(row.original)} />,
     };
-    return [...columns, actionsCol];
-  }, [columns, rowActions]);
+    return [...base, actionsCol];
+  }, [columns, rowActions, selection, selectedSet, rowIdOf]);
 
   // TanStack's hook returns non-memoizable functions; this is expected.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -203,7 +251,7 @@ export function DataTable<T>({
                 data={data}
                 value={filterValues[f.id] ?? "all"}
                 onChange={(v) => {
-                  setFilterValues((prev) => ({ ...prev, [f.id]: v }));
+                  setFilterValue(f.id, v);
                   resetPage();
                 }}
               />
@@ -241,6 +289,8 @@ export function DataTable<T>({
         </div>
       ) : null}
 
+      {banner}
+
       {noResults || (isEmpty && !emptyState) ? (
         <p className="px-4 py-12 text-center text-sm text-muted-foreground">
           {isEmpty ? "Kayıt bulunmuyor." : noResultsText}
@@ -255,6 +305,16 @@ export function DataTable<T>({
                 const actions = rowActions?.(row.original);
                 return (
                   <li key={row.id} className="relative flex items-start gap-2">
+                    {selection ? (
+                      <div className="py-2 pl-2">
+                        <RowCheckbox
+                          checked={selectedSet.has(rowIdOf(row.original))}
+                          label={selection.rowLabel?.(row.original) ?? "Satırı seç"}
+                          onChange={(checked) => toggleIds(selection, [rowIdOf(row.original)], checked)}
+                          touch
+                        />
+                      </div>
+                    ) : null}
                     {href ? (
                       <Link
                         href={href}
@@ -332,9 +392,11 @@ export function DataTable<T>({
                   <tr
                     key={row.id}
                     onClick={rowHref ? (e) => onRowClick(e, row.original) : undefined}
+                    aria-selected={selection ? selectedSet.has(rowIdOf(row.original)) : undefined}
                     className={cn(
                       "border-b transition-colors last:border-0 hover:bg-muted/40",
-                      rowHref && "cursor-pointer"
+                      rowHref && "cursor-pointer",
+                      selection && selectedSet.has(rowIdOf(row.original)) && "bg-muted/50"
                     )}
                   >
                     {row.getVisibleCells().map((cell) => {
@@ -384,6 +446,81 @@ export function DataTable<T>({
       {body}
     </div>
   );
+}
+
+function toggleIds<T>(selection: DataTableSelection<T>, ids: string[], checked: boolean) {
+  const next = new Set(selection.selected);
+  for (const id of ids) {
+    if (checked) next.add(id);
+    else next.delete(id);
+  }
+  selection.onChange([...next]);
+}
+
+function RowCheckbox({
+  checked,
+  indeterminate = false,
+  label,
+  onChange,
+  touch = false,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+  /** 44px hit area (mobile cards). */
+  touch?: boolean;
+}) {
+  const ref = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <label
+      data-no-row-click
+      className={cn("inline-flex cursor-pointer items-center justify-center", touch ? "size-11" : "size-6")}
+    >
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        aria-label={label}
+        onChange={(e) => onChange(e.target.checked)}
+        className="size-4 cursor-pointer rounded-[3px] border-input accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      />
+    </label>
+  );
+}
+
+function selectColumn<T>(
+  selection: DataTableSelection<T>,
+  selectedSet: Set<string>,
+  rowIdOf: (row: T) => string
+): ColumnDef<T, unknown> {
+  return {
+    id: "__select",
+    enableSorting: false,
+    meta: { className: "w-10 pr-0" },
+    header: ({ table }) => {
+      const ids = table.getRowModel().rows.map((r) => rowIdOf(r.original));
+      const count = ids.filter((id) => selectedSet.has(id)).length;
+      return (
+        <RowCheckbox
+          checked={ids.length > 0 && count === ids.length}
+          indeterminate={count > 0 && count < ids.length}
+          label="Bu sayfadaki tüm satırları seç"
+          onChange={(checked) => toggleIds(selection, ids, checked)}
+        />
+      );
+    },
+    cell: ({ row }) => (
+      <RowCheckbox
+        checked={selectedSet.has(rowIdOf(row.original))}
+        label={selection.rowLabel?.(row.original) ?? "Satırı seç"}
+        onChange={(checked) => toggleIds(selection, [rowIdOf(row.original)], checked)}
+      />
+    ),
+  };
 }
 
 function FilterControl<T>({

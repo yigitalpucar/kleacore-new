@@ -4,6 +4,7 @@ import { parsePagination } from "@/lib/utils/pagination";
 import { serializeOrder, withDefaultPerPage } from "../_components/serialize";
 import { ActiveOrdersContent } from "./content";
 import { requirePermission } from "@/lib/utils/auth-helpers";
+import { listCapabilities } from "@/lib/admin/list-views";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default async function ActiveOrdersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requirePermission("orders.view");
+  const session = await requirePermission("orders.view");
   const sp = await searchParams;
   const params = parsePagination(withDefaultPerPage(sp));
 
@@ -25,6 +26,7 @@ export default async function ActiveOrdersPage({
 
   return (
     <ActiveOrdersContent
+      capabilities={listCapabilities(session.user.role, "orders")}
       orders={result.data.map(serializeOrder)}
       total={result.total}
       page={result.page}

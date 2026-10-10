@@ -15,11 +15,13 @@ import {
 } from "@/components/app";
 import { formatDate } from "@/lib/format/date";
 import { useCustomerActions } from "../use-customer-actions";
-import type { CustomerRow } from "./customer-row";
+import { bulkActivateCustomers, bulkSuspendCustomers } from "@/lib/actions/admin/bulk";
+import { useAdminList, type BulkActionDef } from "@/components/admin/list-tools/use-admin-list";
+import type { ListCapabilities } from "@/lib/admin/list-views";
+import { CUSTOMER_FILTER_VALUES, customerSearch, type CustomerRow } from "./customer-row";
 
 const detailHref = (id: string) => `/yonetim/musteriler/${id}`;
 const fullName = (c: CustomerRow) => `${c.name} ${c.surname}`.trim();
-const tr = (s: string | null | undefined) => (s ?? "").toLocaleLowerCase("tr-TR");
 
 const columns: ColumnDef<CustomerRow>[] = [
   {
@@ -76,6 +78,33 @@ const columns: ColumnDef<CustomerRow>[] = [
   },
 ];
 
+const n = (v: number) => v.toLocaleString("tr-TR");
+
+const BULK_ACTIONS: BulkActionDef<CustomerRow>[] = [
+  {
+    id: "suspend",
+    label: "Askıya al",
+    icon: <Pause aria-hidden />,
+    appliesTo: (c) => c.status === "ACTIVE",
+    confirmTitle: (c) => `${n(c)} müşteri hesabı askıya alınsın mı?`,
+    confirmDescription: "Askıdaki müşteri panele giriş yapamaz. Hizmetleri bu işlemle askıya alınmaz.",
+    run: (ids) => bulkSuspendCustomers(ids),
+    successText: (c) => `${n(c)} müşteri askıya alındı`,
+  },
+  {
+    id: "activate",
+    label: "Aktif et",
+    icon: <CheckCircle aria-hidden />,
+    appliesTo: (c) => c.status === "SUSPENDED" || c.status === "CLOSED",
+    confirmTitle: (c) => `${n(c)} müşteri hesabı aktif edilsin mi?`,
+    run: (ids) => bulkActivateCustomers(ids),
+    successText: (c) => `${n(c)} müşteri aktif edildi`,
+  },
+];
+
+const getId = (c: CustomerRow) => c.id;
+const getLabel = (c: CustomerRow) => fullName(c) || c.email;
+
 export function CustomersTable({
   rows,
   statusFilter = true,
@@ -83,8 +112,14 @@ export function CustomersTable({
   emptyTitle = "Henüz müşteri yok",
   emptyDescription,
   emptyAction,
+  scope = "all",
+  capabilities,
 }: {
   rows: CustomerRow[];
+  /** Export scope of the segment page (individual, corporate, suspended, closed). */
+  scope?: string;
+  /** Bulk actions / CSV export allowed for the viewer (from the server). */
+  capabilities?: ListCapabilities;
   /** Show the Durum filter tabs (off on lists that are already one status). */
   statusFilter?: boolean;
   /** Show the Tip filter (bireysel / kurumsal). */
@@ -94,10 +129,20 @@ export function CustomersTable({
   emptyAction?: React.ReactNode;
 }) {
   const { handleSuspendCustomer, handleActivateCustomer, handleCloseCustomer } = useCustomerActions();
+  const admin = useAdminList({
+    list: "customers",
+    scope,
+    filterIds: [...(statusFilter ? ["status"] : []), ...(typeFilter ? ["type"] : [])],
+    getId,
+    getLabel,
+    noun: "müşteri",
+    actions: BULK_ACTIONS,
+    capabilities,
+  });
 
   const filters: DataTableFilter<CustomerRow>[] = [];
   if (statusFilter) {
-    filters.push({ id: "status", label: "Durum", options: getStatusOptions("user"), getValue: (c) => c.status });
+    filters.push({ id: "status", label: "Durum", options: getStatusOptions("user"), getValue: CUSTOMER_FILTER_VALUES.status });
   }
   if (typeFilter) {
     filters.push({
@@ -109,7 +154,7 @@ export function CustomersTable({
         { value: "INDIVIDUAL", label: "Bireysel" },
         { value: "CORPORATE", label: "Kurumsal" },
       ],
-      getValue: (c) => c.customerType ?? "INDIVIDUAL",
+      getValue: CUSTOMER_FILTER_VALUES.type,
     });
   }
 
@@ -134,15 +179,8 @@ export function CustomersTable({
       caption="Müşteriler"
       columns={columns}
       data={rows}
-      getRowId={(c) => c.id}
       initialSort={[{ id: "createdAt", desc: true }]}
-      searchFn={(c, q) =>
-        tr(fullName(c)).includes(q) ||
-        tr(c.email).includes(q) ||
-        tr(c.id).includes(q) ||
-        tr(c.companyName).includes(q) ||
-        tr(c.phone).includes(q)
-      }
+      searchFn={customerSearch}
       searchPlaceholder="İsim, firma veya e-posta ara…"
       filters={filters}
       rowHref={(c) => detailHref(c.id)}
@@ -163,6 +201,8 @@ export function CustomersTable({
       )}
       emptyState={<EmptyState icon={Users} title={emptyTitle} description={emptyDescription} action={emptyAction} />}
       noResultsText="Aramanızla eşleşen müşteri bulunamadı."
+      {...admin.tableProps}
+      toolbar={admin.toolbar}
     />
   );
 }
