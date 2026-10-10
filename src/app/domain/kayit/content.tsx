@@ -49,9 +49,9 @@ const features: FeatureItem[] = [
 
 const faqs: FaqItem[] = [
   {
-    question: "Sorgu sonucunda neden \"müsait\" yazmıyor?",
+    question: "Sorgu sonucundaki durumlar ne anlama geliyor?",
     answer:
-      "Arama sonuçları bir ön sorgudur. Kayıtlı olduğu tespit edilen alan adlarını \"Kayıtlı\" olarak işaretleriz. Diğer alan adlarının kesin müsaitliği sipariş aşamasında kayıt kuruluşu üzerinden doğrulanır. Emin olmak için WHOIS sorgusu da yapabilirsiniz.",
+      "\"Müsait\" yalnızca kayıt kuruluşu alan adının kayda açık olduğunu doğruladığında görünür. \"Müsait görünüyor\", uzantının kayıt otoritesinde bir kayıt bulunamadığı anlamına gelir. \"Doğrulanamadı\" ise o an kontrol yapılamadığını gösterir (örneğin .tr uzantılarında). Bu iki durumda kesin müsaitlik sipariş aşamasında kayıt kuruluşu üzerinden doğrulanır. \"Kayıtlı\" alan adları için WHOIS sorgusu yapabilirsiniz.",
   },
   {
     question: "Alan adı kaydı ne kadar sürer?",
@@ -80,7 +80,7 @@ const faqs: FaqItem[] = [
 ];
 
 export function Content({ tlds }: { tlds: TldPriceRow[] }) {
-  const searchTlds = tlds.slice(0, 12).map((tld) => ({
+  const searchTlds = tlds.map((tld) => ({
     ext: tld.ext,
     price: tld.registerPrice,
     renewPrice: tld.renewPrice,
