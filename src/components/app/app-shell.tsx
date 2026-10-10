@@ -25,6 +25,12 @@ export type AppNavItem = {
 export type AppNavGroup = {
   /** Mono micro-label above the group. */
   label?: string;
+  /**
+   * The label becomes a toggle that folds the group (needs `label`). Open by
+   * default; the folded set is remembered per browser, and the group holding
+   * the current page always stays open.
+   */
+  collapsible?: boolean;
   items: AppNavItem[];
 };
 
@@ -358,24 +364,7 @@ function SidebarBody({
 
       <nav aria-label="Ana menü" className="flex-1 overflow-y-auto overflow-x-hidden py-3 [scrollbar-width:thin]">
         {nav.map((group, gi) => (
-          <div key={group.label ?? gi} className={cn("px-3", gi > 0 && "mt-4")}>
-            {group.label ? (
-              collapsed ? (
-                <span aria-hidden className="line-dashed-x mx-auto mb-2 block w-6" />
-              ) : (
-                <p className="mb-1.5 px-2 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  {group.label}
-                </p>
-              )
-            ) : null}
-            <ul className="space-y-0.5">
-              {group.items.map((item) => (
-                <li key={item.href}>
-                  <NavLink item={item} active={isActive(pathname, item)} collapsed={collapsed} />
-                </li>
-              ))}
-            </ul>
-          </div>
+          <NavGroup key={group.label ?? gi} group={group} first={gi === 0} pathname={pathname} collapsed={collapsed} />
         ))}
       </nav>
 
@@ -395,6 +384,110 @@ function SidebarBody({
         </div>
       ) : null}
     </>
+  );
+}
+
+const FOLDED_GROUPS_KEY = "kc-nav-folded";
+
+function readFolded(): string[] {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(FOLDED_GROUPS_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Folded group labels, shared by every NavGroup (desktop sidebar + drawer). */
+function useFoldedGroup(label: string | undefined) {
+  const [folded, setFolded] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!label) return;
+    const sync = () => setFolded(readFolded().includes(label));
+    sync();
+    window.addEventListener("kc-nav-folded", sync);
+    return () => window.removeEventListener("kc-nav-folded", sync);
+  }, [label]);
+
+  const toggle = React.useCallback(() => {
+    if (!label) return;
+    const current = readFolded();
+    const next = current.includes(label) ? current.filter((l) => l !== label) : [...current, label];
+    try {
+      window.localStorage.setItem(FOLDED_GROUPS_KEY, JSON.stringify(next));
+    } catch {
+      /* storage unavailable: still toggle for this page */
+    }
+    setFolded(next.includes(label));
+    window.dispatchEvent(new Event("kc-nav-folded"));
+  }, [label]);
+
+  return [folded, toggle] as const;
+}
+
+function NavGroup({
+  group,
+  first,
+  pathname,
+  collapsed,
+}: {
+  group: AppNavGroup;
+  first: boolean;
+  pathname: string;
+  collapsed: boolean;
+}) {
+  const foldable = Boolean(group.collapsible && group.label) && !collapsed;
+  const [folded, toggle] = useFoldedGroup(foldable ? group.label : undefined);
+  const hasActive = group.items.some((item) => isActive(pathname, item));
+  const open = !foldable || !folded || hasActive;
+  const listId = React.useId();
+  const badgeTotal = group.items.reduce((sum, item) => sum + (typeof item.badge === "number" ? item.badge : 0), 0);
+
+  return (
+    <div className={cn("px-3", !first && (foldable ? "mt-2" : "mt-4"))}>
+      {group.label ? (
+        collapsed ? (
+          <span aria-hidden className="line-dashed-x mx-auto mb-2 block w-6" />
+        ) : foldable ? (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={open}
+            aria-controls={listId}
+            disabled={hasActive}
+            title={hasActive ? "Açık sayfa bu grupta" : undefined}
+            className="group/fold mb-0.5 flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:text-muted-foreground"
+          >
+            <span className="flex-1 truncate">{group.label}</span>
+            {!open && badgeTotal > 0 ? (
+              <span className="min-w-5 rounded border bg-background px-1.5 text-center font-mono text-[11px] normal-case tracking-normal tabular-nums text-foreground">
+                {badgeTotal}
+              </span>
+            ) : null}
+            <ChevronRight
+              aria-hidden
+              className={cn(
+                "size-3.5 shrink-0 transition-transform motion-reduce:transition-none",
+                open && "rotate-90",
+                hasActive && "opacity-0"
+              )}
+            />
+          </button>
+        ) : (
+          <p className="mb-1.5 px-2 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            {group.label}
+          </p>
+        )
+      ) : null}
+      <ul id={listId} hidden={!open} className={cn("space-y-0.5", foldable && "mb-1")}>
+          {group.items.map((item) => (
+            <li key={item.href}>
+              <NavLink item={item} active={isActive(pathname, item)} collapsed={collapsed} />
+            </li>
+          ))}
+      </ul>
+    </div>
   );
 }
 

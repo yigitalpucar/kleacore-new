@@ -66,4 +66,23 @@ describe("admin nav filtering", () => {
     expect(search.some((h) => h.startsWith("/yonetim/faturalar"))).toBe(false);
     expect(search.some((h) => h.startsWith("/yonetim/urunler"))).toBe(false);
   });
+
+  it("folds every labelled group and keeps the sidebar short", () => {
+    const groups = buildAdminNav(counts, "ADMIN");
+    expect(groups[0].label).toBeUndefined();
+    for (const group of groups.slice(1)) {
+      expect(group.label).toBeTruthy();
+      expect(group.collapsible).toBe(true);
+      expect(group.items.length).toBeLessThanOrEqual(6);
+    }
+    const hrefsInNav = groups.flatMap((g) => g.items.map((i) => i.href));
+    expect(new Set(hrefsInNav).size).toBe(hrefsInNav.length);
+  });
+
+  it("puts overdue invoices and bank transfer notices on the Faturalar badge", () => {
+    const faturalar = buildAdminNav(counts, "ADMIN")
+      .flatMap((g) => g.items)
+      .find((i) => i.href === "/yonetim/faturalar");
+    expect(faturalar?.badge).toBe(7);
+  });
 });
