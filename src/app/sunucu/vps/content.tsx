@@ -1,5 +1,6 @@
 import { CalendarClock, Cpu, Globe, HardDrive, Terminal, Wrench } from "lucide-react";
 import type { FeatureItem } from "@/components/site/feature-grid";
+import { buildPackageComparison } from "@/lib/catalog/package-comparison";
 import { serverFaqs } from "@/components/sunucu/server-faq";
 import type { ProductWithPricing } from "@/lib/products/map-product";
 import {
@@ -70,6 +71,7 @@ export function Content({
       plansTitle="VPS sunucu paketleri"
       plansDescription="Paketler işlemci, bellek, disk ve aylık trafik kotasıyla ayrılır. Fiyatlar seçili ödeme dönemine göre aylık karşılık olarak gösterilir."
       rows={products.map(productToCartRow)}
+      comparison={buildPackageComparison(products)}
       columns={columns}
       included={sharedIncluded(products)}
       summaries={summaries}

@@ -1,5 +1,6 @@
 import { Cpu, HardDrive, MapPin, MonitorCog, Server, Terminal } from "lucide-react";
 import type { FeatureItem } from "@/components/site/feature-grid";
+import { buildPackageComparison } from "@/lib/catalog/package-comparison";
 import type { FaqItem } from "@/components/site/faq-section";
 import { serverFaqs } from "@/components/sunucu/server-faq";
 import type { ProductWithPricing } from "@/lib/products/map-product";
@@ -85,6 +86,7 @@ export function Content({
       plansTitle="Fiziksel sunucu paketleri"
       plansDescription="Paketler işlemci, bellek, disk ve port hızıyla ayrılır. Fiyatlar seçili ödeme dönemine göre aylık karşılık olarak gösterilir."
       rows={products.map(productToCartRow)}
+      comparison={buildPackageComparison(products)}
       columns={columns}
       included={included}
       summaries={summaries}

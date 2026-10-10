@@ -12,6 +12,7 @@ import {
 import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import { BillingProvider } from "@/components/site/billing-context";
 import { buttonClasses } from "@/components/site/button-classes";
 import { CtaBand } from "@/components/site/cta-band";
 import { FaqSection, type FaqItem } from "@/components/site/faq-section";
@@ -22,6 +23,8 @@ import { SectionHeading } from "@/components/site/section-heading";
 import { TrustBar, type TrustBarItem } from "@/components/site/trust-bar";
 import { CartPlanTable, type CartPlanColumn, type CartPlanRow } from "./cart-plan-table";
 import { ServerComparison } from "./server-comparison";
+import { ServerPackageComparison } from "./server-package-comparison";
+import type { PackageComparisonData } from "@/lib/catalog/package-comparison";
 import { serverFamilyMeta, type FamilySummary, type ServerFamilyKey } from "./server-catalog";
 
 export interface ServerLandingProps {
@@ -41,6 +44,10 @@ export interface ServerLandingProps {
   featuresDescription?: string;
   features: FeatureItem[];
   faqs: FaqItem[];
+  /** DB-driven package-by-package comparison (buildPackageComparison). */
+  comparison?: PackageComparisonData;
+  /** Rendered right after the plans (e.g. the VDS configurator). */
+  afterPlans?: React.ReactNode;
   /** Extra sections rendered between the plans and the comparison. */
   children?: React.ReactNode;
   cta: { title: string; description: string };
@@ -54,103 +61,130 @@ export function ServerLanding(props: ServerLandingProps) {
     <div className="flex min-h-screen flex-col">
       <Topbar />
       <Header />
-      <main id="main" className="flex-1">
-        <PageHeader
-          eyebrow={props.eyebrow}
-          title={props.title}
-          description={props.description}
-          breadcrumbs={[{ label: "Sunucu", href: "/sunucu/vds" }, { label: props.breadcrumb }]}
-          actions={
-            <>
-              <a href="#paketler" className={buttonClasses({ size: "lg" })}>
-                Paketleri gör
-                <ArrowDown aria-hidden className="size-4" />
-              </a>
-              <a href="#karsilastirma" className={buttonClasses({ variant: "outline", size: "lg" })}>
-                Hangisi bana uygun?
-              </a>
-            </>
-          }
-        />
-
-        <TrustBar items={props.trustItems} bordered={false} />
-
-        <Section id="paketler" divider aria-labelledby="paketler-heading" className="scroll-mt-20">
-          <SectionHeading
-            id="paketler-heading"
-            align="center"
-            eyebrow={`${meta.noun} paketleri`}
-            title={props.plansTitle}
-            description={props.plansDescription}
-            className="mb-10"
+      <BillingProvider>
+        <main id="main" className="flex-1">
+          <PageHeader
+            eyebrow={props.eyebrow}
+            title={props.title}
+            description={props.description}
+            breadcrumbs={[{ label: "Sunucu", href: "/sunucu/vds" }, { label: props.breadcrumb }]}
+            actions={
+              <>
+                <a href="#paketler" className={buttonClasses({ size: "lg" })}>
+                  Paketleri gör
+                  <ArrowDown aria-hidden className="size-4" />
+                </a>
+                <a href="#karsilastirma" className={buttonClasses({ variant: "outline", size: "lg" })}>
+                  Hangisi bana uygun?
+                </a>
+              </>
+            }
           />
-          {props.rows.length > 0 ? (
-            <CartPlanTable
-              plans={props.rows}
-              columns={props.columns}
-              target={{ kind: "server", category: meta.cartCategory }}
-              caption={`${props.breadcrumb} paketleri`}
+
+          <TrustBar items={props.trustItems} bordered={false} />
+
+          <Section id="paketler" divider aria-labelledby="paketler-heading" className="scroll-mt-20">
+            <SectionHeading
+              id="paketler-heading"
+              align="center"
+              eyebrow={`${meta.noun} paketleri`}
+              title={props.plansTitle}
+              description={props.plansDescription}
+              className="mb-10"
             />
-          ) : (
-            <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Şu anda satışta paket bulunmuyor. Bilgi için support@kleacore.com adresine yazabilirsiniz.
-            </p>
-          )}
-
-          {props.included.length > 0 ? (
-            <div className="mt-10 rounded-xl border border-dashed p-5 sm:p-6">
-              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                Tüm {meta.noun} paketlerinde
+            {props.rows.length > 0 ? (
+              <CartPlanTable
+                plans={props.rows}
+                columns={props.columns}
+                target={{ kind: "server", category: meta.cartCategory }}
+                caption={`${props.breadcrumb} paketleri`}
+              />
+            ) : (
+              <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                Şu anda satışta paket bulunmuyor. Bilgi için support@kleacore.com adresine yazabilirsiniz.
               </p>
-              <ul className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                {props.included.map((item) => (
-                  <li key={item} className="flex items-start gap-2.5">
-                    <span
-                      aria-hidden
-                      className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-muted"
-                    >
-                      <Check className="size-2.5 stroke-[3]" />
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            )}
+
+            {props.included.length > 0 ? (
+              <div className="mt-10 rounded-xl border border-dashed p-5 sm:p-6">
+                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  Tüm {meta.noun} paketlerinde
+                </p>
+                <ul className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                  {props.included.map((item) => (
+                    <li key={item} className="flex items-start gap-2.5">
+                      <span
+                        aria-hidden
+                        className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-muted"
+                      >
+                        <Check className="size-2.5 stroke-[3]" />
+                      </span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </Section>
+
+          {props.afterPlans}
+
+          {props.comparison && props.comparison.columns.length > 1 && props.comparison.rows.length > 0 ? (
+            <Section
+              id="paket-karsilastirma"
+              tone="muted"
+              divider
+              aria-labelledby="paket-karsilastirma-heading"
+              className="scroll-mt-20"
+            >
+              <SectionHeading
+                id="paket-karsilastirma-heading"
+                eyebrow="Karşılaştırma"
+                title={`${props.breadcrumb} paketlerini karşılaştırın`}
+                description="Tüm paketler yan yana. Değerler paket kayıtlarımızdan otomatik gelir."
+                className="mb-8"
+              />
+              <ServerPackageComparison
+                data={props.comparison}
+                target={{ kind: "server", category: meta.cartCategory }}
+                caption={`${props.breadcrumb} paket karşılaştırması`}
+              />
+            </Section>
           ) : null}
-        </Section>
 
-        {props.children}
+          {props.children}
 
-        <div id="karsilastirma" className="scroll-mt-20">
-          <ServerComparison summaries={props.summaries} current={props.family} />
-        </div>
+          <div id="karsilastirma" className="scroll-mt-20">
+            <ServerComparison summaries={props.summaries} current={props.family} />
+          </div>
 
-        <Section divider aria-labelledby="ozellikler-heading">
-          <SectionHeading
-            id="ozellikler-heading"
-            eyebrow="Özellikler"
-            title={props.featuresTitle}
-            description={props.featuresDescription}
-            className="mb-12"
+          <Section divider aria-labelledby="ozellikler-heading">
+            <SectionHeading
+              id="ozellikler-heading"
+              eyebrow="Özellikler"
+              title={props.featuresTitle}
+              description={props.featuresDescription}
+              className="mb-12"
+            />
+            <FeatureGrid items={props.features} columns={3} />
+          </Section>
+
+          <FaqSection
+            items={props.faqs}
+            description={`${meta.noun.charAt(0).toLocaleUpperCase("tr")}${meta.noun.slice(1)} hizmetimiz hakkında merak edilenler.`}
+            tone="muted"
+            divider
           />
-          <FeatureGrid items={props.features} columns={3} />
-        </Section>
 
-        <FaqSection
-          items={props.faqs}
-          description={`${meta.noun.charAt(0).toLocaleUpperCase("tr")}${meta.noun.slice(1)} hizmetimiz hakkında merak edilenler.`}
-          tone="muted"
-          divider
-        />
-
-        <CtaBand
-          eyebrow="Destek"
-          title={props.cta.title}
-          description={props.cta.description}
-          primary={{ label: "Paketleri gör", href: `${meta.href}#paketler` }}
-          secondary={{ label: "Bize ulaşın", href: "/iletisim" }}
-        />
-      </main>
+          <CtaBand
+            eyebrow="Destek"
+            title={props.cta.title}
+            description={props.cta.description}
+            primary={{ label: "Paketleri gör", href: `${meta.href}#paketler` }}
+            secondary={{ label: "Bize ulaşın", href: "/iletisim" }}
+          />
+        </main>
+      </BillingProvider>
       <Footer />
     </div>
   );

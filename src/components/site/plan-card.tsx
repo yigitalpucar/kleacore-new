@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type BillingPeriod, yearlySavingsPercent } from "@/lib/format/price";
+import { type BillingPeriod, formatTRY, yearlySavingsPercent } from "@/lib/format/price";
+import { periodTotal } from "@/lib/billing/period-price";
+import { FEATURED_LABEL } from "@/lib/catalog/package-comparison";
 import { buttonClasses } from "./button-classes";
 import { GridLineHorizontal } from "./grid-lines";
 import { resolveIcon, type IconRef } from "./icon";
@@ -51,7 +53,7 @@ export function PlanCard({
   const amount = showYearly ? (plan.yearlyMonthlyPrice as number) : plan.monthlyPrice;
   const savings = showYearly ? yearlySavingsPercent(plan.monthlyPrice, plan.yearlyMonthlyPrice) : 0;
   const featured = Boolean(plan.featured);
-  const badge = plan.badge ?? (featured ? "Popüler" : undefined);
+  const badge = plan.badge ?? (featured ? FEATURED_LABEL : undefined);
 
   return (
     <article
@@ -93,8 +95,8 @@ export function PlanCard({
         <p className="mt-2 min-h-5 text-xs text-muted-foreground">
           {showYearly ? (
             <>
-              Yıllık ödemede aylık karşılığı
-              {savings > 0 ? <> · aylığa göre %{savings} tasarruf</> : null}
+              Yıllık {formatTRY(periodTotal(amount, "yearly", "monthly-equivalent"))} faturalandırılır
+              {savings > 0 ? <> · %{savings} tasarruf</> : null}
             </>
           ) : billing === "yearly" && !yearlyAvailable ? (
             "Bu pakette yalnızca aylık ödeme var"
