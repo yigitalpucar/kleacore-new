@@ -4,7 +4,6 @@ import Link from "next/link";
 import { ArrowUpRight, FileText, Globe, Headphones, Package, Users } from "lucide-react";
 import {
   DataTable,
-  EmptyState,
   IconTile,
   ListRow,
   PageHeader,
@@ -18,6 +17,7 @@ import {
 } from "@/components/app";
 import { formatTRY } from "@/lib/format/price";
 import { formatDate } from "@/lib/format/date";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 interface ResellerCustomer {
   id: string;
@@ -134,16 +134,7 @@ export function BayilikContent({ discountPercent, customers, stats }: BayilikCon
           />
         )}
         emptyState={
-          <EmptyState
-            icon={Users}
-            title="Henüz alt müşteriniz yok"
-            description="Yönetici tarafından hesabınıza müşteri atandığında burada listelenir. Yeni atama için destek ekibiyle iletişime geçebilirsiniz."
-            action={
-              <Link href="/musteri/panel/destek/yeni" className={appButton({ variant: "outline", size: "sm" })}>
-                Destek talebi oluştur
-              </Link>
-            }
-          />
+          <PanelEmptyState kind="resellerClients" />
         }
         noResultsText="Aramanızla eşleşen müşteri bulunamadı."
       />

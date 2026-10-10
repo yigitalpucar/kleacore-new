@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRightLeft, ExternalLink, Globe, Lock, Plus, RefreshCcw, Settings } from "lucide-react";
+import { ArrowRightLeft, ExternalLink, Lock, Plus, RefreshCcw, Settings } from "lucide-react";
 import {
   DataTable,
-  EmptyState,
   ListRow,
   PageHeader,
   StatCard,
@@ -16,6 +15,7 @@ import {
   type RowAction,
 } from "@/components/app";
 import { daysUntil, formatDate } from "@/lib/format/date";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 interface DomainItem {
   id: string;
@@ -183,21 +183,7 @@ export function DomainlerContent({ domains, stats }: DomainlerContentProps) {
           />
         )}
         emptyState={
-          <EmptyState
-            icon={Globe}
-            title="Henüz alan adınız yok"
-            description="Yeni bir alan adı kaydedebilir veya mevcut alan adınızı KLEACORE'a taşıyabilirsiniz."
-            action={
-              <>
-                <Link href="/domain/kayit" className={appButton()}>
-                  Alan adı sorgula
-                </Link>
-                <Link href="/domain/transfer" className={appButton({ variant: "outline" })}>
-                  Transfer et
-                </Link>
-              </>
-            }
-          />
+          <PanelEmptyState kind="domains" />
         }
         noResultsText="Aramanızla eşleşen alan adı bulunamadı."
       />

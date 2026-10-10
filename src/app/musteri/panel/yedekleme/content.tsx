@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Cloud, Database, Download, FileArchive, HardDrive, Loader2, Plus, RefreshCcw, RotateCcw, Server, Trash2 } from "lucide-react";
+import { Cloud, Database, Download, HardDrive, Loader2, Plus, RefreshCcw, RotateCcw, Server, Trash2 } from "lucide-react";
 import {
   DataTable,
   EmptyState,
@@ -40,6 +40,7 @@ import {
   toggleSchedule,
 } from "@/lib/actions/customer/backups";
 import { toast } from "@/lib/toast";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 interface BackupItem {
   id: string;
@@ -436,11 +437,7 @@ export function YedeklemeContent({ backups, schedules, stats }: YedeklemeContent
           </div>
         )}
         emptyState={
-          <EmptyState
-            icon={FileArchive}
-            title="Henüz yedek yok"
-            description="Otomatik yedekleme zamanlaması olan hizmetlerinizin yedekleri burada listelenir."
-          />
+          <PanelEmptyState kind="backups" />
         }
         noResultsText="Aramanızla eşleşen yedek bulunamadı."
       />

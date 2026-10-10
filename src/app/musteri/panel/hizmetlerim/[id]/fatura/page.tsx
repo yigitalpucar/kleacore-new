@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { CreditCard, Download, FileText } from "lucide-react";
+import { CreditCard, Download } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { getServiceById } from "@/lib/dal/services";
 import { getInvoicesByCustomer } from "@/lib/dal/invoices";
 import {
   AppBreadcrumbLabel,
-  EmptyState,
   PageHeader,
   SectionCard,
   StatCard,
@@ -18,6 +17,7 @@ import {
 import { formatTRY } from "@/lib/format/price";
 import { formatDate } from "@/lib/format/date";
 import { sub, sum, toNumber } from "@/lib/money";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 export const dynamic = "force-dynamic";
 
@@ -143,7 +143,7 @@ export default async function ServiceInvoicesPage(props: Props) {
             })}
           </ul>
         ) : (
-          <EmptyState compact className="m-4" icon={FileText} title="Henüz faturanız yok" />
+          <PanelEmptyState kind="invoices" compact className="m-4" />
         )}
       </SectionCard>
     </>

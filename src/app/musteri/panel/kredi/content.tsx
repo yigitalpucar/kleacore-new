@@ -11,13 +11,11 @@ import {
   CreditCard,
   Loader2,
   Lock,
-  ReceiptText,
   Wallet,
 } from "lucide-react";
 import {
   DataTable,
   DetailList,
-  EmptyState,
   FormField,
   IconTile,
   ListRow,
@@ -35,6 +33,7 @@ import { formatTRY } from "@/lib/format/price";
 import { formatDate, formatDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 // Limits enforced by initiateBalanceTopUp.
 const MIN_TOPUP = 50;
@@ -207,6 +206,8 @@ export function KrediContent({ transactions, balance }: KrediContentProps) {
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <SectionCard
+            id="bakiye-yukle"
+            className="scroll-mt-20"
             title="Tutar seçin"
             description={`Hazır tutarlardan birini seçin veya ${formatTRY(MIN_TOPUP)} ile ${formatTRY(MAX_TOPUP)} arasında bir tutar girin.`}
           >
@@ -389,11 +390,7 @@ export function KrediContent({ transactions, balance }: KrediContentProps) {
             />
           )}
           emptyState={
-            <EmptyState
-              icon={ReceiptText}
-              title="Henüz bakiye hareketi yok"
-              description="Bakiye yüklediğinizde veya bakiyenizle ödeme yaptığınızda hareketler burada listelenir."
-            />
+            <PanelEmptyState kind="credit" />
           }
           noResultsText="Aramanızla eşleşen hareket bulunamadı."
         />

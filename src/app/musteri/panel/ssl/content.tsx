@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Download, FileText, KeyRound, Plus, RefreshCcw, Settings2, ShieldCheck } from "lucide-react";
 import {
   DataTable,
-  EmptyState,
   IconTile,
   ListRow,
   PageHeader,
@@ -23,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { toggleAutoRenew } from "@/lib/actions/customer/ssl";
 import { formatDate } from "@/lib/format/date";
 import { toast } from "@/lib/toast";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 interface CertificateItem {
   id: string;
@@ -256,16 +256,7 @@ export function SSLContent({ certificates, stats }: SSLContentProps) {
           </div>
         )}
         emptyState={
-          <EmptyState
-            icon={ShieldCheck}
-            title="Henüz SSL sertifikanız yok"
-            description="Sitenizi HTTPS ile korumak için bir SSL sertifikası alın."
-            action={
-              <Link href="/ssl" className={appButton({ variant: "outline" })}>
-                SSL paketlerini incele
-              </Link>
-            }
-          />
+          <PanelEmptyState kind="ssl" />
         }
         noResultsText="Aramanızla eşleşen sertifika bulunamadı."
       />

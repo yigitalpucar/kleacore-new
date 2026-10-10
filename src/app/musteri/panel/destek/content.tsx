@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Headphones, MessageSquare, Plus } from "lucide-react";
+import { MessageSquare, Plus } from "lucide-react";
 import {
   DataTable,
-  EmptyState,
   ListRow,
   PageHeader,
   StatCard,
@@ -18,6 +17,7 @@ import {
   type ColumnDef,
 } from "@/components/app";
 import { formatDate, formatDateTime } from "@/lib/format/date";
+import { PanelEmptyState } from "@/components/panel/panel-empty-state";
 
 interface Ticket {
   id: string;
@@ -169,16 +169,7 @@ export function DestekListContent({ tickets }: DestekListContentProps) {
           />
         )}
         emptyState={
-          <EmptyState
-            icon={Headphones}
-            title="Henüz destek talebiniz yok"
-            description="Bir sorun yaşarsanız ya da sorunuz varsa destek ekibimize yazabilirsiniz."
-            action={
-              <Link href={`${P}/yeni`} className={appButton()}>
-                Yeni talep oluştur
-              </Link>
-            }
-          />
+          <PanelEmptyState kind="tickets" />
         }
         noResultsText="Aramanızla eşleşen talep bulunamadı."
       />
