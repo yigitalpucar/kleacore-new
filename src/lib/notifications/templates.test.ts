@@ -55,7 +55,7 @@ describe("notification templates", () => {
     const rendered = renderNotification(template.key, template.sample, ctx);
 
     expect(rendered.subject.length).toBeGreaterThan(5);
-    expect(rendered.html).toContain('<html lang="tr">');
+    expect(rendered.html).toContain('<html lang="tr"');
     expect(rendered.html).toContain('src="cid:kleacore-logo"');
     // Footer: company info + support address on every mail.
     expect(rendered.html).toContain("KLEAWORK DIGITAL LLC");
@@ -63,7 +63,7 @@ describe("notification templates", () => {
     expect(rendered.text).toContain("KLEAWORK DIGITAL LLC");
     // No remote images / tracking pixels.
     expect(rendered.html).not.toMatch(/<img[^>]+src="https?:/i);
-    expect(rendered.html).not.toMatch(/utm_|tracking|pixel/i);
+    expect(rendered.html).not.toMatch(/utm_|tracking|pixel(?!sPerInch)/i);
     if (template.sms) expect(rendered.sms).toBeTruthy();
   });
 

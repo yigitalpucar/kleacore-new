@@ -316,7 +316,7 @@ export function BroadcastDetail({
           <SectionCard title="İçerik" description={preview ? `Konu: ${preview.subject} (sizin bilgilerinizle)` : undefined} flush>
             {preview ? (
               <>
-                <iframe title="E-posta önizleme" srcDoc={preview.html} sandbox="" className="block h-[620px] w-full border-0 bg-[#f4f4f5]" />
+                <iframe title="E-posta önizleme" srcDoc={preview.html} sandbox="" className="block h-[620px] w-full border-0 bg-[#fafafa]" />
                 {preview.sms ? (
                   <div className="border-t px-5 py-4">
                     <p className="mb-1 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">SMS</p>

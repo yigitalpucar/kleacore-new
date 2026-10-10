@@ -1,0 +1,121 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`email layout > renders the branded shell (snapshot) 1`] = `
+"<!doctype html>
+<html lang="tr" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no" />
+<meta name="color-scheme" content="light dark" />
+<meta name="supported-color-schemes" content="light dark" />
+<title>Yeni faturanız: F-1</title>
+<!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
+<style>
+:root{color-scheme:light dark;supported-color-schemes:light dark}
+body{margin:0;padding:0;width:100% !important;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}
+table{border-collapse:collapse;mso-table-lspace:0;mso-table-rspace:0}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic}
+a[x-apple-data-detectors]{color:inherit !important;text-decoration:none !important}
+.kc-body p{margin:0 0 14px;font-size:15px;line-height:1.6}
+.kc-body h2{margin:24px 0 10px;font-size:17px;line-height:1.35}
+.kc-body ul,.kc-body ol{margin:0 0 14px;padding-left:22px}
+.kc-body li{margin:0 0 6px}
+.kc-body a{color:#09090b;text-decoration:underline}
+.kc-body img{max-width:100%;height:auto}
+@media only screen and (max-width:620px){
+  .kc-outer{padding:12px 0 24px !important}
+  .kc-pad{padding:24px 20px !important}
+  .kc-head{padding:18px 20px !important;border-radius:0 !important}
+  .kc-card{border-radius:0 !important;border-left:0 !important;border-right:0 !important}
+  .kc-foot{padding:20px !important}
+  .kc-h1{font-size:20px !important}
+  .kc-row td{display:block !important;width:auto !important}
+  .kc-row .kc-label{padding-bottom:0 !important}
+  .kc-row .kc-value{padding-top:2px !important;border-top:0 !important}
+  .kc-btn-table{width:100% !important}
+  .kc-btn{display:block !important;text-align:center !important}
+}
+@media (prefers-color-scheme:dark){
+.kc-page{background-color:#09090b !important}
+.kc-card{background-color:#131316 !important;border-color:#27272a !important}
+.kc-head{background-color:#000000 !important;border-color:#27272a !important}
+.kc-body,.kc-body p,.kc-body li,.kc-body .kc-text{color:#f4f4f5 !important}
+.kc-body a{color:#fafafa !important}
+.kc-body .kc-h1{color:#fafafa !important}
+.kc-body .kc-muted,.kc-foot,.kc-foot p,.kc-foot a,.kc-muted{color:#a1a1aa !important}
+.kc-body .kc-rule{border-color:#3f3f46 !important}
+.kc-body .kc-table{background-color:#1b1b1f !important;border-color:#27272a !important}
+.kc-body .kc-row td{border-color:#27272a !important}
+.kc-body .kc-row .kc-label{color:#a1a1aa !important}
+.kc-body .kc-row .kc-value{color:#f4f4f5 !important}
+.kc-body .kc-btn-cell{background-color:#fafafa !important}
+.kc-body a.kc-btn{background-color:#fafafa !important;border-color:#fafafa !important;color:#09090b !important}
+}
+[data-ogsc] .kc-page{background-color:#09090b !important}
+[data-ogsc] .kc-card{background-color:#131316 !important;border-color:#27272a !important}
+[data-ogsc] .kc-head{background-color:#000000 !important;border-color:#27272a !important}
+[data-ogsc] .kc-body,[data-ogsc] .kc-body p,[data-ogsc] .kc-body li,[data-ogsc] .kc-body .kc-text{color:#f4f4f5 !important}
+[data-ogsc] .kc-body a{color:#fafafa !important}
+[data-ogsc] .kc-body .kc-h1{color:#fafafa !important}
+[data-ogsc] .kc-body .kc-muted,[data-ogsc] .kc-foot,[data-ogsc] .kc-foot p,[data-ogsc] .kc-foot a,[data-ogsc] .kc-muted{color:#a1a1aa !important}
+[data-ogsc] .kc-body .kc-rule{border-color:#3f3f46 !important}
+[data-ogsc] .kc-body .kc-table{background-color:#1b1b1f !important;border-color:#27272a !important}
+[data-ogsc] .kc-body .kc-row td{border-color:#27272a !important}
+[data-ogsc] .kc-body .kc-row .kc-label{color:#a1a1aa !important}
+[data-ogsc] .kc-body .kc-row .kc-value{color:#f4f4f5 !important}
+[data-ogsc] .kc-body .kc-btn-cell{background-color:#fafafa !important}
+[data-ogsc] .kc-body a.kc-btn{background-color:#fafafa !important;border-color:#fafafa !important;color:#09090b !important}
+</style>
+</head>
+<body class="kc-page" style="margin:0;padding:0;background-color:#fafafa;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b">
+<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all">F-1 numaralı faturanız oluşturuldu.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+
+<table role="presentation" class="kc-page" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#fafafa">
+<tr><td class="kc-outer" align="center" style="padding:32px 16px 40px">
+<!--[if mso]><table role="presentation" width="600" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate">
+<tr><td class="kc-head" bgcolor="#09090b" style="background-color:#09090b;border:1px solid #09090b;border-radius:12px 12px 0 0;padding:22px 32px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+<td style="vertical-align:middle"><a href="https://kleacore.com" target="_blank" style="text-decoration:none"><img src="cid:kleacore-logo" width="144" height="31" alt="KLEACORE" style="display:block;width:144px;height:31px;border:0;color:#ffffff;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:18px;font-weight:700;letter-spacing:2px" /></a></td>
+<td align="right" style="vertical-align:middle;padding-left:12px;font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,'Courier New',monospace;font-size:10px;line-height:1.4;letter-spacing:0.14em;text-transform:uppercase;color:#a1a1aa">Sipariş ve fatura</td>
+</tr></table>
+</td></tr>
+<tr><td class="kc-card kc-pad kc-body" bgcolor="#ffffff" style="background-color:#ffffff;border:1px solid #e0e0e0;border-top:0;border-radius:0 0 12px 12px;padding:36px 36px 32px;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b">
+<h1 class="kc-h1" style="margin:0 0 18px;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:24px;line-height:1.25;font-weight:600;letter-spacing:-0.02em;color:#09090b">Yeni faturanız oluşturuldu</h1>
+<p class="kc-text" style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#18181b">Merhaba Ayşe,</p>
+<p class="kc-text" style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#18181b">F-1 numaralı faturanız oluşturuldu.</p>
+<table role="presentation" class="kc-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border:1px solid #e0e0e0;border-radius:10px;border-collapse:separate;background-color:#f5f5f5;margin:22px 0">
+<tr class="kc-row">
+<td class="kc-label" style="padding:11px 16px;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.45;color:#737373;width:40%;vertical-align:top">Fatura</td>
+<td class="kc-value" style="padding:11px 16px;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,'Courier New',monospace;font-size:13px;line-height:1.45;color:#18181b;font-weight:600;word-break:break-word;vertical-align:top">F-1</td>
+</tr>
+<tr class="kc-row">
+<td class="kc-label" style="border-top:1px dashed #e0e0e0;padding:11px 16px;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.45;color:#737373;width:40%;vertical-align:top">Tutar</td>
+<td class="kc-value" style="border-top:1px dashed #e0e0e0;padding:11px 16px;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.45;color:#18181b;font-weight:700;word-break:break-word;vertical-align:top">599,94 ₺</td>
+</tr>
+</table>
+<table role="presentation" class="kc-btn-table" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 10px">
+<tr><td class="kc-btn-cell" align="center" bgcolor="#09090b" style="border-radius:8px;background-color:#09090b;mso-padding-alt:13px 24px">
+<a class="kc-btn" href="https://kleacore.com/musteri/panel/faturalar/1" target="_blank" style="display:inline-block;padding:13px 24px;mso-padding-alt:0;border:1px solid #09090b;border-radius:8px;background-color:#09090b;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:20px;font-weight:600;color:#ffffff;text-decoration:none">Faturayı öde &rarr;</a>
+</td></tr>
+</table>
+<p class="kc-muted" style="margin:0 0 14px;font-size:12px;line-height:1.5;color:#737373;word-break:break-all">Buton çalışmazsa bu bağlantıyı tarayıcınıza yapıştırın:<br />https://kleacore.com/musteri/panel/faturalar/1</p>
+
+<p class="kc-muted kc-rule" style="margin:22px 0 0;padding-top:16px;border-top:1px dashed #d4d4d8;font-size:13px;line-height:1.55;color:#737373">Not</p>
+</td></tr>
+<tr><td class="kc-foot kc-muted" style="padding:24px 32px 0;font-family:Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:#737373;text-align:center">
+<p style="margin:0 0 4px;font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,'Courier New',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;font-weight:600">KLEAWORK DIGITAL LLC</p>
+<p style="margin:0 0 4px;">30 N Gould St Ste R, Sheridan, WY 82801, USA</p>
+<p style="margin:0 0 4px;">Destek: <a href="mailto:support@kleacore.com" target="_blank" style="color:#737373;text-decoration:underline">support@kleacore.com</a> &middot; <a href="https://kleacore.com" target="_blank" style="color:#737373;text-decoration:underline">kleacore.com</a></p>
+<p style="margin:12px 0 0">Bu e-posta hesabınızla ilgili bir işlem nedeniyle otomatik olarak gönderilmiştir.</p>
+</td></tr>
+</table>
+<!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>"
+`;

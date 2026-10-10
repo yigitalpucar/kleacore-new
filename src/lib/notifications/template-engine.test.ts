@@ -119,7 +119,7 @@ describe("default (seed) sources generated from the TS templates", () => {
     });
     expect(overridden.subject).toBe("Fatura F-2026-000456 hazır");
     expect(overridden.html).toContain("<p>Tutar: 599,94");
-    expect(overridden.html).toContain('<html lang="tr">'); // branded shell
+    expect(overridden.html).toContain('<html lang="tr"'); // branded shell
     expect(overridden.text).toContain("Tutar: 599,94");
     expect(fallback.subject).toBe("Yeni faturanız: F-2026-000456");
   });

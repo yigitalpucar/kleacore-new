@@ -559,7 +559,7 @@ export function BroadcastComposer({
           </p>
         ) : null}
         {rendered ? (
-          <iframe title="E-posta önizleme" srcDoc={rendered.html} sandbox="" className="block h-[620px] w-full border-0 bg-[#f4f4f5]" />
+          <iframe title="E-posta önizleme" srcDoc={rendered.html} sandbox="" className="block h-[620px] w-full border-0 bg-[#fafafa]" />
         ) : (
           <p className="px-5 py-4 text-sm text-muted-foreground">Önizleme hazırlanıyor…</p>
         )}

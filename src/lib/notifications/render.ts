@@ -100,18 +100,19 @@ export function renderNotification(
   const template = getTemplate(templateKey);
   const parsed = template.schema.parse(data);
   const logoSrc = options.logo === "inline" ? LOGO_DATA_URI : `cid:${LOGO_CID}`;
+  const shell = { logoSrc, eyebrow: template.group };
 
   let email: RenderedEmail | null = null;
   if (template.renderRaw) {
-    email = renderRawEmail(template.renderRaw(parsed, ctx), ctx.brand, { logoSrc });
+    email = renderRawEmail(template.renderRaw(parsed, ctx), ctx.brand, shell);
   } else if (options.override?.email) {
     try {
-      email = renderOverrideEmail(template, parsed, ctx, options.override.email, { logoSrc });
+      email = renderOverrideEmail(template, parsed, ctx, options.override.email, shell);
     } catch (error) {
       console.error(`[Notifications] ${templateKey} e-posta şablonu işlenemedi, varsayılan kullanılıyor:`, error);
     }
   }
-  email ??= renderEmailLayout(template.render(parsed, ctx), ctx.brand, { logoSrc });
+  email ??= renderEmailLayout(template.render(parsed, ctx), ctx.brand, shell);
 
   let sms: string | null = template.sms ? template.sms(parsed, ctx) : null;
   if (template.sms && options.override?.sms && !template.renderRaw) {

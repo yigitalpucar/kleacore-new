@@ -46,7 +46,7 @@ export const billingOrderReceived = defineTemplate({
       details: [
         { label: data.orderNumbers.length > 1 ? "Sipariş numaraları" : "Sipariş numarası", value: orderLabel, mono: true },
         { label: "Ödeme yöntemi", value: paymentMethodLabels[data.paymentMethod] ?? data.paymentMethod },
-        { label: "Toplam tutar", value: money(data.totalAmount) },
+        { label: "Toplam tutar", value: money(data.totalAmount), emphasis: true },
         ...(data.promoCode ? [{ label: "Kupon", value: data.promoCode, mono: true }] : []),
       ],
       action: { label: "Siparişlerimi görüntüle", url: `${baseUrl}${panelPaths.invoices}` },
@@ -84,7 +84,7 @@ export const billingPaymentReceived = defineTemplate({
     ],
     details: [
       { label: "Fatura", value: data.invoiceNumber, mono: true },
-      { label: "Ödenen tutar", value: money(data.paidAmount) },
+      { label: "Ödenen tutar", value: money(data.paidAmount), emphasis: true },
       { label: "Ödeme tarihi", value: date(data.paidAt) },
     ],
     action: { label: "Faturayı görüntüle", url: `${baseUrl}${panelPaths.invoice(data.invoiceId)}` },
@@ -122,7 +122,7 @@ export const billingInvoiceCreated = defineTemplate({
     intro: [`${data.invoiceNumber} numaralı faturanız oluşturuldu. Son ödeme tarihine kadar panelinizden ödeyebilirsiniz.`],
     details: [
       { label: "Fatura", value: data.invoiceNumber, mono: true },
-      { label: "Tutar", value: money(data.totalAmount) },
+      { label: "Tutar", value: money(data.totalAmount), emphasis: true },
       { label: "Son ödeme tarihi", value: date(data.dueDate) },
     ],
     action: { label: "Faturayı öde", url: `${baseUrl}${panelPaths.invoice(data.invoiceId)}` },
@@ -149,7 +149,7 @@ export const billingInvoiceReminder = defineTemplate({
     ],
     details: [
       { label: "Fatura", value: data.invoiceNumber, mono: true },
-      { label: "Tutar", value: money(data.totalAmount) },
+      { label: "Tutar", value: money(data.totalAmount), emphasis: true },
       { label: "Son ödeme tarihi", value: date(data.dueDate) },
     ],
     action: { label: "Faturayı öde", url: `${baseUrl}${panelPaths.invoice(data.invoiceId)}` },
@@ -179,7 +179,7 @@ export const billingInvoiceOverdue = defineTemplate({
     ],
     details: [
       { label: "Fatura", value: data.invoiceNumber, mono: true },
-      { label: "Tutar", value: money(data.totalAmount) },
+      { label: "Tutar", value: money(data.totalAmount), emphasis: true },
       { label: "Son ödeme tarihi", value: date(data.dueDate) },
     ],
     action: { label: "Faturayı öde", url: `${baseUrl}${panelPaths.invoice(data.invoiceId)}` },
@@ -208,7 +208,7 @@ export const billingInvoiceFinalWarning = defineTemplate({
     ],
     details: [
       { label: "Fatura", value: data.invoiceNumber, mono: true },
-      { label: "Tutar", value: money(data.totalAmount) },
+      { label: "Tutar", value: money(data.totalAmount), emphasis: true },
       { label: "Son ödeme tarihi", value: date(data.dueDate) },
       { label: "Askıya alma", value: date(data.suspendAt) },
     ],
@@ -253,7 +253,7 @@ export const billingPaymentFailed = defineTemplate({
     ],
     details: [
       ...(data.invoiceNumber ? [{ label: "Fatura", value: data.invoiceNumber, mono: true }] : []),
-      ...(data.amount ? [{ label: "Tutar", value: money(data.amount) }] : []),
+      ...(data.amount ? [{ label: "Tutar", value: money(data.amount), emphasis: true }] : []),
       ...(data.reason ? [{ label: "Sebep", value: data.reason }] : []),
     ],
     action: { label: "Faturayı öde", url: `${baseUrl}${panelPaths.invoice(data.invoiceId)}` },
@@ -281,7 +281,7 @@ export const billingBankTransferApproved = defineTemplate({
     intro: ["Havale/EFT ödemeniz hesabımıza ulaştı ve onaylandı."],
     details: [
       ...(data.invoiceNumber ? [{ label: "Fatura", value: data.invoiceNumber, mono: true }] : []),
-      { label: "Tutar", value: money(data.amount) },
+      { label: "Tutar", value: money(data.amount), emphasis: true },
     ],
     action: {
       label: "Faturayı görüntüle",
@@ -316,7 +316,7 @@ export const billingBankTransferRejected = defineTemplate({
     intro: ["Gönderdiğiniz havale/EFT bildirimi incelendi ancak onaylanamadı."],
     details: [
       ...(data.invoiceNumber ? [{ label: "Fatura", value: data.invoiceNumber, mono: true }] : []),
-      ...(data.amount ? [{ label: "Bildirilen tutar", value: money(data.amount) }] : []),
+      ...(data.amount ? [{ label: "Bildirilen tutar", value: money(data.amount), emphasis: true }] : []),
       { label: "Sebep", value: data.reason },
     ],
     action: {
@@ -367,7 +367,7 @@ export const billingRefundIssued = defineTemplate({
       intro: [methodText],
       details: [
         ...(data.invoiceNumber ? [{ label: "Fatura", value: data.invoiceNumber, mono: true }] : []),
-        { label: "İade tutarı", value: money(data.amount) },
+        { label: "İade tutarı", value: money(data.amount), emphasis: true },
         { label: "İade tarihi", value: date(data.refundedAt) },
         ...(data.reason ? [{ label: "Açıklama", value: data.reason }] : []),
       ],
@@ -394,7 +394,7 @@ export const affiliatePayoutCompleted = defineTemplate({
     intro: ["Satış ortaklığı ödeme talebiniz tamamlandı."],
     details: [
       { label: "Talep", value: data.paymentId, mono: true },
-      { label: "Tutar", value: money(data.amount) },
+      { label: "Tutar", value: money(data.amount), emphasis: true },
       { label: "Ödeme tarihi", value: date(data.paidAt) },
     ],
     action: { label: "Satış ortaklığı paneli", url: `${baseUrl}${panelPaths.affiliate}` },
