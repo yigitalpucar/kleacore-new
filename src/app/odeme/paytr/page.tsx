@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Section } from "@/components/site/section";
 import { CheckoutHeader } from "@/components/site/hosting/checkout-header";
+import { CheckoutSteps } from "@/components/checkout/checkout-steps";
 import { PaytrCheckoutFrame } from "./checkout-frame";
 
 export const metadata: Metadata = {
@@ -19,6 +20,7 @@ export default function Page() {
       <Header />
       <main id="main" className="flex-1">
         <CheckoutHeader
+          steps={<CheckoutSteps current="odeme" />}
           eyebrow="Ödeme · PayTR"
           title="Güvenli ödeme"
           description="Kart bilgilerinizi aşağıdaki PayTR ödeme formuna girin. Ödeme tamamlandığında faturanız otomatik olarak güncellenir."

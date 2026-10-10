@@ -114,6 +114,14 @@ interface CartState {
   removeItem: (id: string) => void;
   /** Domain an item is for (SSL certificate common name). */
   setItemDomain: (id: string, domain: string) => void;
+  /**
+   * Switch a hosting/server line to another billing period. `unitPrice` is the
+   * server-quoted charge for that period. Returns false when the line can't
+   * switch or the same product is already in the cart for that period.
+   */
+  setItemPeriod: (id: string, period: "monthly" | "yearly", unitPrice: number) => boolean;
+  /** Replace stale line prices with server-quoted ones (id → unitPrice). */
+  syncItemPrices: (prices: Record<string, number>) => void;
   clearCart: () => void;
   getTotalItems: () => number;
   getSubtotal: () => number;
@@ -121,6 +129,20 @@ interface CartState {
 
 function normalizeDomain(domain: string) {
   return domain.trim().toLowerCase();
+}
+
+/**
+ * Cart id of a hosting/server/product line for another billing period (ids
+ * embed the period: `hosting:SKU:yearly`, `server:vds:code:yearly:ist`).
+ * null for lines that have no period in their id (domains).
+ */
+export function cartItemIdForPeriod(item: Pick<CartItem, "id" | "type">, period: "monthly" | "yearly"): string | null {
+  if (item.type === "domain") return null;
+  const parts = item.id.split(":");
+  const index = item.type === "server" ? 3 : 2;
+  if (parts.length <= index || (parts[index] !== "monthly" && parts[index] !== "yearly")) return null;
+  parts[index] = period;
+  return parts.join(":");
 }
 
 function chargeFor(type: CartItemType, price: number, billingPeriod: "monthly" | "yearly") {
@@ -330,6 +352,43 @@ export const useCartStore = create<CartState>()(
             item.id === id ? { ...item, metadata: { ...item.metadata, domain: domain.trim() } } : item
           ),
         })),
+
+      setItemPeriod: (id, period, unitPrice) => {
+        let changed = false;
+        set((state) => {
+          const item = state.items.find((entry) => entry.id === id);
+          if (!item || !Number.isFinite(unitPrice) || unitPrice <= 0) return state;
+          const nextId = cartItemIdForPeriod(item, period);
+          if (!nextId) return state;
+          if (nextId !== id && state.items.some((entry) => entry.id === nextId)) return state;
+          changed = true;
+          return {
+            items: state.items.map((entry) =>
+              entry.id === id
+                ? {
+                    ...entry,
+                    id: nextId,
+                    unitPrice,
+                    metadata: { ...entry.metadata, billingPeriod: period },
+                  }
+                : entry
+            ),
+          };
+        });
+        return changed;
+      },
+
+      syncItemPrices: (prices) =>
+        set((state) => {
+          let dirty = false;
+          const items = state.items.map((item) => {
+            const price = prices[item.id];
+            if (typeof price !== "number" || !Number.isFinite(price) || price === item.unitPrice) return item;
+            dirty = true;
+            return { ...item, unitPrice: price };
+          });
+          return dirty ? { items } : state;
+        }),
 
       removeItem: (id) =>
         set((state) => ({

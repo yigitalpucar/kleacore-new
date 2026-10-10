@@ -40,6 +40,7 @@ export default async function SepetPage() {
           paymentOptions={paymentOptions}
           emailVerified={emailVerified}
           userEmail={session?.user?.email ?? null}
+          signedIn={Boolean(userId)}
           legal={{
             documents: documents.map((document) => ({
               id: document.id,
