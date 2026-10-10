@@ -206,7 +206,6 @@ const tickets: ExportSpec<AdminTicketRow> = {
   ],
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const EXPORT_SPECS: Record<AdminListKey, ExportSpec<any>> = { invoices, services, customers, orders, tickets };
 
 /** Keeps a row when every non-"all" filter matches and the search (if any) does. */

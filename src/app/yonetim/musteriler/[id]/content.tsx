@@ -30,6 +30,7 @@ import {
   StatusBadge,
   appButton,
   enumLabel,
+  getStatusMeta,
   type ColumnDef,
 } from "@/components/app";
 import { billingPeriodLabel, formatDate, formatDateTime } from "@/lib/format/date";
@@ -113,7 +114,16 @@ export type CustomerDetail = {
   sslCount: number;
 };
 
-const money = (n: number) => formatTRY(n, { keepDecimals: true });
+/** Customer 360 header figures (null = viewer may not see / no data). Amounts are Decimal strings. */
+export type CustomerOverview = {
+  lifetime: { gross: string; net: string; refunded: string; count: number } | null;
+  overdue: { amount: string; count: number } | null;
+  risk: { score: number; threshold: number; status: string; createdAt: string; inReview: number } | null;
+  kycStatus: string;
+  kycSubmittedAt: string | null;
+};
+
+const money = (n: number | string) => formatTRY(Number(n), { keepDecimals: true });
 
 /* ---------------------------------------------------------------- columns */
 
@@ -298,7 +308,18 @@ const transactionColumns: ColumnDef<TransactionRow>[] = [
 
 /* ------------------------------------------------------------------ page */
 
-export function CustomerDetailContent({ customer, role }: { customer: CustomerDetail; role: StaffRole }) {
+export function CustomerDetailContent({
+  customer,
+  role,
+  overview,
+  timeline,
+}: {
+  customer: CustomerDetail;
+  role: StaffRole;
+  overview: CustomerOverview;
+  /** Server-rendered Customer 360 timeline. */
+  timeline: React.ReactNode;
+}) {
   // Sections and actions follow the viewer's permissions (the page also omits the data).
   const canEdit = hasPermission(role, "customers.edit");
   const showInvoices = hasPermission(role, "invoices.view");
@@ -362,37 +383,66 @@ export function CustomerDetailContent({ customer, role }: { customer: CustomerDe
         }
       />
 
-      <StatGrid columns={4}>
+      <StatGrid columns={5}>
         {showInvoices && (
-        <StatCard
-          label="Bakiye"
-          value={money(customer.balance)}
-          hint={customer.transactions.length ? `Son hareket ${formatDate(customer.transactions[0].createdAt)}` : "Bakiye hareketi yok"}
-          tone={customer.balance < 0 ? "danger" : undefined}
-        />
+          <StatCard
+            label="Bakiye / kredi"
+            value={money(customer.balance)}
+            hint={customer.transactions.length ? `Son hareket ${formatDate(customer.transactions[0].createdAt)}` : "Bakiye hareketi yok"}
+            tone={customer.balance < 0 ? "danger" : undefined}
+          />
         )}
+        {overview.lifetime ? (
+          <StatCard
+            label="Toplam gelir"
+            value={money(overview.lifetime.gross)}
+            hint={
+              overview.lifetime.count
+                ? `Net ${money(overview.lifetime.net)} · ${overview.lifetime.count} ödenmiş fatura`
+                : "Ödenmiş fatura yok"
+            }
+          />
+        ) : null}
+        {overview.overdue ? (
+          <StatCard
+            label="Gecikmiş"
+            value={money(overview.overdue.amount)}
+            hint={overview.overdue.count ? `${overview.overdue.count} gecikmiş fatura` : "Gecikmiş fatura yok"}
+            tone={overview.overdue.count ? "danger" : undefined}
+            href={overview.overdue.count ? `/yonetim/faturalar/gecikmis?q=${encodeURIComponent(customer.email)}` : undefined}
+          />
+        ) : null}
+        {showOrders ? (
+          <StatCard
+            label="Risk puanı"
+            value={overview.risk ? `${overview.risk.score} / ${overview.risk.threshold}` : "—"}
+            hint={
+              overview.risk
+                ? overview.risk.inReview
+                  ? `${overview.risk.inReview} sipariş incelemede`
+                  : `${getStatusMeta("fraudCheck", overview.risk.status).label} · ${formatDate(overview.risk.createdAt)}`
+                : "Risk değerlendirmesi yok"
+            }
+            tone={overview.risk ? (overview.risk.inReview ? "warning" : overview.risk.score >= overview.risk.threshold ? "danger" : undefined) : undefined}
+            href={overview.risk?.inReview && canAccessRoute(role, "/yonetim/siparisler/inceleme") ? "/yonetim/siparisler/inceleme" : undefined}
+          />
+        ) : null}
         <StatCard
-          label="Hizmetler"
-          value={customer.services.length.toLocaleString("tr-TR")}
-          hint={`${activeServices} aktif`}
-        />
-        {showInvoices && (
-        <StatCard
-          label="Ödenmemiş fatura"
-          value={unpaid.length.toLocaleString("tr-TR")}
-          hint={unpaid.length ? money(toNumber(sum(unpaid.map((i) => i.totalAmount)))) : "Son 10 faturada ödenmemiş yok"}
-          tone={unpaid.some((i) => i.status === "OVERDUE") ? "danger" : unpaid.length ? "warning" : undefined}
-        />
-        )}
-        <StatCard
-          label="Alan adı / SSL"
-          value={`${customer.domains.length} / ${customer.sslCount}`}
-          hint={openTickets ? `${openTickets} açık destek talebi` : "Açık destek talebi yok"}
+          label="Kimlik (KYC)"
+          value={<StatusBadge kind="kyc" status={overview.kycStatus} size="md" />}
+          hint={
+            overview.kycSubmittedAt
+              ? `Gönderim ${formatDate(overview.kycSubmittedAt)}`
+              : `${activeServices} aktif hizmet · ${openTickets} açık talep`
+          }
+          href={hasPermission(role, "kyc.review") && overview.kycStatus !== "NONE" ? `/yonetim/kyc/${customer.id}` : undefined}
         />
       </StatGrid>
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
+          {timeline}
+
           <SectionCard
             title="Hizmetler"
             description={`${customer.services.length} hizmet`}

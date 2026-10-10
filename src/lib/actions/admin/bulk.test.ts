@@ -32,12 +32,12 @@ beforeEach(() => {
 
 describe("bulk admin actions", () => {
   it.each([
-    ["bulkSendInvoiceReminders", "invoices.edit", "sendInvoiceReminder", [] as string[]],
-    ["bulkCancelInvoices", "invoices.edit", "cancelInvoice", []],
-    ["bulkUnsuspendServices", "services.manage", "activateService", []],
-    ["bulkSuspendCustomers", "customers.edit", "suspendCustomer", []],
-    ["bulkActivateCustomers", "customers.edit", "activateCustomer", []],
-    ["bulkCloseTickets", "tickets.reply", "closeTicket", []],
+    ["bulkSendInvoiceReminders", "invoices.edit", "sendInvoiceReminder"],
+    ["bulkCancelInvoices", "invoices.edit", "cancelInvoice"],
+    ["bulkUnsuspendServices", "services.manage", "activateService"],
+    ["bulkSuspendCustomers", "customers.edit", "suspendCustomer"],
+    ["bulkActivateCustomers", "customers.edit", "activateCustomer"],
+    ["bulkCloseTickets", "tickets.reply", "closeTicket"],
   ] as const)("%s needs %s and runs %s per id", async (name, permission, singleName) => {
     const fn = bulk[name] as (ids: string[]) => Promise<{ succeeded: number }>;
     const result = await fn(["a", "b"]);

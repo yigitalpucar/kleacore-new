@@ -1811,6 +1811,9 @@ model ActivityLog {
   ipAddress String?
   createdAt DateTime @default(now())
 
+  /// Customer 360 timeline and per-user activity lists (UI3).
+  @@index([userId, createdAt])
+  @@index([entityId, createdAt])
   @@map("activity_logs")
 }
 

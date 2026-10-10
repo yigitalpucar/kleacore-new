@@ -35,3 +35,9 @@ ALTER TABLE "ticket_presence" ADD CONSTRAINT "ticket_presence_userId_fkey" FOREI
 
 -- AddForeignKey
 ALTER TABLE "saved_filters" ADD CONSTRAINT "saved_filters_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- CreateIndex (customer 360 timeline: a customer's own rows and rows about them)
+CREATE INDEX "activity_logs_userId_createdAt_idx" ON "activity_logs"("userId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "activity_logs_entityId_createdAt_idx" ON "activity_logs"("entityId", "createdAt");
