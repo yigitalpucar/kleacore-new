@@ -70,7 +70,9 @@ export function ChartCard({
                   // Dense axes: labels may overflow their bar's slot (neighbours are blank);
                   // flex alignment keeps the first/last label inside the card.
                   labelEvery > 1 ? "flex overflow-visible whitespace-nowrap" : "truncate",
-                  labelEvery > 1 && (i === 0 ? "justify-start" : i === data.length - 1 ? "justify-end" : "justify-center")
+                  labelEvery > 1 && (i === 0 ? "justify-start" : i === data.length - 1 ? "justify-end" : "justify-center"),
+                  // Phones: half as many labels.
+                  labelEvery > 1 && !showAxisLabel(i, data.length, labelEvery * 2) && "invisible sm:visible"
                 )}
               >
                 {showAxisLabel(i, data.length, labelEvery) ? d.label : ""}
