@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({ db: { user: { findUnique: mocks.findUnique }, service: { count: mocks.count } } }));
 vi.mock("@/lib/auth/two-factor-settings", () => ({ isTwoFactorGloballyEnabled: mocks.twoFactor }));
 
-import { buildOnboardingSteps, getCustomerOnboarding, missingBillingFields, type OnboardingUser } from "./customer";
+import { buildOnboardingSteps, checklistCoversEmailVerification, getCustomerOnboarding, missingBillingFields, type OnboardingUser } from "./customer";
 
 const fresh: OnboardingUser = {
   name: "Ayşe",
@@ -89,5 +89,19 @@ describe("getCustomerOnboarding", () => {
     expect(await getCustomerOnboarding("u1")).toBeNull();
     mocks.findUnique.mockResolvedValueOnce({ ...fresh, role: "ADMIN", onboardingDismissedAt: null });
     expect(await getCustomerOnboarding("u1")).toBeNull();
+  });
+});
+
+describe("checklistCoversEmailVerification", () => {
+  const step = (id: "email" | "profile", done: boolean) => ({ id, title: "", description: "", done, href: null, cta: "" });
+
+  it("is true only while the visible checklist has an open e-mail step", () => {
+    expect(checklistCoversEmailVerification({ steps: [step("email", false), step("profile", false)], completed: 0, total: 2 })).toBe(true);
+    expect(checklistCoversEmailVerification({ steps: [step("email", true), step("profile", false)], completed: 1, total: 2 })).toBe(false);
+  });
+
+  it("keeps the banner when the checklist is dismissed or complete", () => {
+    expect(checklistCoversEmailVerification(null)).toBe(false);
+    expect(checklistCoversEmailVerification(undefined)).toBe(false);
   });
 });

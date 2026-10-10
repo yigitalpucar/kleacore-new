@@ -5,7 +5,9 @@ import { getServicesByCustomer } from "@/lib/dal/services";
 import { getDomainsByCustomer } from "@/lib/dal/domains";
 import { getInvoicesByCustomer } from "@/lib/dal/invoices";
 import { getTicketsByCustomer } from "@/lib/dal/tickets";
-import { getCustomerOnboarding } from "@/lib/onboarding/customer";
+import { checklistCoversEmailVerification, getCustomerOnboarding } from "@/lib/onboarding/customer";
+import { isEmailVerified } from "@/lib/auth/email-verification";
+import { EmailVerificationBanner } from "@/components/auth/email-verification-banner";
 import { DashboardContent } from "./content";
 import { WaitingOrdersNotice } from "@/components/panel/waiting-orders-notice";
 
@@ -17,17 +19,21 @@ export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [dashboardStats, services, domains, invoices, tickets, onboarding] = await Promise.all([
+  const [dashboardStats, services, domains, invoices, tickets, onboarding, emailVerified] = await Promise.all([
     getCustomerDashboardStats(userId),
     getServicesByCustomer(userId),
     getDomainsByCustomer(userId),
     getInvoicesByCustomer(userId),
     getTicketsByCustomer(userId),
     getCustomerOnboarding(userId),
+    isEmailVerified(userId),
   ]);
+  // One prompt, not two: the checklist's e-mail step replaces the banner here.
+  const showEmailBanner = !emailVerified && !checklistCoversEmailVerification(onboarding);
 
   return (
     <>
+      {showEmailBanner ? <EmailVerificationBanner email={session!.user.email} /> : null}
       <WaitingOrdersNotice userId={userId} />
       <DashboardContent
         userName={session!.user.name ?? ""}

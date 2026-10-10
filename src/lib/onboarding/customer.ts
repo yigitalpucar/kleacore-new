@@ -130,3 +130,12 @@ export async function getCustomerOnboarding(userId: string): Promise<CustomerOnb
   if (completed === steps.length) return null;
   return { steps, completed, total: steps.length };
 }
+
+/**
+ * True when the visible checklist already asks for e-mail verification, so the
+ * panel home can drop the separate "e-posta doğrulanmadı" banner. When the
+ * checklist is dismissed/complete (null) the banner stays.
+ */
+export function checklistCoversEmailVerification(onboarding: CustomerOnboarding | null | undefined): boolean {
+  return Boolean(onboarding?.steps.some((step) => step.id === "email" && !step.done));
+}

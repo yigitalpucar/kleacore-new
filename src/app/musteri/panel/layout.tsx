@@ -6,6 +6,7 @@ import { getBellNotifications } from "@/lib/dal/notifications";
 import { isResellerUser } from "@/lib/reseller";
 import { isEmailVerified } from "@/lib/auth/email-verification";
 import { EmailVerificationBanner } from "@/components/auth/email-verification-banner";
+import { HiddenOnPath } from "@/components/panel/hidden-on-path";
 
 export const metadata: Metadata = {
   title: {
@@ -40,7 +41,13 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       notifications={notifications.items}
       unreadNotifications={notifications.unread}
     >
-      {emailVerified ? null : <EmailVerificationBanner email={user?.email} className="mb-6" />}
+      {emailVerified ? null : (
+        // The panel home decides itself: its onboarding checklist may already
+        // carry the verification step (see src/app/musteri/panel/page.tsx).
+        <HiddenOnPath path="/musteri/panel">
+          <EmailVerificationBanner email={user?.email} className="mb-6" />
+        </HiddenOnPath>
+      )}
       {children}
     </CustomerShell>
   );
