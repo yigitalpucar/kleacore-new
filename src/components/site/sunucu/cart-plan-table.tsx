@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { maxYearlySavings, type BillingPeriod } from "@/lib/format/price";
+import { formatTRY, yearlySavingsPercent, type BillingPeriod } from "@/lib/format/price";
+import { periodTotal } from "@/lib/billing/period-price";
 import { useCartStore } from "@/store/cart-store";
 import { toast } from "@/lib/toast";
 import { BillingSwitch } from "@/components/site/billing-switch";
+import { useBilling } from "@/components/site/billing-context";
+import { FeaturedTag } from "@/components/site/package-comparison";
 import { buttonClasses } from "@/components/site/button-classes";
 import { Price } from "@/components/site/price";
 import type { CartTarget } from "./cart-target";
@@ -50,43 +52,25 @@ export function CartPlanTable({
   showBillingSwitch?: boolean;
   className?: string;
 }) {
-  const router = useRouter();
-  const addServerPlan = useCartStore((s) => s.addServerPlan);
-  const addProduct = useCartStore((s) => s.addProduct);
+  const { billing, setBilling } = useBilling();
   const yearlyAvailable = showBillingSwitch && plans.some((p) => p.yearlyMonthlyPrice);
-  const [billing, setBilling] = useState<BillingPeriod>("monthly");
-  const savings = yearlyAvailable ? maxYearlySavings(plans) : 0;
+  const savingsList = plans.map((p) => yearlySavingsPercent(p.monthlyPrice, p.yearlyMonthlyPrice));
+  const savings = yearlyAvailable ? Math.max(0, ...savingsList) : 0;
+  const savingsUniform = savingsList.every((v) => v === savings);
+  const add = useCartPlanAdd(target, billing);
 
   const priceOf = (plan: CartPlanRow) =>
     billing === "yearly" && plan.yearlyMonthlyPrice ? plan.yearlyMonthlyPrice : plan.monthlyPrice;
 
-  const add = (plan: CartPlanRow) => {
-    const price = priceOf(plan);
-    const period: BillingPeriod = billing === "yearly" && plan.yearlyMonthlyPrice ? "yearly" : "monthly";
-    const added =
-      target.kind === "server"
-        ? addServerPlan({
-            category: target.category,
-            planCode: plan.id,
-            title: plan.name,
-            price,
-            billingPeriod: period,
-            location: "tr",
-          })
-        : addProduct({
-            type: "datacenter",
-            sku: plan.id,
-            title: plan.name,
-            price,
-            billingPeriod: "monthly",
-            subType: target.subType,
-          });
-    if (added) {
-      toast.success(`${plan.name} sepete eklendi.`);
-      router.push("/sepet");
-    } else {
-      toast.info("Bu ürün zaten sepetinizde.");
-    }
+  const yearlyNote = (plan: CartPlanRow) => {
+    if (billing !== "yearly" || !plan.yearlyMonthlyPrice) return null;
+    const pct = yearlySavingsPercent(plan.monthlyPrice, plan.yearlyMonthlyPrice);
+    return (
+      <span className="mt-1 block text-[11px] text-muted-foreground">
+        {formatTRY(periodTotal(plan.yearlyMonthlyPrice, "yearly", "monthly-equivalent"))}/yıl
+        {pct > 0 ? <> · %{pct} tasarruf</> : null}
+      </span>
+    );
   };
 
   const cell = (plan: CartPlanRow, col: CartPlanColumn) => (
@@ -118,7 +102,13 @@ export function CartPlanTable({
   return (
     <div className={className}>
       {yearlyAvailable ? (
-        <BillingSwitch value={billing} onChange={setBilling} savingsPercent={savings} className="mb-10" />
+        <BillingSwitch
+          value={billing}
+          onChange={setBilling}
+          savingsPercent={savings}
+          savingsVaries={!savingsUniform}
+          className="mb-10"
+        />
       ) : null}
 
       {/* Desktop: table */}
@@ -151,7 +141,7 @@ export function CartPlanTable({
                 <th scope="row" className="px-5 py-4 text-left font-semibold">
                   <span className="flex flex-wrap items-center gap-2">
                     {plan.name}
-                    {plan.featured ? <PopularTag /> : null}
+                    {plan.featured ? <FeaturedTag /> : null}
                   </span>
                 </th>
                 {columns.map((col) => (
@@ -161,6 +151,7 @@ export function CartPlanTable({
                 ))}
                 <td className="whitespace-nowrap px-4 py-4 text-right">
                   <Price amount={priceOf(plan)} period="ay" size="md" className="justify-end" />
+                  {yearlyNote(plan)}
                 </td>
                 <td className="px-5 py-4 text-right">{action(plan, "sm")}</td>
               </tr>
@@ -181,7 +172,7 @@ export function CartPlanTable({
           >
             <div className="flex items-start justify-between gap-3">
               <h3 className="font-semibold">{plan.name}</h3>
-              {plan.featured ? <PopularTag /> : null}
+              {plan.featured ? <FeaturedTag /> : null}
             </div>
             <dl className="mt-3 grid flex-1 grid-cols-2 content-start gap-x-4 gap-y-3 text-sm">
               {columns.map((col) => (
@@ -194,7 +185,10 @@ export function CartPlanTable({
               ))}
             </dl>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-dashed pt-4">
-              <Price amount={priceOf(plan)} period="ay" size="md" />
+              <div>
+                <Price amount={priceOf(plan)} period="ay" size="md" />
+                {yearlyNote(plan)}
+              </div>
               {action(plan, "md")}
             </div>
           </li>
@@ -209,10 +203,43 @@ export function CartPlanTable({
   );
 }
 
-function PopularTag() {
-  return (
-    <span className="rounded-full border px-2 py-0.5 font-mono text-[10px] font-normal uppercase tracking-wider text-muted-foreground">
-      Popüler
-    </span>
-  );
+/**
+ * Add-to-cart for a server/datacenter plan in the given billing period. Only
+ * the plan code and period matter to checkout, which re-prices from the DB;
+ * the price passed here is what the cart shows until then.
+ */
+export function useCartPlanAdd(target: CartTarget, billing: BillingPeriod) {
+  const router = useRouter();
+  const addServerPlan = useCartStore((s) => s.addServerPlan);
+  const addProduct = useCartStore((s) => s.addProduct);
+
+  return (plan: Pick<CartPlanRow, "id" | "name" | "monthlyPrice" | "yearlyMonthlyPrice">) => {
+    const yearly = billing === "yearly" && Boolean(plan.yearlyMonthlyPrice);
+    const price = yearly ? (plan.yearlyMonthlyPrice as number) : plan.monthlyPrice;
+    const period: BillingPeriod = yearly ? "yearly" : "monthly";
+    const added =
+      target.kind === "server"
+        ? addServerPlan({
+            category: target.category,
+            planCode: plan.id,
+            title: plan.name,
+            price,
+            billingPeriod: period,
+            location: "tr",
+          })
+        : addProduct({
+            type: "datacenter",
+            sku: plan.id,
+            title: plan.name,
+            price,
+            billingPeriod: "monthly",
+            subType: target.subType,
+          });
+    if (added) {
+      toast.success(`${plan.name} sepete eklendi.`);
+      router.push("/sepet");
+    } else {
+      toast.info("Bu ürün zaten sepetinizde.");
+    }
+  };
 }

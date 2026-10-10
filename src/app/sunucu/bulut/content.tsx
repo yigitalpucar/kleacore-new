@@ -1,5 +1,6 @@
 import { CalendarClock, Cpu, Gauge, HardDrive, MemoryStick, Terminal } from "lucide-react";
 import type { FeatureItem } from "@/components/site/feature-grid";
+import { buildPackageComparison } from "@/lib/catalog/package-comparison";
 import { serverFaqs } from "@/components/sunucu/server-faq";
 import type { ProductWithPricing } from "@/lib/products/map-product";
 import {
@@ -69,6 +70,7 @@ export function Content({
       plansTitle="Bulut sunucu paketleri"
       plansDescription="Tüm paketlerde NVMe SSD disk, DDR5 bellek ve yüksek port hızı. Fiyatlar seçili ödeme dönemine göre aylık karşılık olarak gösterilir."
       rows={products.map(productToCartRow)}
+      comparison={buildPackageComparison(products)}
       columns={columns}
       included={sharedIncluded(products)}
       summaries={summaries}

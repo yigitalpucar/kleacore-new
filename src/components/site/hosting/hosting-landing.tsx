@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { Topbar } from "@/components/layout/topbar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import { BillingProvider } from "@/components/site/billing-context";
 import { buttonClasses } from "@/components/site/button-classes";
 import { CtaBand, type CtaBandProps } from "@/components/site/cta-band";
 import { FaqSection, type FaqItem } from "@/components/site/faq-section";
@@ -62,72 +63,74 @@ export function HostingLanding({
     <div className="flex min-h-screen flex-col">
       <Topbar />
       <Header />
-      <main id="main" className="flex-1">
-        <PageHeader
-          eyebrow={hero.eyebrow}
-          title={hero.title}
-          description={hero.description}
-          breadcrumbs={[{ label: "Hosting", href: "/hosting/linux" }, { label: hero.breadcrumb }]}
-          actions={
-            <>
-              <Link href="#paketler" className={buttonClasses({ size: "lg" })}>
-                Paketleri incele
-                <ArrowRight aria-hidden className="size-4" />
-              </Link>
-              <Link
-                href="#paketler-karsilastirma"
-                className={buttonClasses({ variant: "outline", size: "lg", className: "hidden md:inline-flex" })}
-              >
-                Karşılaştır
-              </Link>
-            </>
-          }
-        >
-          {from ? (
-            <p className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              <span className="font-mono text-[11px] uppercase tracking-[0.14em]">Başlangıç</span>
-              <Price amount={from} period="ay" size="sm" from className="text-foreground" />
-            </p>
-          ) : null}
-        </PageHeader>
+      <BillingProvider>
+        <main id="main" className="flex-1">
+          <PageHeader
+            eyebrow={hero.eyebrow}
+            title={hero.title}
+            description={hero.description}
+            breadcrumbs={[{ label: "Hosting", href: "/hosting/linux" }, { label: hero.breadcrumb }]}
+            actions={
+              <>
+                <Link href="#paketler" className={buttonClasses({ size: "lg" })}>
+                  Paketleri incele
+                  <ArrowRight aria-hidden className="size-4" />
+                </Link>
+                <Link
+                  href="#paketler-karsilastirma"
+                  className={buttonClasses({ variant: "outline", size: "lg" })}
+                >
+                  Karşılaştır
+                </Link>
+              </>
+            }
+          >
+            {from ? (
+              <p className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                <span className="font-mono text-[11px] uppercase tracking-[0.14em]">Başlangıç</span>
+                <Price amount={from} period="ay" size="sm" from className="text-foreground" />
+              </p>
+            ) : null}
+          </PageHeader>
 
-        <TrustBar items={trustItems} bordered={false} />
+          <TrustBar items={trustItems} bordered={false} />
 
-        <HostingPlans
-          plans={plans}
-          comparison={comparison}
-          eyebrow={plansHeading.eyebrow}
-          title={plansHeading.title}
-          description={plansHeading.description}
-        />
-
-        {children}
-
-        <Section tone="muted" divider aria-labelledby="baslangic-heading">
-          <SectionHeading
-            id="baslangic-heading"
-            eyebrow={steps.eyebrow ?? "Nasıl başlarım"}
-            title={steps.title}
-            description={steps.description}
-            className="mb-12"
+          <HostingPlans
+            plans={plans}
+            comparison={comparison}
+            eyebrow={plansHeading.eyebrow}
+            title={plansHeading.title}
+            description={plansHeading.description}
           />
-          <HostingSteps steps={steps.items} />
-        </Section>
 
-        <FaqSection items={faqs} description={faqDescription} divider />
+          {children}
 
-        <Section divider aria-labelledby="diger-heading" spacing="sm">
-          <SectionHeading
-            id="diger-heading"
-            eyebrow="Diğer hosting türleri"
-            title="İhtiyacınız farklı mı?"
-            className="mb-10"
-          />
-          <HostingTypes current={subType} startingPrices={startingPrices} />
-        </Section>
+          <Section tone="muted" divider aria-labelledby="baslangic-heading">
+            <SectionHeading
+              id="baslangic-heading"
+              eyebrow={steps.eyebrow ?? "Nasıl başlarım"}
+              title={steps.title}
+              description={steps.description}
+              className="mb-12"
+            />
+            <HostingSteps steps={steps.items} />
+          </Section>
 
-        <CtaBand {...cta} />
-      </main>
+          <FaqSection items={faqs} description={faqDescription} divider />
+
+          <Section divider aria-labelledby="diger-heading" spacing="sm">
+            <SectionHeading
+              id="diger-heading"
+              eyebrow="Diğer hosting türleri"
+              title="İhtiyacınız farklı mı?"
+              className="mb-10"
+            />
+            <HostingTypes current={subType} startingPrices={startingPrices} />
+          </Section>
+
+          <CtaBand {...cta} />
+        </main>
+      </BillingProvider>
       <Footer />
     </div>
   );

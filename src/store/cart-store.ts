@@ -46,6 +46,10 @@ export interface CartItem {
     };
     addons?: CartAddon[];
     configuration?: Record<string, string | number>;
+    /** Labels of the chosen config options, for the cart line (display only). */
+    configurationLabels?: { name: string; label: string }[];
+    /** Requested server hostname (re-validated at checkout). */
+    hostname?: string;
   };
 }
 
@@ -74,6 +78,12 @@ interface AddServerPlanPayload {
   price: number;
   billingPeriod: "monthly" | "yearly";
   location?: string;
+  /** Config option selections (validated and re-priced at checkout). */
+  configuration?: Record<string, string | number>;
+  configurationLabels?: { name: string; label: string }[];
+  /** Config options total for the whole period (already a period total). */
+  configOptionTotal?: number;
+  hostname?: string;
 }
 
 interface AddHostingBundlePayload {
@@ -262,7 +272,18 @@ export const useCartStore = create<CartState>()(
         return wasAdded;
       },
 
-      addServerPlan: ({ category, planCode, title, price, billingPeriod, location }) => {
+      addServerPlan: ({
+        category,
+        planCode,
+        title,
+        price,
+        billingPeriod,
+        location,
+        configuration,
+        configurationLabels,
+        configOptionTotal = 0,
+        hostname,
+      }) => {
         const normalizedPlanCode = planCode.trim().toLowerCase();
         const normalizedLocation = (location ?? "global").trim().toLowerCase();
         if (!normalizedPlanCode) return false;
@@ -270,7 +291,19 @@ export const useCartStore = create<CartState>()(
         let wasAdded = false;
 
         set((state) => {
-          const id = `server:${category}:${normalizedPlanCode}:${billingPeriod}:${normalizedLocation}`;
+          const configKey = configuration
+            ? Object.entries(configuration)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([key, value]) => `${key}=${value}`)
+                .join(",")
+            : "";
+          const id = [
+            `server:${category}:${normalizedPlanCode}:${billingPeriod}:${normalizedLocation}`,
+            configKey,
+            hostname?.trim().toLowerCase() ?? "",
+          ]
+            .filter(Boolean)
+            .join(":");
           const exists = state.items.some((item) => item.id === id);
           if (exists) return state;
 
@@ -279,7 +312,7 @@ export const useCartStore = create<CartState>()(
             id,
             type: "server",
             title,
-            unitPrice: chargeFor("server", price, billingPeriod),
+            unitPrice: toNumber(add(chargeFor("server", price, billingPeriod), configOptionTotal)),
             quantity: 1,
             createdAt: new Date().toISOString(),
             metadata: {
@@ -287,6 +320,9 @@ export const useCartStore = create<CartState>()(
               planCode: planCode.trim(),
               billingPeriod,
               location: location?.trim(),
+              ...(configuration && Object.keys(configuration).length > 0 ? { configuration } : {}),
+              ...(configurationLabels?.length ? { configurationLabels } : {}),
+              ...(hostname?.trim() ? { hostname: hostname.trim().toLowerCase() } : {}),
             },
           };
 

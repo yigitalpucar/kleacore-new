@@ -45,6 +45,15 @@ export default async function KurulumDetayPage({ params }: { params: Promise<{ i
   const sla = SLA_LABELS[slaState(waitingMs, slaHours)];
   const delivery = (task.deliveryDetails ?? {}) as Delivery;
   const isServer = ["vds", "vps", "server", "cloud", "datacenter"].includes(order.product.category.slug);
+  // What the customer chose at checkout (VDS configurator): hostname + config options.
+  const itemConfig = (order.items[0]?.configuration ?? {}) as {
+    hostname?: string;
+    configOptions?: Array<{ name?: string; label?: string }>;
+  };
+  const requestedHostname = typeof itemConfig.hostname === "string" ? itemConfig.hostname : null;
+  const chosenOptions = Array.isArray(itemConfig.configOptions)
+    ? itemConfig.configOptions.filter((line) => typeof line?.name === "string" && typeof line?.label === "string")
+    : [];
 
   return (
     <>
@@ -92,7 +101,12 @@ export default async function KurulumDetayPage({ params }: { params: Promise<{ i
               />
             </SectionCard>
           ) : (
-            <ActivationForm taskId={task.id} isServer={isServer} defaultUsername={isServer ? "root" : (task.service?.username ?? "")} />
+            <ActivationForm
+              taskId={task.id}
+              isServer={isServer}
+              defaultUsername={isServer ? "root" : (task.service?.username ?? "")}
+              defaultHostname={requestedHostname ?? ""}
+            />
           )}
         </div>
 
@@ -106,6 +120,8 @@ export default async function KurulumDetayPage({ params }: { params: Promise<{ i
                 { label: "Dönem", value: billingPeriodLabel(order.billingPeriod) },
                 { label: "Fatura", value: order.invoice?.invoiceNumber, mono: true },
                 { label: "Ödeme", value: order.invoice?.paidAt ? formatDateTime(order.invoice.paidAt) : formatDateTime(task.createdAt) },
+                { label: "İstenen sunucu adı", value: requestedHostname, mono: true },
+                ...chosenOptions.map((line) => ({ label: line.name as string, value: line.label as string })),
                 { label: "Müşteri notu", value: order.customerNotes },
               ]}
             />

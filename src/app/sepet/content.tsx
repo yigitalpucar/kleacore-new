@@ -300,6 +300,22 @@ export function SepetContent({
                           </p>
                         ) : null}
 
+                        {item.type === "server" &&
+                        (item.metadata?.hostname || item.metadata?.configurationLabels?.length) ? (
+                          <ul className="mt-2 space-y-0.5 text-sm text-muted-foreground" aria-label="Sunucu yapılandırması">
+                            {item.metadata.configurationLabels?.map((line) => (
+                              <li key={line.name}>
+                                {line.name}: <span className="text-foreground">{line.label}</span>
+                              </li>
+                            ))}
+                            {item.metadata.hostname ? (
+                              <li className="break-all">
+                                Sunucu adı: <span className="font-mono text-foreground">{item.metadata.hostname}</span>
+                              </li>
+                            ) : null}
+                          </ul>
+                        ) : null}
+
                         {item.type === "ssl" ? (
                           <div className="mt-3">
                             <label htmlFor={`ssl-domain-${item.id}`} className="text-sm font-medium">

@@ -2,6 +2,7 @@ import { getProductsBySubType } from "@/lib/dal/products";
 import type { ProductWithPricing } from "@/lib/products/map-product";
 import type { CartPlanRow } from "./cart-plan-table";
 import { toNumber } from "@/lib/money";
+import { isUnverifiedClaim } from "@/lib/catalog/package-comparison";
 
 export type ServerFamilyKey = "vps" | "vds" | "bulut" | "fiziksel";
 
@@ -51,8 +52,7 @@ function yearlyMonthlyOf(p: ProductWithPricing) {
   return y ? toNumber(y.discountedPrice ?? y.price) : null;
 }
 
-/** Uptime / SLA percentages are not shown on the site (no verifiable SLA). */
-export const isUnverifiedClaim = (text: string) => /uptime|\bsla\b|%\s?99/i.test(text);
+export { isUnverifiedClaim } from "@/lib/catalog/package-comparison";
 
 const num = (s?: string) => {
   const m = s?.match(/(\d+(?:[.,]\d+)?)/);

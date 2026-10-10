@@ -11,19 +11,24 @@ const options: { value: BillingPeriod; label: string }[] = [
 ];
 
 /**
- * Monthly / yearly segmented control (radiogroup, arrow-key navigable).
- * `savingsPercent` must be computed from real tier prices
- * (see `yearlySavingsPercent` / `maxYearlySavings`) — never hard-code it.
+ * Monthly / yearly segmented control (radiogroup, arrow-key navigable) with a
+ * "%X tasarruf" badge. `savingsPercent` must be computed from real tier
+ * prices (`yearlySavingsPercent` / `maxYearlySavings` / `savingsSummary`) —
+ * never hard-code it. 0 hides the badge (yearly is not cheaper).
+ * `savingsVaries` (default true, i.e. the value is a maximum) words it as
+ * "%X'e varan tasarruf"; pass false when every package saves exactly X.
  */
 export function BillingSwitch({
   value,
   onChange,
   savingsPercent = 0,
+  savingsVaries = true,
   className,
 }: {
   value: BillingPeriod;
   onChange: (value: BillingPeriod) => void;
   savingsPercent?: number;
+  savingsVaries?: boolean;
   className?: string;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -38,7 +43,7 @@ export function BillingSwitch({
   };
 
   return (
-    <div className={cn("flex flex-col items-center gap-2", className)}>
+    <div className={cn("flex flex-wrap items-center justify-center gap-x-3 gap-y-2", className)}>
       <div
         role="radiogroup"
         aria-label="Faturalandırma dönemi"
@@ -76,9 +81,19 @@ export function BillingSwitch({
         })}
       </div>
       {savingsPercent > 0 ? (
-        <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-          Yıllık ödemede %{savingsPercent}&apos;{dativeSuffix(savingsPercent)} varan tasarruf
-        </p>
+        <span
+          className={cn(
+            "rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.1em] transition-colors",
+            value === "yearly"
+              ? "border-foreground bg-foreground text-background"
+              : "text-muted-foreground"
+          )}
+        >
+          <span className="sr-only">Yıllık ödemede </span>
+          {savingsVaries
+            ? `%${savingsPercent}'${dativeSuffix(savingsPercent)} varan tasarruf`
+            : `%${savingsPercent} tasarruf`}
+        </span>
       ) : null}
     </div>
   );

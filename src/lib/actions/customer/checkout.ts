@@ -1,5 +1,6 @@
 "use server";
 
+import { checkHostname } from "@/lib/validations/hostname";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { emitEvent } from "@/lib/events/emit";
@@ -102,6 +103,8 @@ interface CheckoutItemInput {
     };
     addons?: CheckoutAddonInput[];
     configuration?: Record<string, string | number>;
+    /** Requested hostname for a server order (VDS configurator). */
+    hostname?: string;
   };
 }
 
@@ -239,7 +242,12 @@ async function getCatalogProduct(item: CheckoutItemInput, tx: Prisma.Transaction
     unitPrice: roundHalfUp(add(basePrice, addonTotal, configPricing.total)),
     addons,
     configOptions: configPricing.lines,
-    configSelections,
+    // Only selections that belong to a real option of this product are stored.
+    configSelections: Object.fromEntries(
+      Object.entries(configSelections).filter(([slug]) =>
+        configValidation.options.some((option) => option.slug === slug)
+      )
+    ),
   };
 }
 
@@ -473,6 +481,15 @@ export async function checkoutCart(input: CheckoutInput) {
         const catalogProduct = await getCatalogProduct(item, tx);
         const domainChoice = normalizeDomainChoice(item.metadata?.domainChoice);
         let sslDomain: string | undefined;
+        let hostname: string | undefined;
+
+        if (item.type === "server" && typeof item.metadata?.hostname === "string" && item.metadata.hostname.trim()) {
+          const check = checkHostname(item.metadata.hostname);
+          if (!check.ok) {
+            throw new Error(`CART_INVALID:Sunucu adı geçersiz: ${check.error}`);
+          }
+          hostname = check.hostname;
+        }
 
         if (catalogProduct.product.category.slug === "ssl") {
           // Re-checked against the real product: only wildcard certificates
@@ -498,6 +515,7 @@ export async function checkoutCart(input: CheckoutInput) {
           configuration: {
             type: item.type,
             domain: sslDomain,
+            hostname,
             category: item.metadata?.category,
             location: item.metadata?.location,
             subType: item.metadata?.subType,

@@ -1,18 +1,9 @@
-import type { ComparisonRow } from "@/components/site/comparison-table";
+import { buildPackageComparison, type PackageComparisonData } from "@/lib/catalog/package-comparison";
 import type { PlanCardData } from "@/components/site/plan-card";
 import { productToPlanCard, type ProductWithPricing } from "@/lib/products/map-product";
 
-/** Serializable comparison column (prices are added on the client per billing period). */
-export interface HostingComparisonColumn {
-  key: string;
-  label: string;
-  highlight?: boolean;
-}
-
-export interface HostingComparisonData {
-  columns: HostingComparisonColumn[];
-  rows: ComparisonRow[];
-}
+/** Plan-by-plan comparison of a hosting family (prices picked per billing period on the client). */
+export type HostingComparisonData = PackageComparisonData;
 
 /** Numeric resources parsed from `resourceLimits` (for the resource bars). */
 export interface HostingResourceRow {
@@ -24,53 +15,12 @@ export interface HostingResourceRow {
   disk: number | null;
 }
 
-interface FeatureItem {
-  label: string;
-  value: string;
-  icon?: string;
-}
-
-const CHECK_VALUES = new Set(["✓", "✔", "var", "evet"]);
-
 /**
- * Builds a plan-by-plan comparison from the products' DB `features`.
- * Rows keep the order in which labels first appear; "✓" becomes a check icon.
+ * Builds a plan-by-plan comparison from the products' DB `features` and
+ * `includedFeatures` (see src/lib/catalog/package-comparison.ts).
  */
 export function buildHostingComparison(products: ProductWithPricing[]): HostingComparisonData {
-  const columns = products.map((product) => ({
-    key: product.sku,
-    label: product.name,
-    highlight: product.isPopular,
-  }));
-
-  const order: { label: string; icon?: string }[] = [];
-  const byProduct = new Map<string, Map<string, string>>();
-
-  for (const product of products) {
-    const features = (product.features as unknown as FeatureItem[] | null) ?? [];
-    const values = new Map<string, string>();
-    for (const feature of features) {
-      if (!order.some((row) => row.label === feature.label)) {
-        order.push({ label: feature.label, icon: feature.icon });
-      }
-      values.set(feature.label, feature.value);
-    }
-    byProduct.set(product.sku, values);
-  }
-
-  const rows: ComparisonRow[] = order.map((row) => ({
-    label: row.label,
-    icon: row.icon,
-    values: Object.fromEntries(
-      products.map((product) => {
-        const raw = byProduct.get(product.sku)?.get(row.label);
-        if (raw === undefined) return [product.sku, null];
-        return [product.sku, CHECK_VALUES.has(raw.trim().toLowerCase()) ? true : raw];
-      })
-    ),
-  }));
-
-  return { columns, rows };
+  return buildPackageComparison(products);
 }
 
 function firstNumber(value: unknown): number | null {

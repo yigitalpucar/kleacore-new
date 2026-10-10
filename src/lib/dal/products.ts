@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { mapConfigOption } from "@/lib/products/configurator-pricing";
 import {
   type PaginationParams,
   paginationMeta,
@@ -171,4 +172,22 @@ export async function getProductCategoryCounts() {
     name: cat.name,
     productCount: cat._count.products,
   }));
+}
+
+/** Active configurable options of the given products, keyed by product id. */
+export async function getConfigOptionsByProduct(productIds: string[]) {
+  const rows =
+    productIds.length > 0
+      ? await db.productConfigOption.findMany({
+          where: { productId: { in: productIds }, isActive: true },
+          orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+        })
+      : [];
+  const byProduct = new Map<string, ReturnType<typeof mapConfigOption>[]>();
+  for (const row of rows) {
+    const list = byProduct.get(row.productId) ?? [];
+    list.push(mapConfigOption(row));
+    byProduct.set(row.productId, list);
+  }
+  return byProduct;
 }
