@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { AnimatePresence, motion, useInView, useReducedMotion } from "framer-motion";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { Activity, KeyRound, PackagePlus, ShieldCheck, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -68,21 +67,13 @@ export function RootTerminal({ steps, host = "vds" }: { steps: TerminalStep[]; h
                     </span>
                     <span className="font-medium">{s.title}</span>
                   </span>
-                  <AnimatePresence initial={false}>
-                    {selected ? (
-                      <motion.span
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-                        className="block overflow-hidden"
-                      >
-                        <span className="block pl-11 pt-2 text-sm leading-relaxed text-muted-foreground">
-                          {s.description}
-                        </span>
-                      </motion.span>
-                    ) : null}
-                  </AnimatePresence>
+                  {selected ? (
+                    <span className="block overflow-hidden motion-safe:duration-200 motion-safe:animate-in motion-safe:fade-in">
+                      <span className="block pl-11 pt-2 text-sm leading-relaxed text-muted-foreground">
+                        {s.description}
+                      </span>
+                    </span>
+                  ) : null}
                 </button>
               </li>
             );
@@ -105,8 +96,8 @@ export function RootTerminal({ steps, host = "vds" }: { steps: TerminalStep[]; h
 
 function Terminal({ step, host }: { step: TerminalStep; host: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, amount: 0.3 });
-  const reduce = useReducedMotion();
+  const inView = useInViewOnce(ref, 0.3);
+  const reduce = usePrefersReducedMotion();
   const [typedRaw, setTyped] = useState(0);
   const [shownRaw, setShown] = useState(0);
   const typed = reduce ? step.command.length : typedRaw;
@@ -211,4 +202,39 @@ function Highlighted({ text }: { text: string }) {
       })}
     </>
   );
+}
+
+/* Small replacements for framer-motion's hooks, so this page ships no animation library. */
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+
+function usePrefersReducedMotion() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(REDUCED_MOTION);
+      query.addEventListener("change", onChange);
+      return () => query.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(REDUCED_MOTION).matches,
+    () => false
+  );
+}
+
+function useInViewOnce(ref: React.RefObject<HTMLElement | null>, amount: number) {
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || inView) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: amount }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [ref, amount, inView]);
+  return inView;
 }
